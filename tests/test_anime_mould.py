@@ -157,3 +157,81 @@ def test_only_a_lofted_anime_arm_is_shortened():
     assert loft["arm_len"] == pytest.approx(0.385 * loft["h"])
     real = blob_pieces(resolve_traits({"style": "real", "gender": "man"})["body"])["layout"]
     assert real["arm_len"] == pytest.approx(0.42 * real["h"])
+
+
+# ---- shoulders, neck, hands, chin, hair and face of the anime mould (the real style keeps its own: see the byte test above) ----
+
+from services.blob_hair import hair_mesh  # noqa: E402
+from services.blob_loft import arm_line, loft_parts, neck_width, shoulder_top, skull_point  # noqa: E402
+
+
+def _anime(gender="boy", hair="short", **extra):
+    raw = {"gender": gender, "hair_style": hair, **extra}
+    return blob_pieces(resolve_traits(raw)["body"])
+
+
+def test_neck_is_shorter_and_slimmer_but_the_head_and_the_arms_stay_where_they_were():
+    for gender, kind_share in (("girl", 0.37), ("boy", 0.41), ("man", 0.50)):
+        built = _anime(gender)
+        L = built["layout"]
+        old_close = L["head_y"] - L["sy"] / 2 - 0.035 * L["h"]
+        assert shoulder_top(L) == pytest.approx(old_close + 0.009 * L["h"])
+        assert arm_line(L) == pytest.approx(old_close - 0.03 * L["h"])   # the arms hang from the line they always did
+        assert neck_width(L) <= L["sx"] * kind_share + 1e-9
+        assert built["faceAnchor"]["center"][1] == pytest.approx(L["head_y"])
+    real = blob_pieces(resolve_traits({"style": "real", "gender": "man"})["body"])["layout"]
+    assert shoulder_top(real) == pytest.approx(real["head_y"] - real["sy"] / 2 - 0.022 * real["h"])   # the real style closes where it did
+
+
+def test_chin_is_round_not_a_point_and_only_the_anime_mould_has_it():
+    for gender in ("girl", "boy"):   # the man's measured chin is already a flat plate: it keeps its own
+        L = _anime(gender)["layout"]
+        real = {**L, "real": True}
+        low = lambda layout: max(abs(skull_point(layout, yaw, -84.0)[0]) for yaw in range(0, 360, 15))
+        assert low(L) > 1.25 * low(real), gender   # the chin plate is wider than the measured V's tip
+        # above the chin the skull is the measured one, to the digit
+        assert skull_point(L, 40.0, -20.0) == skull_point(real, 40.0, -20.0)
+        assert skull_point(L, 40.0, 30.0) == skull_point(real, 40.0, 30.0)
+
+
+@pytest.mark.parametrize("style", ["short", "bangs", "bob", "long", "twin_tails", "ponytail", "spiky", "bun"])
+def test_hair_leaves_the_face_clear_below_the_brows_and_in_front_of_the_cheeks(style):
+    """No lock hangs over the eyes or across the face: everything of the hair that is in the face plane (in front, inside the cheeks) lies at or
+    above the equator of the head. The brows are 4 degrees under it and the eyes 15. A bob used to start its ring in front of the face on one side."""
+    L = _anime("girl", style)["layout"]
+    hair = hair_mesh(L, {"style": style, "color": "#2A211C"})
+    rx, rz = L["sx"] / 2, L["sz"] / 2
+    in_front = [(x, y, z) for x, y, z in hair.vertices if z > 0.5 * rz and abs(x) < 0.5 * rx]
+    assert in_front, style
+    assert min(y for _x, y, _z in in_front) >= L["head_y"] - 0.01 * L["sy"]
+
+
+def test_the_hand_is_a_relaxed_palm_wider_than_it_is_thick():
+    """Palm down in the T pose: the lowered arm turns it to the thigh. The old paddle was thicker than wide and showed its flat face to the camera."""
+    def hand_extent(layout_traits):
+        built = blob_pieces(layout_traits)
+        L = built["layout"]
+        body = loft_parts(built["traits"], L)[0][0]
+        pts = [(x, y, z) for x, y, z in body.vertices if x > L["wrist_x"] + 0.01 and abs(y - L["shoulder_y"]) < L["arm_d"] and abs(z) < L["arm_d"]]
+        return max(p[1] for p in pts) - min(p[1] for p in pts), max(p[2] for p in pts) - min(p[2] for p in pts)
+    thick, wide = hand_extent(resolve_traits({"gender": "boy"})["body"])
+    assert wide > 1.5 * thick
+    old_thick, old_wide = hand_extent(resolve_traits({"style": "real", "gender": "man"})["body"])
+    assert old_thick > old_wide
+
+
+def test_the_drawn_anime_face_is_larger_and_the_painted_and_real_faces_keep_theirs():
+    from services.blob_face import face_kit, face_traits
+    from services.blob_face_anime_head import DIMS
+
+    assert resolve_traits({"gender": "girl"})["face"]["detail"] == 2
+    assert "detail" not in resolve_traits({"gender": "man", "style": "real"})["face"]
+    assert "detail" not in resolve_traits({"face_style": "cute"})["face"]
+    assert face_traits({"style": "anime_head"})["detail"] == 1   # the Qwen painted kit asks for the face as it was
+    assert DIMS[2][1] > 1.1 * DIMS[1][1] and DIMS[2][2] > 1.1 * DIMS[1][2]
+    wide = {}
+    for detail in (1, 2):
+        kit = face_kit({"style": "anime_head", "detail": detail})
+        box = kit["mouths"]["closed"].getbbox()
+        wide[detail] = box[2] - box[0]
+    assert wide[2] > 1.25 * wide[1]
