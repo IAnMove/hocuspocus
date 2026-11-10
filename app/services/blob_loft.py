@@ -489,6 +489,28 @@ def _shirt_v(mesh: Mesh, rows: list, halves: tuple, color: str) -> None:
     _emit(mesh, grid, colors, [st["p"] for st in rows], False, None)
 
 
+ARM_RING_SHARE = 0.016   # the rings of an anime arm lie at most this share of the height apart: four cells of the rig's weight grid (h / 240)
+
+
+def _densify_x(stations: list[dict], spacing: float) -> list[dict]:
+    """Rings between every pair that lies further apart than ``spacing`` along X, with the radii and the position
+    interpolated and the colour of the ring before. Pairs closer than that (the double rings of a colour change) stay as they are.
+
+    The rig weighs each bone from the rings nearest to its middle and then smooths over neighbouring rings: an upper arm
+    of three rings 15 cm apart has no ring in the clavicle's span and the whole arm took its weight from the shoulder,
+    which bowed the arms of a body without a skirt like hoops (see ``tests/test_anime_mould.py``)."""
+    out = []
+    for before, after in zip(stations, stations[1:]):
+        out.append(before)
+        gap = abs(after["p"][0] - before["p"][0])
+        count = int(gap // spacing) if gap > 0.004 else 0
+        for k in range(1, count + 1):
+            u = k / (count + 1)
+            out.append({**before, "p": tuple(before["p"][i] + (after["p"][i] - before["p"][i]) * u for i in range(3)),
+                        "a": before["a"] + (after["a"] - before["a"]) * u, "b": before["b"] + (after["b"] - before["b"]) * u})
+    return out + stations[-1:]
+
+
 def _arms(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     sleeve, skin = wear["sleeves"], spec["colors"]["hands"]
     y, r = wear["arm_y"], L["arm_d"] / 2
@@ -505,7 +527,7 @@ def _arms(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
         lower = skin if short else sleeve
         arm += [at(elbow - bend, 0.92, lower), at(elbow, 0.9, lower), at(elbow + bend, 0.9, lower),
                 at(elbow + (wrist - elbow) * 0.35, 0.86, lower), at(elbow + (wrist - elbow) * 0.75, 0.7, lower), at(wrist, 0.58, lower)]
-        _tube(mesh, arm, "x")
+        _tube(mesh, arm if L.get("real") else _densify_x(arm, ARM_RING_SHARE * L["h"]), "x")
         d = r * 2
         palm_end = wrist + (tip - wrist) * 0.52
         hand = [_st((sign * (wrist - 0.004), y, 0), d * 0.34, d * 0.22, skin), _st((sign * (wrist + (tip - wrist) * 0.22), y, 0), d * 0.5, d * 0.24, skin),
