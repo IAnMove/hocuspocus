@@ -29,7 +29,7 @@ def test_one_card_per_mold_with_the_derived_traits():
         assert all(count == 1 for count in Counter(item[key] for item in builtin_cards()).values()), key
     assert builtin_cards.cache_info().maxsize == 1
     assert builtin_card('stage-sala') is stage_card('stage-sala')
-    assert sum(1 for item in builtin_cards() if item.get('kind') == 'stage') == len(cards) == 28
+    assert sum(1 for item in builtin_cards() if item.get('kind') == 'stage') == len(cards) == 29
 
 
 def test_shot_sizes_are_measured_from_the_default_camera_to_the_first_mark():

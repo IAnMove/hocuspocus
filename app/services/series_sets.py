@@ -228,7 +228,7 @@ class SeriesSets:
 def command_catalog():
     fields={key:{'type':'string'} for key in ('workspace','series_id','location_id','mold','size')}
     fields.update(skin={'type':'object'},props={'type':'array','items':{'type':'object'}},
-                  light={'type':'string','description':'Optional light preset of the mold kind: interior office_day, bar_warm, studio, clinical; exterior daylight, dusk, night_sky.'})
+                  light={'type':'string','description':'Optional light preset of the mold kind: interior office_day, bar_warm, studio, clinical, cabin; exterior daylight, dusk, night_sky.'})
     output=[]
     for status in (False,True):
         name='series.location.set3d'+('.status' if status else '')

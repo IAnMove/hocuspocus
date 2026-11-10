@@ -30,6 +30,7 @@ BLOCK_WORDS = {
     "shelf": ("estantería", "a shelf"), "bottles": ("botellero", "bottle shelves"), "glass": ("cristalera", "a glass wall"),
     "board": ("pizarra", "a board"), "teacher": ("mesa del profesor", "a teacher's desk"), "lectern": ("atril", "a lectern"),
     "tribune": ("tribuna", "a tribune"), "judges": ("estrado", "a judges' bench"), "party": ("mesas de las partes", "party tables"),
+    "wheel": ("volante", "a steering wheel"), "console": ("consola central", "a centre console"), "trim": ("molduras", "trim"),
     "logo": ("panel de logos", "a logo wall"), "video": ("pantalla", "a video screen"), "workstation": ("puestos de trabajo", "workstations"),
 }
 
