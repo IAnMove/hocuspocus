@@ -29,7 +29,8 @@ export class RoomSetRuntime {
       const fill = new AmbientLight('#ffffff', 1.2 * preset.intensity)
       this.key = new PointLight(preset.color, 35 * preset.intensity, 2 * Math.max(width, depth, height))
       this.keyIntensity = this.key.intensity
-      this.key.position.set(0, height - 0.15, depth * 0.12)
+      // The lamp hangs under the roof; in a low room (a vehicle cabin) 0.15 m is so close that the ceiling burns out, so it hangs lower there.
+      this.key.position.set(0, height - (height < 2 ? 0.5 : 0.15), depth * 0.12)
       this.root.add(fill, this.key)
     }
     void Promise.all(roomPanels(room).map(panel => this.panel(panel))).then(() => { this.ready = !this.abort.signal.aborted; this.repaint() }).catch(error => { this.error = error })
