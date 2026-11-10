@@ -15,6 +15,11 @@ from routers.model3d_blob import (
     command_handlers as blob_command_handlers,
     create_model3d_blob_router,
 )
+from routers.model3d_real import (
+    command_catalog as real_command_catalog,
+    command_handlers as real_command_handlers,
+    create_model3d_real_router,
+)
 from routers.wangp_mcp import RequestJournal
 from services.agent_activity import trusted_tool as agent_trusted_tool
 from services.asset_manifest import publish_generation_sidecar
@@ -57,7 +62,7 @@ def command_catalog():
                                                           "name": {"type": "string", "minLength": 1, "maxLength": 64},
                                                           "smooth": {"type": "boolean"},
                                                           "pieces": {"type": "array", "items": piece, "minItems": 1, "maxItems": MAX_PIECES}}}}}},
-            *blob_command_catalog()]
+            *blob_command_catalog(), *real_command_catalog()]
 
 
 def _input(arguments):
@@ -77,7 +82,8 @@ def _input(arguments):
     return payload, check_intent_id(arguments.get("intent_id"))
 
 
-def command_handlers(workspace_dir, journal_path):
+def command_handlers(workspace_dir, journal_path, local_mcp=None):
+    """``local_mcp`` returns the server's LocalMcp: the realistic character job paints its pictures through it."""
     journal = RequestJournal(journal_path)
 
     def compose(arguments):
@@ -113,7 +119,7 @@ def command_handlers(workspace_dir, journal_path):
     async def handle(arguments):
         return await run_in_threadpool(compose, arguments)
 
-    return {OPERATION: handle, **blob_command_handlers(workspace_dir, journal)}
+    return {OPERATION: handle, **blob_command_handlers(workspace_dir, journal), **real_command_handlers(workspace_dir, local_mcp)}
 
 
 def create_model3d_compose_router(handlers):
@@ -127,4 +133,5 @@ def create_model3d_compose_router(handlers):
             raise HTTPException(422, {"code": "invalid_command", "message": str(error), "retryable": False}) from error
 
     router.include_router(create_model3d_blob_router(handlers))
+    router.include_router(create_model3d_real_router(handlers))
     return router

@@ -29,6 +29,7 @@ SERIES_TOOLS = frozenset({
     "characters.animation.cancel", "characters.animation.sheet", "characters.voice.band",
     "characters.rig.flat", "characters.rig.flat.preview", "characters.rig.check", "characters.face.make",
     "model3d.blob.make", "model3d.anime.make", "model3d.blob.presets",
+    "model3d.real.make", "model3d.real.status", "model3d.real.cancel", "model3d.real.get", "model3d.real.list", "model3d.real.presets",
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
     "jobs.cancel",

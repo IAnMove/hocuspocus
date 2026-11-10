@@ -33,14 +33,14 @@ STYLES: dict[str, dict] = {
         "next": ["hair motion"], "doc": "docs/agents/ANIME_CHARACTERS.md",
     },
     "real": {
-        "label": "Realistic PS2-era (textured)", "status": "experimental", "operation": "model3d.anime.make",
-        "make": {"style": "real", "gender": "man|woman", "bottom": "trousers|skirt|shorts", "texture": "<body picture>", "texture_head": "<head picture>"},
+        "label": "Realistic PS2-era (textured)", "status": "experimental", "operation": "model3d.real.make",
+        "make": {"style": "real", "gender": "man|woman", "bottom": "trousers|skirt|shorts", "outfit_prompt": "<the clothes, English>", "face_prompt": "<the face and hair, English>"},
         "mould": "lofted body with real proportions, man/boy skull, real nose, a texture atlas (body front|back, head front|side|back)",
         "dress": "two pictures painted by Qwen over the guides (guide_body_file, guide_head_file); the viewer drapes them per pixel",
-        "face": "the head picture (a photo-like portrait); it talks through a photo face kit with warped mouths (face_pose_file, characters.rig.flat mouthStyle warp)", "look": "toon steps 4, outline 0, classic; look.exposure about 1.5",
+        "face": "the head picture (a photo-like portrait); it talks through a photo face kit with warped mouths (model3d.real.make makes it and returns its kit_id; by hand: face_pose_file, characters.rig.flat mouthStyle warp)", "look": "toon steps 4, outline 0, classic; look.exposure about 1.5",
         "strengths": ["change the clothes by repainting one guide", "same mould for any outfit", "reads as a PS2/PS3 game character"],
         "limits": ["the photo face kit moves only the mouth: no drawn expressions, and the rig's blink is unusable on a photograph", "the face relief comes from one depth estimate (a profile nose is stretched skin tones)", "the front and side portraits are joined into one head map (head_join), but long hair still disagrees between the front and the profile (the face reads wider than painted)", "hands and shoes are blocks"],
-        "next": ["photo face expressions and a blink that works on a photograph (only the mouth moves today)", "relief for the ears and the hands", "woman mould tuning", "UI and Wizard doors for style and texture"],
+        "next": ["photo face expressions and a blink that works on a photograph (only the mouth moves today)", "hair volume for long hair (cards or a snug photo cap)", "relief for the ears and the hands", "woman mould tuning", "a cast sheet of several characters"],
         "doc": "docs/agents/ANIME_CHARACTERS.md",
     },
     "voxel": {
