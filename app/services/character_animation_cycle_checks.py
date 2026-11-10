@@ -143,9 +143,11 @@ def gait_check(figures: list[Image.Image | None], direction: str | None, limit: 
                  else f"every pose has the legs of its moment of the step (scale {scale:.2f})")
 
 
-def cycle_checks(image: Image.Image, sheet: dict[str, Any], definition: dict[str, Any], siblings: Sequence[dict[str, Any]] = ()) -> list[dict[str, Any]]:
+def cycle_checks(image: Image.Image, sheet: dict[str, Any], definition: dict[str, Any], siblings: Sequence[dict[str, Any]] = (),
+                 facing: str | None = None) -> list[dict[str, Any]]:
     """The checks the animation asks for (``definition["checks"]``: ``height``, ``repeats``, ``gait``, ``mirror``), none for one that asks
-    for none."""
+    for none. ``facing`` is the way the sheet looks when it is not the catalog's (a puppet cut from a drawing that looked left): the readings of
+    the order and the feet are made on the sheet mirrored."""
     asked = definition.get("checks") or []
     if not asked:
         return []
@@ -160,7 +162,7 @@ def cycle_checks(image: Image.Image, sheet: dict[str, Any], definition: dict[str
     if "gait" in asked:
         direction = contract_of(definition["id"], definition).get("dir")
         found.append(gait_check(figures, direction, float(rules["gait"]), floor))
-        found.extend(gait_checks(figures, direction, floor))
+        found.extend(gait_checks(figures, direction, floor, mirrored=facing == "left"))
     if "mirror" in asked:
         others = [item for item in siblings if item.get("id") != definition["id"] and item.get("dir") != definition.get("dir")]
         found.append(mirror_check(figures, sheet, others, rules, floor))

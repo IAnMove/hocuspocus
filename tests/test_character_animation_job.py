@@ -1485,3 +1485,31 @@ def test_the_stride_of_an_animation_is_a_share_of_the_figures_height_and_nothing
     for bad in (0.1, 3.5, True, "0.9"):
         with pytest.raises(CharacterAnimationError):
             normalize_animation({**base, "stride": bad})
+
+
+def test_a_fall_back_forgets_what_the_puppet_recorded_about_a_cut_that_never_happened(directions, monkeypatch):
+    from services.walk_puppet import WalkPuppetError
+
+    _patch_puppet(monkeypatch, installed=False)
+
+    def not_apart(*_args):
+        raise WalkPuppetError("no leg on the l side could be cut: the limbs are not apart in this drawing")
+
+    monkeypatch.setattr("services.walk_puppet_method.build", not_apart)  # the joints were found, the layers were skipped, then the cut failed
+    root, server, jobs, _sets = directions
+    job = jobs.start(WS, "hero", "walk-12", method="puppet")
+    assert job["status"] == "completed" and job["fallback"]["reason"].startswith("no leg")
+    codes = [warning["code"] for warning in job["result"]["warnings"]]
+    assert "puppet_fell_back" in codes and "puppet_no_layers" not in codes and "puppet_reference_off" not in codes
+    assert job["warnings"] == ["puppet_fell_back"]
+
+
+def test_a_puppet_sheet_that_looks_left_is_checked_mirrored(directions, monkeypatch):
+    seen = {}
+    from services import character_animation_job as module
+
+    _patch_puppet(monkeypatch, installed=True, mirror=True)
+    real = module.sheet_checks
+    monkeypatch.setattr(module, "sheet_checks", lambda sheet, definition, siblings=(), facing=None: seen.setdefault("facing", facing) and real(sheet, definition, siblings, facing))
+    root, server, jobs, _sets = directions
+    assert jobs.start(WS, "hero", "walk-12", method="puppet")["status"] == "completed" and seen["facing"] == "left"

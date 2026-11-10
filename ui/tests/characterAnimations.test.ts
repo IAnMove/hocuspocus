@@ -7,6 +7,7 @@ import {
   kitStyleId, localized, reviewedByAgent, reviewKitAnimation, sheetCellStyle, templateControls, withKitAnimation, withoutKitAnimation, type KitAnimation,
 } from '../src/lib/characterAnimations.ts'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
+import { resolveSceneTemplate } from '../src/features/sceneTemplates/catalog.ts'
 
 const made = (changes: Partial<KitAnimation> = {}): Omit<KitAnimation, 'reviewState'> => ({
   sheet: { source: '/api/v1/file/walk-sheet.png?workspace=w', width: 1480, height: 640, count: 4, columns: 4, rows: 1, cell: { width: 370, height: 640 } },
@@ -121,6 +122,17 @@ test('a card is given only the controls it has, with values it accepts', () => {
   // Two poses are out of range for the walk card (at least 3), and a card without `fps` never gets one.
   assert.equal(controlsForCard(made({ sheet: { ...made().sheet, count: 2 } }) as KitAnimation, 'walk-cycle-sheet', walk).frames, undefined)
   assert.equal('fps' in controlsForCard(made() as KitAnimation, 'character-reaction', { frames: reaction.frames }), false)
+})
+
+test('the real walk cards declare the stride and the sheet facing, so a card is given them and keeps them', () => {
+  for (const [card, count] of [['walk-cycle-sheet', 4], ['walk-two-pose', 2]] as const) {
+    const { template } = resolveSceneTemplate(card)
+    const sheet = { ...made({ stride: .87, facing: 'left' }).sheet, count, columns: count }
+    const given = controlsForCard(made({ stride: .87, facing: 'left', sheet }) as KitAnimation, card, template.controls as never)
+    assert.equal(given.stride, .87, `${card}: the stride reaches the card`)
+    assert.deepEqual([given.facing, given.sheetFacing], ['left', 'left'], `${card}: and the way the sheet looks`)
+    assert.equal('stride' in controlsForCard(made({ sheet }) as KitAnimation, card, template.controls as never), false, `${card}: a sheet with no stride gives none`)
+  }
 })
 
 test('an animation the author names gets a free slug, and its poses are the lines they wrote', () => {

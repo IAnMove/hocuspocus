@@ -543,7 +543,8 @@ class CharacterAnimationJobs:
         for take in job["takes"]:
             take.update(status="waiting")
         job.pop("method", None)
-        self._update(store, job, fallback={"from": "puppet", "to": "poses", "reason": reason}, warnings=[*job.get("warnings", []), "puppet_fell_back"])
+        # whatever the puppet recorded before it failed (no layers, a reference off its guide) is about a cut that did not happen
+        self._update(store, job, fallback={"from": "puppet", "to": "poses", "reason": reason}, warnings=["puppet_fell_back"])
         return True
 
     def _pose_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
@@ -629,7 +630,7 @@ class CharacterAnimationJobs:
         try:
             root = self.deps.workspace_dir(job["workspace"])
             siblings = sibling_sheets(self._kit(job["workspace"], job["kitId"]), definition, uploads_root=self.deps.uploads_root(), workspace_root=root)
-            return sheet_checks(sheet, definition, siblings)
+            return sheet_checks(sheet, definition, siblings, self._facing(job, definition))
         except Exception as error:  # the checks are a report on the sheet, not a step of making it
             job["checksError"] = f"{error}"[:200]
             return None

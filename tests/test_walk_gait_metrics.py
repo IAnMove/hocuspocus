@@ -144,3 +144,28 @@ def test_a_cells_score_is_lower_the_nearer_it_is_to_the_guide_and_a_turned_cell_
     turned = metrics.cell_scores(_masks(figures), "side")
     assert turned[2] > clean[2] + 0.5, "the mirrored cell is nearer the others turned around"
     assert metrics.cell_scores(_masks(_cycle("side")), None) == [0.0] * 12 and metrics.cell_scores([], "side") == []
+
+
+@pytest.mark.parametrize("direction", ["side", "front34", "back34"])
+def test_a_sheet_that_looks_left_is_read_mirrored_and_passes_as_the_guide_does(direction):
+    """A puppet cut from a drawing that looked left makes a left-looking sheet: its reach ahead and behind swap, so it is read mirrored."""
+    left = [figure.transpose(Image.Transpose.FLIP_LEFT_RIGHT) for figure in _cycle(direction)]
+    assert not _by_id(metrics.gait_checks(left, direction))["walk_foot_order"]["ok"], "read as it is, a left-looking cycle is not the guide's walk"
+    checks = _by_id(metrics.gait_checks(left, direction, mirrored=True))
+    assert all(item["ok"] for item in checks.values()) and checks["walk_foot_order"]["value"] > 0.9, checks
+    assert metrics.gait_checks(left, "front", mirrored=True) and metrics.mask_checks([], "side", mirrored=True) == []
+
+
+def test_the_sheet_checks_take_the_way_the_sheet_looks(tmp_path):
+    from services.character_animation_checks import sheet_checks
+    from services.character_animations import animation, build_sheet
+
+    (tmp_path / "uploads").mkdir()
+    names = []
+    for index, figure in enumerate(_cycle("side")):
+        figure.transpose(Image.Transpose.FLIP_LEFT_RIGHT).save(tmp_path / f"l{index}.png")
+        names.append(f"l{index}.png")
+    sheet = build_sheet(names, uploads_root=str(tmp_path / "uploads"), workspace_root=str(tmp_path), workspace="demo", name="left", columns=6, output_dir=str(tmp_path))
+    plain = {item["id"]: item for item in sheet_checks(sheet, animation("walk-12"))}
+    left = {item["id"]: item for item in sheet_checks(sheet, animation("walk-12"), facing="left")}
+    assert not plain["walk_foot_order"]["ok"] and left["walk_foot_order"]["ok"]

@@ -46,7 +46,7 @@ read (45 files, every ``*walk*-sheet-*.png`` under ``/mnt/extras/hocuspocus-work
   are as far apart as neighbours are; a seam of the leg readings instead is worse: 16 % above 2.5). Reported as a number, never failing.
 * facing: the least mirrored over plain ratio of real sheets is 0.96 (23 sheets); a mirrored cell is below it 86 % of the time.
 
-LTX clips sampled by ``walk_video_method`` start two cells late (best shift 2 mod 6 on the three real clips: fit 0.93 against -0.48), so
+LTX clips sampled by ``walk_video_method`` start two cells late (best shift 2 mod 6 on the two real keyed clips: fit 0.93 and 0.94 against -0.48 and -0.40; the third is an unkeyed clip), so
 ``walk_foot_order`` fails them: their first cell is not the contact.
 """
 from __future__ import annotations
@@ -281,11 +281,19 @@ def facing_check(flipped: list[int]) -> dict[str, Any]:
                  f"cell(s) {', '.join(str(index + 1) for index in flipped)} look the other way than the rest", flipped)
 
 
-def mask_checks(masks: Sequence[np.ndarray | None], direction: str | None) -> list[dict[str, Any]]:
+def turned(masks: Sequence[np.ndarray | None]) -> list[np.ndarray | None]:
+    """The silhouettes mirrored: a sheet that looks left read as the guide (which looks right) is read."""
+    return [mask[:, ::-1] if mask is not None else None for mask in masks]
+
+
+def mask_checks(masks: Sequence[np.ndarray | None], direction: str | None, mirrored: bool = False) -> list[dict[str, Any]]:
     """The checks on the silhouettes of a walk's cells, in the order of the sheet. Only those that read something in this direction
-    (the order and the facing need a side; the alternation, a foot that steps toward the viewer); none for a direction the guide lacks."""
+    (the order and the facing need a side; the alternation, a foot that steps toward the viewer); none for a direction the guide lacks.
+    ``mirrored``: the sheet looks left (a puppet cut from a drawing that looked left), so its cells are mirrored before they are read."""
     if direction not in TURN or not masks:
         return []
+    if mirrored:
+        masks = turned(masks)
     measured, expected = series_of(masks), guide_series(direction, len(masks))
     found = []
     if direction in ORDER_READINGS:
@@ -321,6 +329,6 @@ def cell_scores(masks: Sequence[np.ndarray | None], direction: str | None) -> li
     return [round(float(value), 4) for value in totals]
 
 
-def gait_checks(figures: Sequence[Image.Image | None], direction: str | None, floor: int = 8) -> list[dict[str, Any]]:
+def gait_checks(figures: Sequence[Image.Image | None], direction: str | None, floor: int = 8, mirrored: bool = False) -> list[dict[str, Any]]:
     """``mask_checks`` of the keyed figures (RGBA pictures cropped to their outline, None for an empty cell)."""
-    return mask_checks([mask_of(figure, floor) for figure in figures], direction)
+    return mask_checks([mask_of(figure, floor) for figure in figures], direction, mirrored)

@@ -94,14 +94,15 @@ def _spread(sheet: dict[str, Any], definition: dict[str, Any], figures: list[dic
     ]
 
 
-def sheet_checks(sheet: dict[str, Any], definition: dict[str, Any], siblings: Sequence[dict[str, Any]] = ()) -> list[dict[str, Any]]:
+def sheet_checks(sheet: dict[str, Any], definition: dict[str, Any], siblings: Sequence[dict[str, Any]] = (), facing: str | None = None) -> list[dict[str, Any]]:
     """Every check on a sheet ``build_sheet`` wrote (``sheet``: its reply; ``definition``: the animation it was made from;
-    ``siblings``: the other directions of the same kit as ``{"id", "dir", "path"}``, for ``direction_mirror``)."""
+    ``siblings``: the other directions of the same kit as ``{"id", "dir", "path"}``, for ``direction_mirror``; ``facing``: the way the sheet looks, when
+    it is not the catalog's)."""
     contract = catalog()["sheet"]
     checks = _structure(sheet, definition, contract)
     with Image.open(sheet["path"]) as image:
         figures = [_figure(cell, contract["alphaFloor"]) for cell in _cells(image, sheet["columns"], sheet["rows"], sheet["count"], sheet["cell"])]
-        extra = cycle_checks(image, sheet, definition, siblings)
+        extra = cycle_checks(image, sheet, definition, siblings, facing)
     if not figures:
         return [*checks, _check("filled_cells", False, 0, MIN_FILL, "no cell to read")]
     height = sheet["cell"]["height"]

@@ -308,6 +308,22 @@ test('the painter pass turns the figure to the camera and hands the painter the 
   assert.equal(slot.screen?.directional?.view, undefined)
 })
 
+test('through the painter pass a 1.7 m figure with a stride starts its walk cycle over every stride times 1.7 m of ground', () => {
+  const slot = { ...slotOf({ sheets: [sheet('walk', 'side', 12, { stride: 0.9 })], walk: { to: [41, 2], speed: 1.5, start: 0 } }), scale: 0.85 } as Scene3DSlot
+  const memory = new DirectionMemory()
+  const wraps: number[] = []
+  let last = -1
+  for (let t = 0; t < 20; t += 0.01) {
+    const walked = walkedSlot(slot, slot.position, t)
+    const view = facingSlot(walked, slot.position, { memory, eye: [1, 1.6, 12], eye0: [1, 12], t }).screen?.directional?.view
+    const frame = view?.kind === 'sheet' ? view.frame : -1
+    if (frame < last) wraps.push(walked.position[0])
+    last = frame
+  }
+  assert.ok(wraps.length >= 6, 'the cycle repeats along the walk')
+  for (let i = 1; i < wraps.length; i++) assert.ok(Math.abs(wraps[i] - wraps[i - 1] - 0.9 * 1.7) < 0.02, `a cycle covers ${wraps[i] - wraps[i - 1]} m, not 1.53`)
+})
+
 test('a walking figure is placed along its path by the time, and every other slot is returned as it came', () => {
   const walker = slotOf({ walk: { to: [1, 8], speed: 2, start: 1 } })
   assert.deepEqual(walkedSlot(walker, walker.position, 2).position, [1, 0, 4])
