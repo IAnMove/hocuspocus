@@ -113,8 +113,9 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
   'vertical-dialogue-across': card({
     duration: 6,
     // The feet anchor: a seated clip lowers the head, never the feet, so the frame holds for a GLB or a seated cutout.
-    camera: portraitCam([-0.45, 1.55, 2.1], [0.17, 0.85, -0.4], 40, {
-      framing: { ...headFraming('subject_1', [-0.3, 1.55, 1.55], [-0.29, 1.52, 1.42], { lookFrom: [0.32, 0.85, -0.95], lookTo: [0.32, 0.85, -0.95] }), anchor: 'feet' },
+    // The push heads for subject_2, so the near head drifts out to the left instead of over the far face.
+    camera: portraitCam([-0.4, 1.55, 2.15], [0.32, 0.85, -0.55], 40, {
+      framing: { ...headFraming('subject_2', [-0.85, 1.55, 2.9], [-0.8, 1.5, 2.72], { lookFrom: [-0.13, 0.85, 0.2], lookTo: [-0.13, 0.85, 0.2] }), anchor: 'feet' },
     }),
     slots: [
       model('subject_1', 'subject_1', [-0.15, 0, 0.55], { rotationY: 2.35 }),

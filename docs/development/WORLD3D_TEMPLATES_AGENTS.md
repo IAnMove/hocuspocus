@@ -207,7 +207,7 @@ The A/B pairs share one blocking (subject_1 left looking right, subject_2 right 
 | `vertical-dialogue-single-a` | 6 | close; push | a, b | a clean single of subject_1 looking screen right, subject_2 just out of frame |
 | `vertical-dialogue-single-b` | 6 | close; push | a, b | a clean single of subject_2 looking screen left, at the same distance and push |
 | `vertical-dialogue-walk` | 7 | medium; push, track | a, b | both stroll toward the camera (0.4 m/s), subject_2 half a step behind; the frame backs away with them; bind a walk clip |
-| `vertical-dialogue-across` | 6 | close; push | a, b, table | seated across a table (`table` prop): subject_1 near from behind, subject_2 beyond facing the camera; framed from the feet so a sit clip does not move it |
+| `vertical-dialogue-across` | 6 | medium; push | a, b, table | seated across a table (`table` prop): subject_1 near from behind, subject_2 beyond facing the camera; framed from subject_2's feet so a sit clip does not move it, and the push heads for subject_2 so the near head never covers that face |
 | `vertical-dialogue-trio` | 7 | close; push, arc | front, left, third | subject_1 near from behind, subject_2 and `person_3` (prop) beyond facing the camera |
 | `vertical-dialogue-listener` | 6 | close; push | speaker, listener | the listener (subject_2) near facing the camera, the speaker (subject_1) behind talking to them; the push is on the listener |
 | `vertical-dialogue-low` | 6 | close; push | a, b | a hip-height lens looks up at two faces in near profile |
