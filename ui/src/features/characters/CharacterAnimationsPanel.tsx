@@ -82,7 +82,8 @@ function SheetNotes({ def, notes }: { def: AnimationDef; notes: NonNullable<Retu
 
 function MadeAnimation({ def, made, actions, how }: { def: AnimationDef; made: KitAnimation; actions: Actions; how: WalkMethod }) {
   const { t, i18n } = useUiTranslation('characters')
-  const controls = Object.entries(templateControls(made, def.template)).map(([key, value]) => `${key} ${value}`).join(', ')
+  // What the person can set on the card; the sheet's own facing and stride go to the card without being shown.
+  const controls = Object.entries(templateControls(made, def.template)).filter(([key]) => key !== 'sheetFacing' && key !== 'stride').map(([key, value]) => `${key} ${value}`).join(', ')
   const notes = animationNotes(made, actions.finished[def.id])
   return <div className="grid gap-3 sm:grid-cols-[14rem_minmax(0,1fr)]">
     <AnimationSheetPlayer animation={made} title={localized(def.title, i18n.language)} />
