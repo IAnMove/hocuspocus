@@ -1,6 +1,7 @@
 """A realistic mould and its texture atlas: UVs, guides, the texture written into a rigged GLB."""
 import io
 import json
+import math
 import struct
 
 from PIL import Image
@@ -269,3 +270,181 @@ def test_head_bands_default_on_and_validated():
         with pytest.raises(BlobTraitsError) as refused:
             resolve_traits({**base, "head_bands": bad})
         assert "head_bands" in str(refused.value)
+
+
+def _painted_head(parts, layout):
+    """A head picture over the guide: skin in the front tile, the profile with a red eye where a profile has one and a green mark
+    by the ear, a blue nape; and the mould's frame and radius map."""
+    import numpy as np
+
+    from services.blob_head_map import head_triangles, radius_map
+    from services.blob_texture import atlas_frame
+
+    guide = np.asarray(Image.open(io.BytesIO(guide_png(parts, layout, "head"))).convert("L")) > 80
+    picture = np.zeros((HALF_SIZE[1], HALF_SIZE[0], 3), np.uint8)
+    picture[:] = (30, 32, 40)
+    third = HALF_SIZE[0] // 3
+    for tile, colour in enumerate(((205, 160, 130), (200, 155, 125), (40, 60, 200))):
+        inside = guide[:, tile * third:(tile + 1) * third]
+        picture[:, tile * third:(tile + 1) * third][inside] = colour
+    rows = slice(400, 470)
+    picture[rows, third + third // 2 - 250: third + third // 2 - 180][guide[rows, third + third // 2 - 250: third + third // 2 - 180]] = (230, 20, 20)   # the profile's eye, well before the axis
+    picture[rows, third + third // 2 - 20: third + third // 2 + 20] = (20, 220, 20)   # at the axis: the ear's place
+    frame = atlas_frame([parts[0][0]], layout)
+    return picture, frame, radius_map(head_triangles(parts[0][0], frame), frame)
+
+
+def test_the_head_map_joins_the_portraits_and_the_profiles_eye_never_lands_on_the_cheek():
+    import numpy as np
+
+    from services.blob_head_map import MAP_SIZE, head_map
+
+    lofted, parts = _real()
+    picture, frame, radius = _painted_head(parts, lofted["layout"])
+    joined = head_map(picture, radius, frame, 40.0, 18.0).astype(int)
+    assert joined.shape == (MAP_SIZE[1], MAP_SIZE[0], 3)
+    width = joined.shape[1]
+    column = lambda yaw: int((yaw + 180) / 360 * width)
+    red = (joined[..., 0] > 150) & (joined[..., 1] < 90) & (joined[..., 2] < 90)
+    assert not red.any(), "a flat projection lays the profile's eye beside the face; the map does not"
+    green = (joined[..., 1] > 150) & (joined[..., 0] < 110) & (joined[..., 2] < 110)
+    columns = np.nonzero(green.any(axis=0))[0]
+    assert len(columns) and all(70 <= abs(c / width * 360 - 180) <= 110 for c in columns), "what the profile shows at the axis is at the ear, on both sides"
+    assert (columns < width // 2).any() and (columns > width // 2).any()
+    assert np.abs(joined[430, column(0)] - (205, 160, 130)).max() < 12, "the face is the front picture"
+    assert joined[430, column(176), 2] > 150 and joined[430, column(-176), 2] > 150, "the nape is the back picture, on both ends of the map"
+    assert np.abs(joined[430, column(-179)] - joined[430, column(179)]).max() < 20, "and the two ends meet"
+
+
+def test_inside_the_face_the_map_is_the_flat_projection_of_the_front_picture():
+    import numpy as np
+
+    from services.blob_head_map import head_map
+
+    lofted, parts = _real()
+    picture, frame, radius = _painted_head(parts, lofted["layout"])
+    third = HALF_SIZE[0] // 3
+    picture[380:480, third // 2 + 40: third // 2 + 60] = (250, 250, 250)   # a mark of the face, a little to its left
+    joined = head_map(picture, radius, frame, 40.0, 18.0).astype(int)
+    white = np.nonzero((joined[430] > 235).all(axis=1))[0]
+    width = joined.shape[1]
+    span = frame["head"][1] / 1.5
+    ring = radius[int(430 / 1024 * radius.shape[0])]
+    expected = [math.degrees(math.asin(min(1.0, (offset / third * span) / ring[int((10 + 180) / 360 * len(ring))]))) for offset in (40, 60)]
+    yaws = white / width * 360 - 180
+    assert len(white) and expected[0] - 2.5 <= yaws.min() and yaws.max() <= expected[1] + 2.5, "the mark is where the face patch shows it"
+
+
+def _long_hair(picture):
+    """The front tile of ``_painted_head`` repainted as a narrow face inside long dark hair that hangs to the shoulders."""
+    third = HALF_SIZE[0] // 3
+    front = picture[:, :third]
+    painted = (front != (30, 32, 40)).any(axis=2)
+    front[painted] = (60, 40, 30)
+    front[250:840, third // 2 - 300: third // 2 + 300] = (60, 40, 30)      # the hair beside the jaw and the neck, outside the mould
+    front[300:640, third // 2 - 120: third // 2 + 120] = (205, 160, 130)   # the face
+    front[640:840, third // 2 - 70: third // 2 + 70] = (205, 160, 130)     # the neck
+    return picture
+
+
+def test_beside_long_hair_the_front_picture_is_kept_until_the_hair_and_a_short_haired_head_is_joined_as_before(monkeypatch):
+    import numpy as np
+
+    from services import blob_head_map
+    from services.blob_head_map import head_map
+
+    lofted, parts = _real("woman")
+    picture, frame, radius = _painted_head(parts, lofted["layout"])
+    short = head_map(picture, radius, frame, 40.0, 18.0).astype(int)
+    monkeypatch.setattr(blob_head_map, "hair_hold", lambda *_args: np.zeros((short.shape[0], short.shape[1])))
+    assert (head_map(picture, radius, frame, 40.0, 18.0) == short).all(), "no long hair: the map is the one made without this step"
+    monkeypatch.undo()
+    long = head_map(_long_hair(picture.copy()), radius, frame, 40.0, 18.0).astype(int)
+    width = short.shape[1]
+    column = lambda yaw: int((yaw + 180) / 360 * width)
+    profile, hair = (200, 155, 125), (60, 40, 30)
+    for yaw in (52, -52):
+        assert np.abs(short[430, column(yaw)] - profile).max() < 25, "a head without long hair has the profile there"
+        assert np.abs(long[430, column(yaw)] - hair).max() < 25, "long hair: the front picture's hair, not the profile's cheek beside the face"
+    for yaw in (10, -10):
+        assert np.abs(long[430, column(yaw)] - (205, 160, 130)).max() < 12, "the face is the front picture"
+    green = (long[..., 1] > 150) & (long[..., 0] < 110) & (long[..., 2] < 110)
+    assert green[:, : width // 2].any() and green[:, width // 2:].any(), "the ear is still the side picture's, on both sides"
+
+
+def test_a_side_with_an_ear_through_long_hair_is_joined_as_a_short_haired_head_is():
+    import numpy as np
+
+    from services.blob_head_map import face_outline, head_map
+
+    lofted, parts = _real("woman")
+    picture, frame, radius = _painted_head(parts, lofted["layout"])
+    picture = _long_hair(picture)
+    third = HALF_SIZE[0] // 3
+    picture[400:500, third // 2 + 150: third // 2 + 200] = (205, 160, 130)   # an ear through the hair, on the picture's right
+    face = face_outline(picture[:, :third], 1.0)
+    assert np.isfinite(face["ear_high"][420:480]).all() and not np.isfinite(face["ear_low"]).any()
+    assert abs(face["high"][450] * third - 120) < 12, "the ear is not the face's edge"
+    joined = head_map(picture, radius, frame, 40.0, 18.0).astype(int)
+    column = lambda yaw: int((yaw + 180) / 360 * joined.shape[1])
+    assert np.abs(joined[620, column(-52)] - (60, 40, 30)).max() < 25, "the side without an ear keeps the front picture's hair"
+    assert np.abs(joined[620, column(52)] - (200, 155, 125)).max() < 25, "the side with the ear has the profile there, as before"
+
+
+def test_the_atlas_holds_the_front_tile_and_the_head_map_and_says_so():
+    import numpy as np
+
+    from services.blob_texture import atlas_uvs, frame_extras
+
+    lofted, parts = _real()
+    picture, frame, radius = _painted_head(parts, lofted["layout"])
+    body = Image.new("RGB", HALF_SIZE, (90, 90, 90))
+    head = Image.fromarray(picture)
+    plain = np.asarray(Image.open(io.BytesIO(stack_atlas(body, head))))
+    joined = np.asarray(Image.open(io.BytesIO(stack_atlas(body, head, join={"radius": radius, "frame": frame, "face_yaw": 40.0, "blend": 18.0}))))
+    third = ATLAS[0] // 3
+    assert joined.shape == plain.shape == (ATLAS[1], ATLAS[0], 3)
+    assert (joined[:, :third] == plain[:, :third]).all() and (joined[:ATLAS[1] // 2] == plain[:ATLAS[1] // 2]).all(), "the body views and the front tile are untouched"
+    assert (joined[ATLAS[1] // 2:, third:] != plain[ATLAS[1] // 2:, third:]).any(), "the side and back tiles gave way to the map"
+    assert frame_extras(frame, head_map=True)["headMap"] == 1 and "headMap" not in frame_extras(frame)
+    # a viewer without the drape reads the UVs: off the front tile the head's triangles point into the map, never outside it
+    mesh = parts[0][0]
+    uvs = atlas_uvs(mesh, frame, head_map=True)
+    old = atlas_uvs(mesh, frame)
+    moved = [new for new, was in zip(uvs, old) if new != was]
+    assert moved and all(1 / 3 - 1e-9 <= u <= 1.0 and 0.5 <= v <= 1.0 for u, v in moved)
+    assert all(0.0 <= u <= 1.0 for u, _v in uvs)
+
+
+def test_head_join_is_the_map_by_default_with_its_own_patch_fade_and_is_validated():
+    import pytest
+
+    from services.blob_builder import BlobTraitsError
+
+    resolved = resolve_traits({"style": "real", "gender": "man"})
+    assert resolved["head_join"] == "map" and resolved["face_feather"] == 18.0
+    blend = resolve_traits({"style": "real", "gender": "man", "head_join": "blend"})
+    assert blend["head_join"] == "blend" and blend["face_feather"] == 0.0, "the tiles blended by the viewer keep their hard patch border"
+    assert resolve_traits({"style": "real", "gender": "man", "face_feather": 6})["face_feather"] == 6.0
+    for bad in ({"style": "real", "head_join": "cube"}, {"style": "anime", "head_join": "map"}):
+        with pytest.raises(BlobTraitsError):
+            resolve_traits(bad)
+
+
+def test_making_a_real_character_with_a_head_picture_writes_the_head_map_into_both_glbs(tmp_path, monkeypatch):
+    from services import anime_make
+
+    lofted, parts = _real()
+    picture, _frame, _radius = _painted_head(parts, lofted["layout"])
+    Image.fromarray(picture).save(tmp_path / "head.png")
+    Image.new("RGB", HALF_SIZE, (90, 90, 90)).save(tmp_path / "body.png")
+    monkeypatch.setattr(anime_make, "_face_relief", lambda *args, **kwargs: None)   # no depth model in a test
+    made = anime_make.make_character(tmp_path, "w", "Join", "intent-join", {"style": "real", "gender": "man", "texture": "body.png", "texture_head": "head.png"})
+    assert "joined head map" in made["atlas"]["layout"]
+    for key in ("file", "rigged_file"):
+        document = _json((tmp_path / made[key]).read_bytes())
+        extras = {m["name"]: m.get("extras", {}).get("atlas", {}) for m in document["materials"]}
+        assert extras["body"]["headMap"] == 1 and extras["face"]["headMap"] == 1 and extras["face"]["faceFeather"] == 18.0
+    old = anime_make.make_character(tmp_path, "w", "Blend", "intent-blend", {"style": "real", "gender": "man", "texture": "body.png", "texture_head": "head.png", "head_join": "blend"})
+    document = _json((tmp_path / old["rigged_file"]).read_bytes())
+    assert all("headMap" not in m.get("extras", {}).get("atlas", {}) for m in document["materials"])
