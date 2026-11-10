@@ -580,7 +580,7 @@ class CharacterAnimationJobs:
             "sheet": {key: sheet[key] for key in ("source", "width", "height", "count", "columns", "rows", "cell")},
             # What the author wrote for a pose stays with it, so that pose can be made again alone.
             "frames": _saved_frames(job, definition),
-            "fps": definition["fps"], "loop": definition["loop"], "facing": (job.get("puppet") or {}).get("facing", definition["facing"]),
+            "fps": definition["fps"], "loop": definition["loop"], "facing": self._facing(job, definition),
             "view": definition["view"],
             "scaleBy": definition["scaleBy"], "model": job["model"], "reviewState": "pending", "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             **contract_of(definition["id"], definition), **clip_fields(job),
@@ -596,10 +596,20 @@ class CharacterAnimationJobs:
         result = {"animation": definition["id"], "reviewState": approval.get("reviewState", "pending"), "sheet": sheet["source"], "count": sheet["count"],
                   "frames": [take["keyed"] for take in job["takes"]], "scaleBy": sheet["scaleBy"], **clip_fields(job),
                   **report_of(checks, definition, job), **({"autoApproved": approval["autoApproved"]} if approval else {}),
-                  **({"autoRemake": job["autoRemake"]} if job.get("autoRemake") else {}), **({"normalised": sheet["normalised"]} if sheet.get("normalised") else {}),
+                  **self._what_was_done(job, sheet),
                   **({"provenance": job["puppet"]} if job.get("puppet") else {})}
         self._update(store, job, status="completed", finishedAt=_now(), generationJob=None, result=result,
                      **{key: approval[key] for key in ("autoApproved", "checks", "reviewNote") if key in approval})
+
+    @staticmethod
+    def _facing(job: dict[str, Any], definition: dict[str, Any]) -> str:
+        """The way the sheet looks: the catalog's, unless a puppet was cut from a drawing that looked the other way."""
+        return (job.get("puppet") or {}).get("facing", definition["facing"])
+
+    @staticmethod
+    def _what_was_done(job: dict[str, Any], sheet: dict[str, Any]) -> dict[str, Any]:
+        """What the job did to the poses besides drawing them, for its result: the poses it drew again and whether it scaled them by their torso."""
+        return {**({"autoRemake": job["autoRemake"]} if job.get("autoRemake") else {}), **({"normalised": sheet["normalised"]} if sheet.get("normalised") else {})}
 
     @staticmethod
     def _stride_field(sheet: dict[str, Any], definition: dict[str, Any]) -> dict[str, Any]:
