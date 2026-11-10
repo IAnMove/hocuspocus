@@ -1,4 +1,4 @@
-"""Automatic checks on the sprite sheet of an animation, for the job's ``autoApprove`` («Modo un solo disparo»).
+"""Automatic checks on the sprite sheet of an animation. Every finished job runs and reports them; its ``autoApprove`` («Modo un solo disparo») acts on them.
 
 ``build_sheet`` (``services/character_animations.py``) stands every pose on one ground line in equal cells, so those two facts hold by
 construction; what these checks read is the PNG that was written, so a change of ``build_sheet`` that breaks the contract is caught here
@@ -22,8 +22,9 @@ walks 0.93 to 0.99 as big at the smallest, legs 0.94 to 0.99, heads 0.85 to 0.96
 * ``scale_measure``: a sheet asked to scale by legs or head was scaled by that, not by the height it falls back to when the part could
   not be measured.
 
-The long cycles and the directions (``checks`` of an animation in the catalog) add ``figure_height``, ``repeated_poses`` and
-``direction_mirror`` (``services/character_animation_cycle_checks.py``); the animations without ``checks`` are checked as before.
+The long cycles, the directions and the four-pose walk (``checks`` of an animation in the catalog) add ``figure_height`` and
+``repeated_poses``, and the directions ``direction_mirror`` and (the twelve-pose walks) ``walk_gait``, which read cell against cell
+(``services/character_animation_cycle_checks.py``); the animations without ``checks`` are checked as before.
 """
 from __future__ import annotations
 

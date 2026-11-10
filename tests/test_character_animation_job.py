@@ -609,10 +609,11 @@ def test_auto_approve_approves_a_good_sheet_in_one_shot_and_reports_the_checks(w
     assert job["status"] == "completed" and job["autoApprove"] is True and job["autoApproved"] is True
     assert job["result"]["autoApproved"] is True and job["result"]["reviewState"] == "approved"
     names = [check["id"] for check in job["checks"]]
-    assert names == ["cell_count", "cell_size", "filled_cells", "clean_alpha", "silhouette", "ground_line", "scale_spread", "scale_measure"]
+    assert names == ["cell_count", "cell_size", "filled_cells", "clean_alpha", "silhouette", "ground_line", "scale_spread", "scale_measure",
+                     "figure_height", "repeated_poses"], "the four-pose walk is read for one size and for a walk that stops; the mirror and the gait are for the twelve-pose cycles"
     assert all(check["ok"] for check in job["checks"]), job["checks"]
     made = _kit(root)["animations"]["walk"]
-    assert made["reviewState"] == "approved" and made["reviewedBy"] == "agent" and made["reviewNote"].startswith("Automatic checks passed (8)")
+    assert made["reviewState"] == "approved" and made["reviewedBy"] == "agent" and made["reviewNote"].startswith("Automatic checks passed (10)")
     assert jobs.status(WS, job["jobId"])["checks"] == job["checks"], "the job store reports them too"
 
 
@@ -622,7 +623,7 @@ def test_auto_approve_leaves_a_bad_sheet_pending_with_the_failed_checks(world):
     server.spoil = {3: "small"}
     small = jobs.start(WS, "hero", "walk", auto_approve=True)
     assert small["status"] == "completed" and small["autoApproved"] is False
-    assert [check["id"] for check in small["checks"] if not check["ok"]] == ["scale_spread"]
+    assert [check["id"] for check in small["checks"] if not check["ok"]] == ["scale_spread", "figure_height"], "one pose at half the size is both"
     assert next(check for check in small["checks"] if check["id"] == "scale_spread")["value"] < 0.80
     made = _kit(root)["animations"]["walk"]
     assert made["reviewState"] == "pending" and "reviewedBy" not in made and small["result"]["reviewState"] == "pending"
@@ -767,7 +768,7 @@ def test_the_twelve_pose_walk_is_made_at_twelve_frames_a_second_with_its_contrac
     guides = [frame["guide"] for frame in made["frames"]]
     assert len(server.of("generation.image")) == 12 and _refs(server) == [[f"/api/v1/file/hero-key.png?workspace={WS}", guide] for guide in guides], \
         "the first direction has the character's own picture and the guide of each pose"
-    # The old four-pose walk keeps its four poses and no new checks; it is drawn over its guide like the full walks.
+    # The four-pose walk keeps its four poses; it is drawn over its guide like the full walks.
     old = jobs.start(WS, "hero", "walk")
     assert old["status"] == "completed" and _kit(root)["animations"]["walk"]["sheet"]["columns"] == 4 and _kit(root)["animations"]["walk"]["motion"] == "walk"
 
@@ -1083,7 +1084,8 @@ def test_method_puppet_cuts_one_drawing_keeps_the_gait_check_and_warns_without_l
     provenance = made["walk-12"]["provenance"]
     assert provenance["method"] == "puppet" and provenance["reference"] == {"animation": "walk-12", "pose": "contact-a"}
     assert provenance["layers"] is False and provenance["start"] == 0.25
-    assert job["result"]["warnings"] == ["puppet_no_layers"] and job["result"]["provenance"]["method"] == "puppet"
+    assert [warning["code"] for warning in job["result"]["warnings"]] == ["puppet_no_layers"] and job["result"]["provenance"]["method"] == "puppet"
+    assert "See-through" in job["result"]["warnings"][0]["message"] and job["warnings"] == ["puppet_no_layers"], "the job still records the bare code"
     assert seen["decompose"] == 0 and seen["layers"] is None
     gait = next(item for item in job["checks"] if item["id"] == "walk_gait")
     assert gait["ok"], job.get("checks")
@@ -1169,3 +1171,102 @@ def test_a_model_id_may_carry_a_provider_prefix_but_never_a_path():
     for pattern in (_MODEL, SET_MODEL):
         assert pattern.fullmatch("minimax:image-01") and pattern.fullmatch("qwen_image_21_turbo")
         assert not pattern.fullmatch("minimax:../x") and not pattern.fullmatch(":image-01") and not pattern.fullmatch("a/b")
+
+
+# ----- what every job says about its own sheet, whatever the approval mode (services/character_animation_verdict.py) -----
+
+def test_a_job_in_review_mode_carries_the_checks_the_verdict_and_the_gait_and_is_still_pending(world):
+    root, server, jobs = world
+    job = jobs.start(WS, "hero", "walk")
+    result = job["result"]
+    assert job["status"] == "completed" and result["reviewState"] == "pending" and "autoApproved" not in result, "nothing asked for an approval"
+    assert [check["id"] for check in result["checks"]][-2:] == ["figure_height", "repeated_poses"] and all(check["ok"] for check in result["checks"])
+    assert result["verdict"] == {"ok": True, "failed": []} and result["gait"] == {"checked": 4, "missed": []} and "warnings" not in result
+    assert "checks" not in job and "autoApproved" not in job, "the job record keeps what only an approval request adds"
+    assert _kit(root)["animations"]["walk"]["reviewState"] == "pending" and "reviewedBy" not in _kit(root)["animations"]["walk"]
+    assert jobs.status(WS, job["jobId"])["result"]["verdict"] == result["verdict"], "the job store reports them too"
+    gesture = jobs.start(WS, "hero", "wave")["result"]
+    assert gesture["verdict"]["ok"] and "gait" not in gesture, "a gesture has no guide to be measured against"
+
+
+def test_a_bad_sheet_in_review_mode_says_so_with_the_way_out_and_stays_pending(world):
+    root, server, jobs = world
+    server.spoil = {3: "small"}
+    walk = jobs.start(WS, "hero", "walk")["result"]
+    assert walk["verdict"] == {"ok": False, "failed": ["scale_spread", "figure_height"]} and walk["reviewState"] == "pending"
+    [warning] = walk["warnings"]
+    assert warning["code"] == "sheet_checks_failed" and "scale_spread" in warning["message"] and "figure_height" in warning["message"]
+    assert "pose:" in warning["hint"] and 'method "puppet"' in warning["hint"], "a catalog walk can be made again pose by pose or as a puppet"
+    assert _kit(root)["animations"]["walk"]["reviewState"] == "pending"
+    server.spoil, server.calls = {2: "box"}, []
+    [wave] = jobs.start(WS, "hero", "wave")["result"]["warnings"]
+    assert wave["code"] == "sheet_checks_failed" and "silhouette" in wave["message"]
+    assert "pose:" in wave["hint"] and "puppet" not in wave["hint"], "a gesture has no puppet to be made with"
+
+
+def test_a_failing_check_is_listed_in_a_warning_and_only_autoapprove_decides_the_approval(world, monkeypatch):
+    root, server, jobs = world
+    broken = [{"id": "ground_line", "ok": False, "value": 0.2, "limit": 0.02, "detail": "feet off the line"}, {"id": "cell_count", "ok": True, "value": 4, "limit": 4, "detail": ""}]
+    monkeypatch.setattr(character_animation_job, "sheet_checks", lambda *args, **kwargs: broken)
+    review = jobs.start(WS, "hero", "wave")["result"]
+    assert review["checks"] == broken and review["verdict"] == {"ok": False, "failed": ["ground_line"]}
+    assert review["warnings"][0]["message"] == "The sheet failed 1 automatic check: ground_line 0.2 (limit 0.02)."
+    _mode(jobs, ONE_SHOT)
+    asked = jobs.start(WS, "hero", "wave", auto_approve=True)
+    assert asked["autoApproved"] is False and asked["result"]["reviewState"] == "pending" and asked["result"]["warnings"][0]["code"] == "sheet_checks_failed"
+    assert _kit(root)["animations"]["wave"]["reviewState"] == "pending", "a failed check still blocks the agent's approval"
+    monkeypatch.undo()
+    good = jobs.start(WS, "hero", "wave")["result"]
+    assert good["verdict"]["ok"] is True and good["reviewState"] == "pending", "one-shot mode alone approves nothing: it has to be asked for"
+
+
+def test_checks_that_cannot_be_read_warn_and_never_cost_the_sheet_nor_approve_it(world, monkeypatch):
+    root, server, jobs = world
+
+    def unreadable(*args, **kwargs):
+        raise OSError("the sheet file is gone")
+    monkeypatch.setattr(character_animation_job, "sheet_checks", unreadable)
+    _mode(jobs, ONE_SHOT)
+    job = jobs.start(WS, "hero", "wave", auto_approve=True)
+    assert job["status"] == "completed" and "wave" in _kit(root)["animations"], "the animation was made and saved"
+    assert "checks" not in job["result"] and "verdict" not in job["result"]
+    assert [warning["code"] for warning in job["result"]["warnings"]] == ["checks_unavailable"] and "the sheet file is gone" in job["result"]["warnings"][0]["message"]
+    assert job["autoApproved"] is False and _kit(root)["animations"]["wave"]["reviewState"] == "pending", "nobody approves what was not judged"
+
+
+def test_the_poses_that_missed_their_gait_are_listed_with_the_way_out(world):
+    root, server, jobs = world
+    server.wrong_legs = {2}
+    assert "gait" in jobs.start(WS, "hero", "walk")["result"] and jobs.start(WS, "hero", "walk")["result"]["gait"]["missed"] == [], "a retry that fixed it is no miss"
+    server.calls, server.follow_guides = [], False
+    result = jobs.start(WS, "hero", "walk")["result"]
+    ids = [pose["id"] for pose in catalog()["animations"][0]["poses"]]
+    assert result["gait"] == {"checked": 4, "missed": ids}
+    warning = next(item for item in result["warnings"] if item["code"] == "gait_missed")
+    assert warning["message"] == "4 of 4 poses have the legs far from their guide: contact, passing, contact-b, passing-b."
+    assert "pose:" in warning["hint"] and 'method "puppet"' in warning["hint"]
+    assert result["reviewState"] == "pending"
+
+
+def test_remaking_one_pose_keeps_what_the_others_measured_so_the_sheet_still_lists_their_misses(world):
+    root, server, jobs = world
+    server.follow_guides = False
+    jobs.start(WS, "hero", "walk")
+    assert [frame["gait"]["ok"] for frame in _kit(root)["animations"]["walk"]["frames"]] == [False] * 4
+    server.follow_guides, server.calls = True, []
+    remade = jobs.start(WS, "hero", "walk", pose="contact")
+    assert remade["status"] == "completed" and len(server.of("generation.image")) == 1
+    assert remade["result"]["gait"] == {"checked": 4, "missed": ["passing", "contact-b", "passing-b"]}, "the other three are not forgotten"
+    frames = _kit(root)["animations"]["walk"]["frames"]
+    assert [frame["gait"]["ok"] for frame in frames] == [True, False, False, False] and all(frame.get("guide") for frame in frames)
+
+
+def test_a_set_in_review_mode_reports_the_checks_that_failed_of_each_sheet(directions, monkeypatch):
+    root, server, jobs, sets = directions
+    done = sets.start(WS, "hero", "walk-12")
+    sheet = done["sheets"][0]
+    assert sheet["status"] == "completed" and sheet["failed"] == [] and "autoApproved" not in sheet, "nothing was approved, but the sheet was judged"
+    broken = [{"id": "scale_spread", "ok": False, "value": 0.5, "limit": 0.8, "detail": "x"}]
+    monkeypatch.setattr(character_animation_job, "sheet_checks", lambda *args, **kwargs: broken)
+    again = sets.start(WS, "hero", "idle-directions")
+    assert {tuple(sheet["failed"]) for sheet in again["sheets"] if sheet["status"] == "completed"} == {("scale_spread",)}

@@ -71,7 +71,7 @@
   ],
   "animations": [
     {
-      "id": "walk", "group": "cycle", "view": "side", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 4, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "side", "guide": "walk",
+      "id": "walk", "group": "cycle", "view": "side", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 4, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "side", "checks": ["height", "repeats"], "guide": "walk",
       "title": {"es": "Andar", "en": "Walk"},
       "summary": {"es": "Ciclo de paso de perfil en cuatro poses: contacto, paso, contacto, paso. Mira a la derecha.", "en": "Side-view gait in four poses: contact, passing, contact, passing. Looks right."},
       "poses": [

@@ -332,7 +332,14 @@ overturns a decision a person gave.
 `characters.animation.make` and the Wizard's `make_character_animation` take `autoApprove` / `auto_approve`. In `one_shot` the job
 reads the sheet it wrote (`services/character_animation_checks.py`), approves it as the agent only if every check passes and reports
 `autoApproved` and `checks` (id, ok, value, limit); otherwise the animation stays pending and the failed checks say why. In `review`
-mode it is ignored and the job says so (`autoApproveNote`). The checks, set against 57 real Qwen sheets (all passed the picture checks):
+mode it is ignored and the job says so (`autoApproveNote`). Approval is the only thing that depends on the mode: every finished job,
+approval asked for or not, reports on its own sheet in `result` (`services/character_animation_verdict.py`): `checks` (all of them),
+`verdict` `{ok, failed: [check ids]}`, `gait` `{checked, missed: [pose ids]}` for a walk drawn pose by pose (each pose is measured against
+its guide while it is drawn, and a pose that was kept by a remake keeps its measure) and `warnings` `[{code, message, hint}]`:
+`sheet_checks_failed`, `gait_missed`, `checks_unavailable` (the sheet is saved all the same and is never auto-approved) and the
+method's own (`puppet_no_layers`). The hint names a way out that exists: make only the poses that are off again (`pose`) or, for a
+catalog walk, `method: "puppet"`. The panel shows the failed checks and marks the poses that missed their gait on the card of a
+finished animation, and a set lists each sheet's failed checks in every mode. The checks, set against 57 real Qwen sheets (all passed the picture checks):
 
 | check | passes when |
 |---|---|
@@ -344,8 +351,8 @@ mode it is ignored and the job says so (`autoApproveNote`). The checks, set agai
 | `ground_line` | the lowest row of every figure is on the line `feet`, within 2 % of the cell (real: 0.1 %) |
 | `scale_spread` | the smallest figure is at least 80 % of the biggest (legs 80 %, head 70 %, measured before the sheet equalised them; jump and bow 45 %); real walks 0.93 to 0.99 |
 | `scale_measure` | the sheet was scaled by what was asked, not by the height it falls back to when the legs or head cannot be measured |
-| `figure_height` (the full walks only) | every figure is as tall as the median of the cycle, within 3 % |
-| `repeated_poses` (the full walks only) | the same drawing (a hash of the figure) fills at most two cells in a row |
+| `figure_height` (the full walks and the four-pose `walk`) | every figure is as tall as the median of the cycle, within 3 % |
+| `repeated_poses` (the full walks and the four-pose `walk`) | the same drawing (a hash of the figure) fills at most two cells in a row |
 | `direction_mirror` (the full walks and the breaths) | the sheet is not the same drawing as another direction of the kit, nor its mirror (at least 75 % of the cells match) |
 | `walk_gait` (the full walks) | every pose has its legs as far apart as the guide's walk has them at that moment of the step, seen from the sheet's direction, within 15 % of the figure's height after one scale for the whole sheet (0.7 to 1.15). It fails a passing pose drawn as a full stride and a back view that turned three-quarter. Run on 12 sheets made from words alone (Lucky Starr, 2026-10-20) it failed 10: the front walk of Lucky and the two four-pose walks passed |
 

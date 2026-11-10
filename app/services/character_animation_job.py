@@ -10,6 +10,8 @@ them into a sprite sheet and saves it on the kit as ``animations.<id>`` waiting 
 * ``autoApprove`` («Modo un solo disparo», ``agent_autonomy`` = ``one_shot``) lets the job approve what it made when the sheet passes the
   automatic checks (``services/character_animation_checks.py``): the approval is the agent's review (``reviewedBy: agent``), the job
   reports ``autoApproved`` and ``checks``, and a sheet that fails stays pending for a person with the list of what failed.
+  Whatever the mode, a finished job also reports on its sheet in ``result`` (``checks``, ``verdict``, ``gait``, ``warnings``:
+  ``services/character_animation_verdict.py``); only approval depends on the mode.
 * A job is a small file under ``.character-animation-jobs-v1`` of the workspace, so it can be followed after a reload and listed.
 * ``references`` are extra pictures (the picture of another direction of the same character) sent after the character's own as
   ``image_refs``: a model that takes only one reference refuses them, and the job goes on with the character's picture alone
@@ -41,6 +43,7 @@ from services.character_animation_cycle_checks import sibling_sheets
 from services.character_animation_directions import contract_of
 from services.character_animation_guides import gait_of, guide_for, guided_prompt, tries
 from services.character_animation_review import AnimationReviewError, review_kit_animation
+from services.character_animation_verdict import CHECKS_UNAVAILABLE, report_of
 from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
                                            pose_prompt)
 from services.character_kit_face_cleanup import resolve_character_kit_image
@@ -109,6 +112,12 @@ def _saved_frames(job: dict[str, Any], definition: dict[str, Any]) -> list[dict[
                 frame[key] = take[key]
         frames.append(frame)
     return frames
+
+
+def _kept_pose(made: dict[str, Any], keyed: str) -> dict[str, Any]:
+    """A pose a new job keeps: its keyed picture, and the guide and the gait that the earlier drawing recorded (``made``: a saved frame
+    or a take), which a remake of another pose must not erase."""
+    return {"keyed": keyed, **{key: made[key] for key in ("guide", "gait") if made.get(key)}}
 
 
 def reference_of(kit: dict[str, Any]) -> str | None:
@@ -230,17 +239,18 @@ class CharacterAnimationJobs:
         self._store(workspace).save(job)
         return job
 
-    def _kept(self, workspace: str, kit: dict[str, Any], animation_id: str, remake: str | None, ids: list[str]) -> dict[str, str]:
-        """Poses (id → keyed picture) the new job does not make again: the others when one pose is remade, else those an earlier
-        failed, cancelled or interrupted job for this animation had already keyed."""
+    def _kept(self, workspace: str, kit: dict[str, Any], animation_id: str, remake: str | None, ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Poses (id → ``{"keyed", "guide"?, "gait"?}``) the new job does not make again: the others when one pose is remade, else those an
+        earlier failed, cancelled or interrupted job for this animation had already keyed. A pose keeps its guide and how its legs measured
+        against it, so the finished sheet still says which poses missed."""
         if remake:
             frames = (kit.get("animations") or {}).get(animation_id, {}).get("frames") or []
-            return {frame["id"]: frame["source"] for frame in frames if frame["id"] != remake and frame["id"] in ids}
+            return {frame["id"]: _kept_pose(frame, frame["source"]) for frame in frames if frame["id"] != remake and frame["id"] in ids}
         latest = next((job for job in self._store(workspace).list() if job.get("kitId") == kit["id"] and job.get("animationId") == animation_id), None)
         if not latest or latest.get("status") not in RESUMABLE or latest.get("remake"):
             return {}
         made = [take for take in latest.get("takes") or [] if take.get("keyed") and take["status"] in ("ready", "reused")]
-        return {take["id"]: take["keyed"] for take in made if take["id"] in ids}
+        return {take["id"]: _kept_pose(take, take["keyed"]) for take in made if take["id"] in ids}
 
     def _definition(self, kit: dict[str, Any], animation_id: str, custom: dict[str, Any] | None, pose: str | None) -> dict[str, Any]:
         """What to make, or why it cannot be made: nothing is asked of the model before this passes."""
@@ -264,7 +274,7 @@ class CharacterAnimationJobs:
         ids = [item["id"] for item in definition["poses"]]
         # A guided clip replaces every pose. A pose kept from an earlier pose-by-pose try is not a frame of that clip.
         kept = {} if method_name in ("video", "puppet") else self._kept(workspace, kit, definition["id"], pose, ids)
-        takes = [{"id": item, "status": "reused", "keyed": kept[item], "seed": 0} if item in kept else
+        takes = [{"id": item, "status": "reused", "seed": 0, **kept[item]} if item in kept else
                  {"id": item, "status": "waiting", "seed": random.randrange(2_000_000_000)} for item in ids]
         job = {"jobId": f"anim-{uuid.uuid4().hex[:12]}", "workspace": workspace, "kitId": kit["id"], "animationId": definition["id"],
                "title": definition["title"]["en"], "model": model or DEFAULT_MODEL, "status": "queued", "stage": "poses", "takes": takes,
@@ -538,27 +548,38 @@ class CharacterAnimationJobs:
             **({"provenance": job["puppet"]} if job.get("puppet") else {}),
         }
         normalize_kit_animations({definition["id"]: entry})
+        checks = self._sheet_checks(job, sheet, definition)
         self._save_on_kit(workspace, job["kitId"], definition["id"], entry)
-        approval = self._auto_approve(job, sheet, definition) if job.get("autoApprove") else {}
+        # Only autoApprove decides approval; the checks and the gait are reported to whoever reads the job, in every mode.
+        approval = self._auto_approve(job, checks) if job.get("autoApprove") else {}
         result = {"animation": definition["id"], "reviewState": approval.get("reviewState", "pending"), "sheet": sheet["source"], "count": sheet["count"],
                   "frames": [take["keyed"] for take in job["takes"]], "scaleBy": sheet["scaleBy"], **clip_fields(job),
-                  **{key: approval[key] for key in ("autoApproved", "checks") if key in approval},
-                  **({"provenance": job["puppet"]} if job.get("puppet") else {}),
-                  **({"warnings": job["warnings"]} if job.get("warnings") else {})}
+                  **report_of(checks, definition, job), **({"autoApproved": approval["autoApproved"]} if approval else {}),
+                  **({"provenance": job["puppet"]} if job.get("puppet") else {})}
         self._update(store, job, status="completed", finishedAt=_now(), generationJob=None, result=result,
                      **{key: approval[key] for key in ("autoApproved", "checks", "reviewNote") if key in approval})
 
-    def _auto_approve(self, job: dict[str, Any], sheet: dict[str, Any], definition: dict[str, Any]) -> dict[str, Any]:
+    def _sheet_checks(self, job: dict[str, Any], sheet: dict[str, Any], definition: dict[str, Any]) -> list[dict[str, Any]] | None:
+        """The automatic checks on the sheet just written, whatever the approval mode. None when they could not be read: the sheet is
+        made and saved all the same (a diagnosis never costs it), the job warns ``checks_unavailable`` and nothing is auto-approved."""
+        try:
+            root = self.deps.workspace_dir(job["workspace"])
+            siblings = sibling_sheets(self._kit(job["workspace"], job["kitId"]), definition, uploads_root=self.deps.uploads_root(), workspace_root=root)
+            return sheet_checks(sheet, definition, siblings)
+        except Exception as error:  # the checks are a report on the sheet, not a step of making it
+            job["checksError"] = f"{error}"[:200]
+            return None
+
+    def _auto_approve(self, job: dict[str, Any], checks: list[dict[str, Any]] | None) -> dict[str, Any]:
         """The agent's review of the animation just saved: approved when every automatic check passes, else it stays pending with the
         checks that failed. The approval is the same operation a review over MCP is (``review_kit_animation``, actor ``agent``)."""
-        root = self.deps.workspace_dir(job["workspace"])
-        siblings = sibling_sheets(self._kit(job["workspace"], job["kitId"]), definition, uploads_root=self.deps.uploads_root(), workspace_root=root)
-        checks = sheet_checks(sheet, definition, siblings)
+        if checks is None:
+            return {"autoApproved": False, "reviewState": "pending", "reviewNote": CHECKS_UNAVAILABLE}
         outcome = {"autoApproved": False, "checks": checks, "reviewState": "pending", "reviewNote": summary(checks)}
         if failed(checks):
             return outcome
         try:
-            review = review_kit_animation(self.deps.workspace_dir(job["workspace"]), job["kitId"], definition["id"], "approve", outcome["reviewNote"], "agent",
+            review = review_kit_animation(self.deps.workspace_dir(job["workspace"]), job["kitId"], job["definition"]["id"], "approve", outcome["reviewNote"], "agent",
                                           services=self._services())
         except AnimationReviewError as error:  # the owner switched the mode off while the poses were made: a person decides
             return {**outcome, "reviewNote": str(error)}

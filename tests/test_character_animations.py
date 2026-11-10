@@ -409,9 +409,10 @@ def test_the_catalog_has_five_directions_each_with_a_twelve_pose_walk_at_twelve_
         assert item["view"] == direction and item["columns"] == 6 and set(item["checks"]) == {"height", "repeats", "mirror", "gait"}
         assert item["guide"] == "walk", "every pose of a walk is drawn over its guide"
         assert len({pose["id"] for pose in item["poses"]}) == 12 == len({pose["prompt"] for pose in item["poses"]}), "twelve different drawings"
-    # The old four-pose walk stays as it was, and says what it is.
+    # The four-pose walk keeps its four poses and says what it is. It is read for one size and for a walk that stops; the mirror compares
+    # cell with cell against the twelve-pose directions and the gait compares each cell with its moment of a twelve-pose step.
     walk = next(item for item in data["animations"] if item["id"] == "walk")
-    assert len(walk["poses"]) == 4 and walk["fps"] == 4 and (walk["motion"], walk["dir"]) == ("walk", "side") and "checks" not in walk
+    assert len(walk["poses"]) == 4 and walk["fps"] == 4 and (walk["motion"], walk["dir"]) == ("walk", "side") and walk["checks"] == ["height", "repeats"]
     assert walk["guide"] == "walk" and data["guide"]["style"] in data["guide"]["text"]
     idles = {item["dir"] for item in data["animations"] if item.get("motion") == "idle"}
     assert idles == {"front", "side", "front34", "back34", "back"}
@@ -589,4 +590,20 @@ def test_the_cycle_checks_run_only_on_the_animations_that_ask_for_them(folder):
     four = [_figure(folder / f"p{index}.png", legs=(30 + index, 100 - index)) for index in range(4)]
     built = _sheet_of(folder, four)
     ids = set(_checks(built, "walk"))
-    assert not ids & {"figure_height", "repeated_poses", "direction_mirror"}, "the old walk is checked as it always was"
+    assert {"figure_height", "repeated_poses"} <= ids and not ids & {"direction_mirror", "walk_gait"}, "the four-pose walk asks for two of the four"
+    assert not set(_checks(built, "wave")) & {"figure_height", "repeated_poses", "direction_mirror", "walk_gait"}, "a gesture is checked as it always was"
+
+
+def _four_pose_walk(folder: Path, name: str, *, heights: dict[int, int] | None = None, same: dict[int, int] | None = None) -> dict:
+    """The four poses of ``walk`` (contact, passing, contact, passing: phases 0, 3, 6 and 9 of the twelve a walker is drawn in)."""
+    poses = [_walker(folder / f"{name}-{index}.png", (same or {}).get(index, 3 * index), height=(heights or {}).get(index, 200)) for index in range(4)]
+    return build_sheet([pose.name for pose in poses], uploads_root=str(folder / "uploads"), workspace_root=str(folder), workspace="demo", name=name, output_dir=str(folder))
+
+
+def test_the_four_pose_walk_fails_the_size_and_the_repeat_checks_like_the_long_cycles(folder):
+    good = _checks(_four_pose_walk(folder, "four-good"), "walk")
+    assert all(check["ok"] for check in good.values()), {key: check for key, check in good.items() if not check["ok"]}
+    small = _checks(_four_pose_walk(folder, "four-small", heights={1: 170}), "walk")
+    assert not small["figure_height"]["ok"] and small["figure_height"]["value"] > 0.03, "a pose a tenth smaller makes the walk pulse"
+    stopped = _checks(_four_pose_walk(folder, "four-stopped", same={1: 0, 2: 0}), "walk")
+    assert not stopped["repeated_poses"]["ok"] and stopped["repeated_poses"]["value"] == 3, "three poses alike in a row is a walk that stops"
