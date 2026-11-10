@@ -306,8 +306,8 @@ def _dedupe(issues: list[dict]) -> list[dict]:
     return out
 
 
-def _combined(issues: list[dict], items: list[dict]) -> dict:
-    """One position that applies every fix of an object (they are shifts from its current position, so they add up)."""
+def _combined(issues: list[dict], items: list[dict], at_least: int = 2) -> dict:
+    """One position that applies every fix of an object (they are shifts from its current position, so they add up); only objects with ``at_least`` fixes."""
     position = {item.get("id"): list(item.get("position") or [0, 0, 0]) for item in items}
     total: dict[str, list[float]] = {}
     count: dict[str, int] = {}
@@ -319,7 +319,13 @@ def _combined(issues: list[dict], items: list[dict]) -> dict:
         for i in range(3):
             shift[i] += fix[i] - position[issue["id"]][i]
         count[issue["id"]] = count.get(issue["id"], 0) + 1
-    return {id_: [round(position[id_][i] + shift[i], 3) for i in range(3)] for id_, shift in total.items() if count[id_] > 1}
+    return {id_: [round(position[id_][i] + shift[i], 3) for i in range(3)] for id_, shift in total.items() if count[id_] >= at_least}
+
+
+def placement_fixes(issues: list[dict], items: list[dict], only=None) -> dict:
+    """``{object id: position}`` that applies every position fix of the listed issues (the objects in ``only``, or all): what ``world3d.scene.fix_placement`` writes."""
+    fixes = _combined(issues, items, at_least=1)
+    return {id_: position for id_, position in fixes.items() if not only or id_ in only}
 
 
 def placement_warnings(issues: list[dict], items: list[dict]) -> list[str]:
