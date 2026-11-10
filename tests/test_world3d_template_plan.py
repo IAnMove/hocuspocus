@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -236,6 +237,39 @@ def test_the_vertical_cards_answer_vertical_words_and_leave_plain_dialogue_to_th
     assert [card["id"] for card in plain[:3]] == ["duo-diagonal", "speech-dialogue", "two-shot"]
     assert not any(card["id"].startswith("vertical-") for card in plain[:5])
     assert all(card["score"] < plain[0]["score"] for card in plain if card["id"].startswith("vertical-"))
+
+
+def test_the_vertical_pack_never_takes_a_plain_phrase_from_the_card_it_found_before(monkeypatch):
+    """A 16:9 brief (``world3d``/``toma``) and ``apply_query`` take the top card only when it strictly wins: across the
+    whole writer's battery, adding the vertical cards changes no top card and turns no strict win into a tie, except
+    for a query that names the frame."""
+    import services.world3d_template_catalog as catalog
+    from services.world3d_template_frame import names_a_frame
+    entries = json.loads((Path(__file__).resolve().parent / "fixtures" / "world3d_template_queries.json").read_text(encoding="utf-8"))
+    queries = [entry["query"] for entry in entries] + ["mesa", "locked", "three quarter", "caminar y hablar"]
+    full = builtin_cards()
+    without = [card for card in full if not card["id"].startswith("vertical-")]
+
+    def top(cards, query):
+        monkeypatch.setattr(catalog, "builtin_cards", lambda: cards)
+        found = catalog.search_report(query, limit=8)["templates"]
+        if not found:
+            return None, False
+        return found[0]["id"], len(found) == 1 or found[0]["score"] > found[1]["score"]
+
+    checked = 0
+    for query in queries:
+        if names_a_frame(catalog._query_tokens(catalog._fold(query))):
+            continue
+        assert top(full, query) == top(without, query), query
+        checked += 1
+    assert checked >= 280
+    monkeypatch.setattr(catalog, "builtin_cards", lambda: full)
+    for query, twin in (("caminar", "cine-walk-and-talk"), ("sentado", "dialogue-table"), ("mesa", "dialogue-table")):
+        found = search_report(query, limit=2)["templates"]
+        assert found[0]["id"] == twin and found[0]["score"] > found[1]["score"], (query, found)
+    # Naming the frame lifts the point: the vertical twin answers.
+    assert search_report("caminar en vertical", limit=1)["templates"][0]["id"] == "vertical-dialogue-walk"
 
 
 def test_a_plan_without_a_format_is_for_the_production_frame_and_takes_landscape_cards():

@@ -101,7 +101,7 @@ test('every vertical shot builds at 720x1280 for models, reopens through the par
     assert.ok(subjects.every(slot => slot.media === 'model3d' && slot.scale === 1 && slot.sourceUrl === ''), `${id}: authored for models, shipped empty`)
     const framing = doc.camera.framing!
     assert.ok(framing && validFraming(framing), id)
-    assert.equal(framing.anchor, id === 'vertical-dialogue-table' ? 'feet' : 'head', id)
+    assert.equal(framing.anchor, id === 'vertical-dialogue-across' ? 'feet' : 'head', id)
     assert.equal(framing.track, 'rest', `${id}: the camera never follows a clip's pose`)
     assert.equal(framing.relativeToFacing, false, id)
     assert.notEqual(doc.camera.family, 'fixed', `${id}: the fixed family ignores framing`)
@@ -124,7 +124,7 @@ test('every vertical shot builds at 720x1280 for models, reopens through the par
 
 /** The faces a card is about, when they are not the framing target: the target of these is seen from behind. */
 const FACES: Partial<Record<string, string[]>> = {
-  'vertical-dialogue-high': ['subject_2'], 'vertical-dialogue-trio': ['subject_2', 'person_3'], 'vertical-dialogue-table': ['subject_2'],
+  'vertical-dialogue-high': ['subject_2'], 'vertical-dialogue-trio': ['subject_2', 'person_3'], 'vertical-dialogue-across': ['subject_2'],
 }
 
 test('faces sit on the upper third with the crown in frame and the lower third left for captions', () => {
@@ -144,7 +144,7 @@ test('faces sit on the upper third with the crown in frame and the lower third l
 })
 
 test('the second face is in frame where the card shows two, and off frame in the singles', () => {
-  const shown = ['vertical-dialogue-stack', 'vertical-dialogue-walk', 'vertical-dialogue-table', 'vertical-dialogue-trio',
+  const shown = ['vertical-dialogue-stack', 'vertical-dialogue-walk', 'vertical-dialogue-across', 'vertical-dialogue-trio',
     'vertical-dialogue-listener', 'vertical-dialogue-low', 'vertical-dialogue-high', 'vertical-dialogue-locked']
   for (const id of VERTICAL_DIALOGUE_IDS) {
     const doc = applyScene3DTemplate(id)
@@ -188,10 +188,10 @@ test('the walk strolls toward the camera, the seated card carries its table and 
   const walkTraits = templateTraitsOf('vertical-dialogue-walk')
   assert.ok(walkTraits.travel && walkTraits.moves.includes('track') && walkTraits.uses.includes('dialogue'))
 
-  const table = slotsOf(applyScene3DTemplate('vertical-dialogue-table')).table
+  const table = slotsOf(applyScene3DTemplate('vertical-dialogue-across')).table
   assert.deepEqual([table.slot, table.media, table.grounded], ['prop', 'model3d', true])
-  assert.match(verticalCard('vertical-dialogue-table', 'en')!.description, /sit_down/)
-  assert.match(verticalCard('vertical-dialogue-table', 'es')!.description, /sit_down/)
+  assert.match(verticalCard('vertical-dialogue-across', 'en')!.description, /sit_down/)
+  assert.match(verticalCard('vertical-dialogue-across', 'es')!.description, /sit_down/)
 
   const third = slotsOf(applyScene3DTemplate('vertical-dialogue-trio')).person_3
   assert.deepEqual([third.slot, third.media, third.scale, third.grounded], ['prop', 'model3d', 1, true])

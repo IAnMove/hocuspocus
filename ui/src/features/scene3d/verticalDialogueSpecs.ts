@@ -50,7 +50,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     slots: two([0, 0, 0.55], 1.1, [0.5, 0, -0.65], -0.45),
     copy: copy(
       { title: 'Portrait two-shot, near and far', description: 'A 9:16 portrait two-shot in depth: subject_1 near on the left, three-quarter, subject_2 behind on the right facing the camera, one face above the other. A slow push; the lower third stays free for captions.', requirements: pair('near speaker', 'far speaker', 'interlocutor cercano', 'interlocutor lejano').en },
-      { title: 'Plano de dos vertical, cerca y lejos', description: 'Plano de dos vertical 9:16 en profundidad: subject_1 cerca a la izquierda, en tres cuartos, y subject_2 detrás a la derecha de cara a cámara, una cara sobre la otra, hablando. Empuje lento; el tercio inferior queda libre para subtítulos.', requirements: pair('near speaker', 'far speaker', 'interlocutor cercano', 'interlocutor lejano').es },
+      { title: 'Plano de dos vertical, cerca y lejos', description: 'Plano de dos vertical 9:16 en profundidad: subject_1 cerca a la izquierda, en tres cuartos, y subject_2 detrás a la derecha de cara a cámara, una cara sobre la otra. Empuje lento; el tercio inferior queda libre para subtítulos.', requirements: pair('near speaker', 'far speaker', 'interlocutor cercano', 'interlocutor lejano').es },
     ),
   }),
   'vertical-dialogue-ots-a': card({
@@ -59,7 +59,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     slots: facingPair(),
     copy: copy(
       { title: 'Portrait over the shoulder A', description: 'A 9:16 portrait over-the-shoulder: subject_1’s shoulder fills the left edge and subject_2’s face sits high on the right, medium-close with a slow push. Cut with B for the reverse; the eyelines match.', requirements: pair('left speaker, seen from behind', 'right speaker, framed', 'interlocutor izquierdo, de espaldas', 'interlocutor derecho, encuadrado').en },
-      { title: 'Por encima del hombro vertical A', description: 'Por encima del hombro en vertical 9:16: el hombro de subject_1 ocupa el borde izquierdo y la cara de subject_2 queda alta a la derecha, hablando, plano medio corto con empuje lento. Monta B para el plano inverso; las miradas casan.', requirements: pair('left speaker, seen from behind', 'right speaker, framed', 'interlocutor izquierdo, de espaldas', 'interlocutor derecho, encuadrado').es },
+      { title: 'Por encima del hombro vertical A', description: 'Por encima del hombro en vertical 9:16: el hombro de subject_1 ocupa el borde izquierdo y la cara de subject_2 queda alta a la derecha, plano medio corto con empuje lento. Monta B para el plano inverso; las miradas casan.', requirements: pair('left speaker, seen from behind', 'right speaker, framed', 'interlocutor izquierdo, de espaldas', 'interlocutor derecho, encuadrado').es },
     ),
   }),
   'vertical-dialogue-ots-b': card({
@@ -70,7 +70,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     slots: facingPair(),
     copy: copy(
       { title: 'Portrait over the shoulder B', description: 'The reverse of A in 9:16 portrait: subject_2’s shoulder fills the right edge and subject_1’s face sits high on the left, at the same distance and with the same push, so cutting A and B keeps the eyelines.', requirements: pair('left speaker, framed', 'right speaker, seen from behind', 'interlocutor izquierdo, encuadrado', 'interlocutor derecho, de espaldas').en },
-      { title: 'Por encima del hombro vertical B', description: 'El inverso de A en vertical 9:16: el hombro de subject_2 ocupa el borde derecho y la cara de subject_1 queda alta a la izquierda, hablando, a la misma distancia y con el mismo empuje, para que montar A y B conserve las miradas.', requirements: pair('left speaker, framed', 'right speaker, seen from behind', 'interlocutor izquierdo, encuadrado', 'interlocutor derecho, de espaldas').es },
+      { title: 'Por encima del hombro vertical B', description: 'El inverso de A en vertical 9:16: el hombro de subject_2 ocupa el borde derecho y la cara de subject_1 queda alta a la izquierda, a la misma distancia y con el mismo empuje, para que montar A y B conserve las miradas.', requirements: pair('left speaker, framed', 'right speaker, seen from behind', 'interlocutor izquierdo, encuadrado', 'interlocutor derecho, de espaldas').es },
     ),
   }),
   'vertical-dialogue-single-a': card({
@@ -81,7 +81,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     slots: facingPair(),
     copy: copy(
       { title: 'Portrait single A', description: 'A clean 9:16 portrait single of subject_1, medium-close, looking screen right toward subject_2 just out of frame, with a slow push. Cut with single B and the over-the-shoulders: the same side, the same eyelines.', requirements: pair('left speaker, framed', 'right speaker, out of frame', 'interlocutor izquierdo, encuadrado', 'interlocutor derecho, fuera de cuadro').en },
-      { title: 'Plano individual vertical A', description: 'Plano individual limpio en vertical 9:16 de subject_1, plano medio corto, hablando y mirando a la derecha del cuadro hacia subject_2, justo fuera de campo, con empuje lento. Monta el B y los hombros: mismo lado, mismas miradas.', requirements: pair('left speaker, framed', 'right speaker, out of frame', 'interlocutor izquierdo, encuadrado', 'interlocutor derecho, fuera de cuadro').es },
+      { title: 'Plano individual vertical A', description: 'Plano individual limpio en vertical 9:16 de subject_1, plano medio corto, mirando a la derecha del cuadro hacia subject_2, justo fuera de campo, con empuje lento. Monta el B y los hombros: mismo lado, mismas miradas.', requirements: pair('left speaker, framed', 'right speaker, out of frame', 'interlocutor izquierdo, encuadrado', 'interlocutor derecho, fuera de cuadro').es },
     ),
   }),
   'vertical-dialogue-single-b': card({
@@ -92,7 +92,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     slots: facingPair(),
     copy: copy(
       { title: 'Portrait single B', description: 'The reverse single in 9:16 portrait: subject_2, medium-close, looking screen left toward subject_1 just out of frame, at the same distance and push as single A.', requirements: pair('left speaker, out of frame', 'right speaker, framed', 'interlocutor izquierdo, fuera de cuadro', 'interlocutor derecho, encuadrado').en },
-      { title: 'Plano individual vertical B', description: 'El individual inverso en vertical 9:16: subject_2, plano medio corto, hablando y mirando a la izquierda del cuadro hacia subject_1, justo fuera de campo, a la misma distancia y con el mismo empuje que el A.', requirements: pair('left speaker, out of frame', 'right speaker, framed', 'interlocutor izquierdo, fuera de cuadro', 'interlocutor derecho, encuadrado').es },
+      { title: 'Plano individual vertical B', description: 'El individual inverso en vertical 9:16: subject_2, plano medio corto, mirando a la izquierda del cuadro hacia subject_1, justo fuera de campo, a la misma distancia y con el mismo empuje que el A.', requirements: pair('left speaker, out of frame', 'right speaker, framed', 'interlocutor izquierdo, fuera de cuadro', 'interlocutor derecho, encuadrado').es },
     ),
   }),
   'vertical-dialogue-walk': card({
@@ -106,11 +106,11 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
       plate(),
     ],
     copy: copy(
-      { title: 'Portrait walk and talk', description: 'Two figures walk toward the camera side by side, subject_2 half a step behind, and the 9:16 portrait frame backs away with them at a stroll, both faces on the upper third. Bind a walk clip to both.', requirements: WALKERS.en },
-      { title: 'Caminar y hablar en vertical', description: 'Dos figuras caminan hacia la cámara una junto a otra, subject_2 medio paso detrás, hablando, y el cuadro vertical 9:16 retrocede con ellas al paso, las dos caras en el tercio superior. Pon a las dos un clip walk.', requirements: WALKERS.es },
+      { title: 'Portrait talk on the go', description: 'Two figures walk toward the camera side by side, subject_2 half a step behind, and the 9:16 portrait frame backs away with them at a stroll, both faces on the upper third. Bind a walk clip to both.', requirements: WALKERS.en },
+      { title: 'Charla de camino en vertical', description: 'Dos figuras caminan hacia la cámara una junto a otra, subject_2 medio paso detrás, y el cuadro vertical 9:16 retrocede con ellas al paso, las dos caras en el tercio superior. Pon a las dos un clip walk.', requirements: WALKERS.es },
     ),
   }),
-  'vertical-dialogue-table': card({
+  'vertical-dialogue-across': card({
     duration: 6,
     // The feet anchor: a seated clip lowers the head, never the feet, so the frame holds for a GLB or a seated cutout.
     camera: portraitCam([-0.45, 1.55, 2.1], [0.17, 0.85, -0.4], 40, {
@@ -124,8 +124,8 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     ],
     aliases: { ...ALIASES, table: 'table' },
     copy: copy(
-      { title: 'Portrait seated across a table', description: 'Two figures seated across a small table in 9:16 portrait: subject_1 near on the left from behind, subject_2 beyond the table facing the camera. A slow push at seated eye height; needs a seated clip (sit_down held) or seated cutouts.', requirements: ['GLB with a seated clip (sit_down held) or seated cutout, near speaker (subject_1)', 'GLB with a seated clip (sit_down held) or seated cutout, far speaker (subject_2)', 'GLB table (table, role prop)', PLATE_EN] },
-      { title: 'Sentados a la mesa en vertical', description: 'Dos figuras sentadas a una mesa en vertical 9:16, hablando: subject_1 cerca a la izquierda de espaldas, subject_2 enfrente de cara a cámara. Empuje lento a la altura de los ojos; clip sentado (sit_down mantenido) o recortes sentados.', requirements: ['GLB con clip sentado (sit_down mantenido) o recorte sentado, interlocutor cercano (subject_1)', 'GLB con clip sentado (sit_down mantenido) o recorte sentado, interlocutor lejano (subject_2)', 'GLB de mesa (table, papel prop)', PLATE_ES] },
+      { title: 'Portrait across a table', description: 'Two figures seated across a small table in 9:16 portrait: subject_1 near on the left from behind, subject_2 beyond the table facing the camera. A slow push at seated eye height; needs a seated clip (sit_down held) or seated cutouts.', requirements: ['GLB with a seated clip (sit_down held) or seated cutout, near speaker (subject_1)', 'GLB with a seated clip (sit_down held) or seated cutout, far speaker (subject_2)', 'GLB table (table, role prop)', PLATE_EN] },
+      { title: 'Mesa frente a frente en vertical', description: 'Dos figuras sentadas a una mesa en vertical 9:16: subject_1 cerca a la izquierda de espaldas, subject_2 enfrente de cara a cámara. Empuje lento a la altura de los ojos; clip sentado (sit_down mantenido) o recortes sentados.', requirements: ['GLB con clip sentado (sit_down mantenido) o recorte sentado, interlocutor cercano (subject_1)', 'GLB con clip sentado (sit_down mantenido) o recorte sentado, interlocutor lejano (subject_2)', 'GLB de mesa (table, papel prop)', PLATE_ES] },
     ),
   }),
   'vertical-dialogue-trio': card({
@@ -142,7 +142,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     aliases: { front: 'subject_1', left: 'subject_2', third: 'person_3', background: 'background' },
     copy: copy(
       { title: 'Portrait three in a triangle', description: 'Three figures in a 9:16 portrait triangle: subject_1 near in the middle, seen from behind, subject_2 and a third figure beyond on either side facing the camera. A slow push with a slight arc. The third figure is the prop slot person_3.', requirements: [`${CAST_EN}, front figure, from behind (subject_1)`, `${CAST_EN}, back left figure (subject_2)`, 'GLB, back right figure (person_3, role prop)', PLATE_EN] },
-      { title: 'Tres en triángulo, vertical', description: 'Tres figuras en triángulo en vertical 9:16, hablando: subject_1 cerca en el centro, de espaldas, y subject_2 y una tercera figura detrás a cada lado de cara a cámara. Empuje lento con un arco leve. La tercera es el hueco prop person_3.', requirements: [`${CAST_ES}, figura delantera, de espaldas (subject_1)`, `${CAST_ES}, figura trasera izquierda (subject_2)`, 'GLB, figura trasera derecha (person_3, papel prop)', PLATE_ES] },
+      { title: 'Tres en triángulo, vertical', description: 'Tres figuras en triángulo en vertical 9:16: subject_1 cerca en el centro, de espaldas, y subject_2 y una tercera figura detrás a cada lado de cara a cámara. Empuje lento con un arco leve. La tercera es el hueco prop person_3.', requirements: [`${CAST_ES}, figura delantera, de espaldas (subject_1)`, `${CAST_ES}, figura trasera izquierda (subject_2)`, 'GLB, figura trasera derecha (person_3, papel prop)', PLATE_ES] },
     ),
   }),
   'vertical-dialogue-listener': card({
@@ -165,7 +165,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     slots: two([-0.27, 0, 0.1], 1.55, [0.27, 0, -0.12], -1.25),
     copy: copy(
       { title: 'Portrait low-angle two-shot', description: 'Two figures face each other, seen from below in 9:16 portrait: a low lens at hip height looks up at both faces with the ceiling or the sky behind, and creeps in. Power, a challenge, a confession.', requirements: pair('left speaker', 'right speaker', 'interlocutor izquierdo', 'interlocutor derecho').en },
-      { title: 'Plano de dos en contrapicado vertical', description: 'Dos figuras frente a frente, hablando, vistas desde abajo en vertical 9:16: una lente baja a la altura de la cadera mira hacia las dos caras con el techo o el cielo detrás y se acerca despacio. Poder, un desafío, una confesión.', requirements: pair('left speaker', 'right speaker', 'interlocutor izquierdo', 'interlocutor derecho').es },
+      { title: 'Plano de dos en contrapicado vertical', description: 'Dos figuras frente a frente, vistas desde abajo en vertical 9:16: una lente baja a la altura de la cadera mira hacia las dos caras con el techo o el cielo detrás y se acerca despacio. Poder, un desafío, una confesión.', requirements: pair('left speaker', 'right speaker', 'interlocutor izquierdo', 'interlocutor derecho').es },
     ),
   }),
   'vertical-dialogue-high': card({
@@ -176,7 +176,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     slots: two([-0.15, 0, 0.6], 2.75, [0.25, 0, -0.8], -0.3),
     copy: copy(
       { title: 'Portrait high-angle two-shot', description: 'Two figures face each other, seen from above in 9:16 portrait: the floor is the background, subject_1 near at the bottom with the back to the camera and subject_2 beyond at the top looking up. The camera sinks slowly.', requirements: pair('near speaker, from behind', 'far speaker', 'interlocutor cercano, de espaldas', 'interlocutor lejano').en },
-      { title: 'Plano de dos en picado vertical', description: 'Dos figuras frente a frente, hablando, vistas desde arriba en vertical 9:16: el suelo es el fondo, subject_1 cerca abajo y de espaldas, subject_2 al fondo arriba mirando hacia arriba. La cámara baja despacio.', requirements: pair('near speaker, from behind', 'far speaker', 'interlocutor cercano, de espaldas', 'interlocutor lejano').es },
+      { title: 'Plano de dos en picado vertical', description: 'Dos figuras frente a frente, vistas desde arriba en vertical 9:16: el suelo es el fondo, subject_1 cerca abajo y de espaldas, subject_2 al fondo arriba mirando hacia arriba. La cámara baja despacio.', requirements: pair('near speaker, from behind', 'far speaker', 'interlocutor cercano, de espaldas', 'interlocutor lejano').es },
     ),
   }),
   'vertical-dialogue-locked': card({
@@ -189,7 +189,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     worldSfx: [LOCKED_DUST],
     copy: copy(
       { title: 'Portrait locked two-shot', description: 'Two figures face each other in a 9:16 portrait two-shot on a locked tripod, from the knees up, both faces on the upper third. The camera never moves; dust drifts in the air and the cast’s clips carry the shot.', requirements: pair('left speaker', 'right speaker', 'interlocutor izquierdo', 'interlocutor derecho').en },
-      { title: 'Plano de dos fijo en vertical', description: 'Dos figuras frente a frente, hablando, en un plano de dos vertical 9:16 con trípode fijo, de las rodillas para arriba, las caras en el tercio superior. La cámara no se mueve; flota polvo y los clips del reparto llevan el plano.', requirements: pair('left speaker', 'right speaker', 'interlocutor izquierdo', 'interlocutor derecho').es },
+      { title: 'Plano de dos fijo en vertical', description: 'Dos figuras frente a frente, en un plano de dos vertical 9:16 con trípode fijo, de las rodillas para arriba, las caras en el tercio superior. La cámara no se mueve; flota polvo y los clips del reparto llevan el plano.', requirements: pair('left speaker', 'right speaker', 'interlocutor izquierdo', 'interlocutor derecho').es },
     ),
   }),
 }

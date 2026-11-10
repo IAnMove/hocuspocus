@@ -19,8 +19,8 @@ export const VERTICAL_TALK_SPECS: Record<VerticalTalkId, CastPackSpec> = {
     }),
     slots: speaker({ rotationY: 0.08 }),
     copy: copy(
-      { title: 'Portrait bust to camera', description: 'One figure talks straight to the lens in a 9:16 portrait bust: the eyes on the upper third, a little air over the head and the chest in the lower third for captions, with a slow push.', requirements: SPEAKER.en },
-      { title: 'Busto vertical a cámara', description: 'Una figura habla directamente a cámara en un busto vertical 9:16: los ojos en el tercio superior, algo de aire sobre la cabeza y el pecho en el tercio inferior para los subtítulos, con un empuje lento.', requirements: SPEAKER.es },
+      { title: 'Portrait to camera, chest up', description: 'One figure talks straight to the lens in a 9:16 portrait bust: the eyes on the upper third, a little air over the head and the chest in the lower third for captions, with a slow push.', requirements: SPEAKER.en },
+      { title: 'A cámara en vertical, hasta el pecho', description: 'Una figura habla directamente a cámara en un busto vertical 9:16: los ojos en el tercio superior, algo de aire sobre la cabeza y el pecho en el tercio inferior para los subtítulos, con un empuje lento.', requirements: SPEAKER.es },
     ),
   }),
   'vertical-talk-caption': card({
@@ -42,7 +42,7 @@ export const VERTICAL_TALK_SPECS: Record<VerticalTalkId, CastPackSpec> = {
     slots: speaker({ rotationY: -0.6 }),
     copy: copy(
       { title: 'Portrait three-quarter talk', description: 'One figure turned three-quarter to the lens talks in a 9:16 portrait medium-close, the eyes on the upper third; the camera arcs slowly toward the face.', requirements: SPEAKER.en },
-      { title: 'Tres cuartos vertical hablando', description: 'Una figura girada en tres cuartos habla en un plano medio corto vertical 9:16, con los ojos en el tercio superior; la cámara traza un arco lento hacia la cara.', requirements: SPEAKER.es },
+      { title: 'Tres cuartos en vertical', description: 'Una figura girada en tres cuartos habla en un plano medio corto vertical 9:16, con los ojos en el tercio superior; la cámara traza un arco lento hacia la cara.', requirements: SPEAKER.es },
     ),
   }),
   'vertical-talk-low': card({
@@ -53,7 +53,7 @@ export const VERTICAL_TALK_SPECS: Record<VerticalTalkId, CastPackSpec> = {
     slots: speaker({ rotationY: 0.06 }),
     copy: copy(
       { title: 'Portrait low-angle talk', description: 'One figure talks seen from below in 9:16 portrait: a low lens at chest height looks up at the face and rises a little as it creeps in. Authority, a speech, a threat.', requirements: SPEAKER.en },
-      { title: 'Contrapicado vertical hablando', description: 'Una figura habla vista desde abajo en vertical 9:16: una lente baja a la altura del pecho mira hacia la cara y sube un poco mientras se acerca. Autoridad, un discurso, una amenaza.', requirements: SPEAKER.es },
+      { title: 'Contrapicado en vertical', description: 'Una figura habla vista desde abajo en vertical 9:16: una lente baja a la altura del pecho mira hacia la cara y sube un poco mientras se acerca. Autoridad, un discurso, una amenaza.', requirements: SPEAKER.es },
     ),
   }),
   'vertical-talk-push': card({
@@ -74,8 +74,8 @@ export const VERTICAL_TALK_SPECS: Record<VerticalTalkId, CastPackSpec> = {
     }),
     slots: speaker({ rotationY: 0.62 }),
     copy: copy(
-      { title: 'Portrait side look', description: 'One figure talks to someone off frame, as in an interview: in 9:16 portrait the face sits left with room to look into on the right, and the camera slides slowly the same way.', requirements: SPEAKER.en },
-      { title: 'Mirada de lado vertical', description: 'Una figura habla con alguien fuera de cuadro, como en una entrevista: en vertical 9:16 la cara queda a la izquierda con aire a la derecha hacia donde mira, y la cámara se desliza despacio en ese sentido.', requirements: SPEAKER.es },
+      { title: 'Portrait talk to someone off frame', description: 'One figure talks to someone off frame, as in an interview: in 9:16 portrait the face sits left with room to look into on the right, and the camera slides slowly the same way.', requirements: SPEAKER.en },
+      { title: 'Hablar a alguien fuera de cuadro, vertical', description: 'Una figura habla con alguien fuera de cuadro, como en una entrevista: en vertical 9:16 la cara queda a la izquierda con aire a la derecha hacia donde mira, y la cámara se desliza despacio en ese sentido.', requirements: SPEAKER.es },
     ),
   }),
 }

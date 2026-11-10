@@ -30,6 +30,7 @@ from urllib.parse import quote
 from services import template_semantic
 from services.template_search import stem
 from services.world3d_stage_cards import stage_cards
+from services.world3d_template_frame import frame_cost
 from services.world3d_template_vocabulary import FORMATS, KINDS, MOVES, QUERY_STOP, SHOT_SIZES, USES, expand
 
 CATALOG_FILE = "world3d_templates.json"
@@ -118,7 +119,7 @@ def search_pool(query: str = "", *, category: str | None = None, workspace_dir=N
     itself, not a copy), the ``unknown_words`` and ``semantic``. ``search_report`` is its first ``limit`` rows;
     ``world3d.templates.plan`` reads them all and ranks them again across a list of shots."""
     library = _cards(workspace_dir, workspace)
-    ranked, unknown, semantic = _ranked(query, library, _fitting(library, roles, setting, filters), category)
+    ranked, unknown, semantic = _ranked(query, library, _fitting(library, roles, setting, filters), category, filters.get("format"))
     return {"rows": [(score, match, card) for score, match, _index, card in ranked], "unknown_words": unknown,
             "semantic": semantic}
 
@@ -137,7 +138,7 @@ def page_templates(query: str = "", *, category: str | None = None, language: st
     unknown: list[str] = []
     semantic = False
     if queried:
-        ranked, unknown, semantic = _ranked(query, library, cards, category)
+        ranked, unknown, semantic = _ranked(query, library, cards, category, filters.get("format"))
         chosen = [(score, match, card) for score, match, _index, card in ranked]
     else:
         filtered = [card for card in cards if _in_category(card, category)]
@@ -298,9 +299,10 @@ def _in_category(card: dict, category: str | None) -> bool:
     return not category or card.get("category") == category or category in (card.get("tags") or ())
 
 
-def _ranked(query: str, library: list[dict], cards: list[dict], category: str | None) -> tuple[list[tuple], list[str], bool]:
+def _ranked(query: str, library: list[dict], cards: list[dict], category: str | None,
+            frame: str | None = None) -> tuple[list[tuple], list[str], bool]:
     """Lexical rows, then the optional cosine pass. The third value is whether embeddings ran."""
-    lexical, unknown = _lexical_ranked(query, library, cards, category)
+    lexical, unknown = _lexical_ranked(query, library, cards, category, frame)
     return _apply_semantic(query, lexical, unknown, cards, category)
 
 
@@ -344,11 +346,13 @@ def _fill_row(order: int, card: dict) -> template_semantic.Row:
     return template_semantic.Row(0, template_semantic.world3d_passage(card), order, str(card.get("id") or order))
 
 
-def _lexical_ranked(query: str, library: list[dict], cards: list[dict], category: str | None) -> tuple[list[tuple], list[str]]:
+def _lexical_ranked(query: str, library: list[dict], cards: list[dict], category: str | None,
+                    frame: str | None = None) -> tuple[list[tuple], list[str]]:
     """``(score, match, index, card)`` best first (full matches, else the partial ones) and the unknown words.
 
     A word is unknown when no card of the whole library has it; it is dropped before counting hits, so a query made
-    only of unknown words returns nothing."""
+    only of unknown words returns nothing. A portrait card scores a point less when no frame is asked
+    (``world3d_template_frame``)."""
     folded = _fold(query)
     tokens = _query_tokens(folded)
     known, unknown = _known_tokens(tokens, library)
@@ -362,6 +366,7 @@ def _lexical_ranked(query: str, library: list[dict], cards: list[dict], category
         if found is None:
             continue
         hits, score = found
+        score -= frame_cost(card, known, frame) if known else 0
         if hits == len(known):
             full.append((score, hits, index, card))
         elif hits * 2 >= len(known):
