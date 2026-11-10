@@ -174,3 +174,47 @@ test('character-reaction: a bust stands on the bottom edge, the mark and the loo
   const short = framesOf(compile('character-reaction', { duration: 3 }), 'subject_1').length
   assert.ok(framesOf(compile('character-reaction', { duration: 12 }), 'subject_1').length > short)
 })
+
+/** The ground a cycle of a walk-cycle-sheet card covers, in pixels of its 1280 x 720 frame, and the height of its figure, from the compiled scene:
+ * the speed of the figure over the stretch where it crosses, times the seconds of a cycle (`count` cells at the sheet's fps). */
+function cycleGround(scene: Scene) {
+  const figure = layerOf(scene, 'subject_1')
+  const sequence = figure.sequence as { count: number; fps: number }
+  const crossing = framesOf(scene, 'subject_1')
+  const [from, to] = [crossing.filter(frame => frame.x <= -12 + 1e-6).pop()!, crossing.find(frame => frame.x >= 112 - 1e-6)!]
+  assert.ok(to.time > from.time)
+  const speed = Math.abs(to.x - from.x) / 100 * 1280 / (to.time - from.time)
+  return { perCycle: speed * sequence.count / sequence.fps, figureHeight: .86 * crossing[1].scale * 720 }
+}
+
+test('a walk sheet moves at the speed its own stride asks: a cycle of the feet covers stride times the figure\'s height, never more', () => {
+  for (const stride of [.7, .897, 1.1]) {
+    const { perCycle, figureHeight } = cycleGround(compile('walk-cycle-sheet', { stride, frames: 12, columns: 6, step: .5 }))
+    assert.ok(Math.abs(perCycle / figureHeight - stride) < .01, `stride ${stride}: the feet cover ${(perCycle / figureHeight).toFixed(3)} heights a cycle`)
+  }
+  // Without a stride (a sheet made before) the card keeps its old constant, .42 a step: .84 a cycle.
+  const old = cycleGround(compile('walk-cycle-sheet', { frames: 12, columns: 6, step: .5 }))
+  assert.ok(Math.abs(old.perCycle / old.figureHeight - .84) < .01)
+  const slower = cycleGround(compile('walk-cycle-sheet', { stride: .6, frames: 12, columns: 6, step: .5 }))
+  const longer = cycleGround(compile('walk-cycle-sheet', { stride: 1.2, frames: 12, columns: 6, step: .5 }))
+  assert.ok(longer.perCycle > 1.9 * slower.perCycle, 'a longer stride is a faster figure at the same cadence')
+})
+
+test('two-pose paces its walk by the stride too, and arrives later when the stride is shorter', () => {
+  const arrival = (stride?: number) => framesOf(compile('walk-two-pose', { step: .5, ...(stride ? { stride } : {}) }), 'subject_1').find(frame => frame.x >= 47)!.time
+  assert.ok(arrival(.5) > arrival(1.2) + .5, `${arrival(.5)} later than ${arrival(1.2)}`)
+  assert.equal(arrival(), arrival(.84), 'no stride is .42 a step')
+})
+
+test('a sheet is mirrored when the card walks the other way from the one it looks, and never when they agree or the card is not told', () => {
+  const mirror = (id: string, controls: TemplateControlInput) => (layerOf(compile(id, controls), 'subject_1').sequence as { mirror?: boolean }).mirror === true
+  for (const id of ['walk-cycle-sheet', 'walk-two-pose']) {
+    assert.equal(mirror(id, { facing: 'left', sheetFacing: 'right' }), true, `${id}: a sheet that looks right walks left mirrored`)
+    assert.equal(mirror(id, { facing: 'right', sheetFacing: 'left' }), true, `${id}: and one that looks left walks right mirrored`)
+    assert.equal(mirror(id, { facing: 'left', sheetFacing: 'left' }), false, `${id}: a sheet drawn looking left walks left as it is`)
+    assert.equal(mirror(id, { facing: 'right', sheetFacing: 'right' }), false)
+    assert.equal(mirror(id, { facing: 'left' }), false, `${id}: a card not told how the sheet looks keeps its own way (it is the way the sheet looks)`)
+  }
+  const rest = layerOf(compile('walk-two-pose', { facing: 'left', sheetFacing: 'right' }), 'rest').sequence as { mirror?: boolean }
+  assert.equal(rest.mirror, true, 'the sheet held on its last cell is mirrored the same way')
+})

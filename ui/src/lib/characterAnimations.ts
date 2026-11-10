@@ -60,6 +60,9 @@ export type KitAnimation = {
   reviewedBy?: AnimationReviewer; reviewNote?: string; reviewedAt?: string
   /** A walk made from one guided clip keeps the skeleton video and the clip, so both can be opened again. */
   guideVideo?: string; clip?: string
+  /** How much ground the feet of a walk carry the figure in one cycle, in heights of the figure (services/walk_stride.py, measured when the sheet was
+   * joined). The players move the figure by it so the boots do not slide; a sheet made before has none and every player keeps its constant. */
+  stride?: number
 }
 export type AnimationReviewer = 'person' | 'agent'
 export type AnimationState = 'none' | CharacterKitReviewState
@@ -164,7 +167,9 @@ export function templateControls(animation: KitAnimation, template: string): Rec
   if (template === 'walk-cycle-sheet' || template === 'walk-two-pose') {
     // A cycle of the gait is two steps; a two-pose sheet is one.
     const steps = template === 'walk-cycle-sheet' ? 2 : 1
-    return { ...sheet, facing: animation.facing === 'left' ? 'left' : 'right', step: Math.min(1, Math.max(.3, +(sheet.frames / (steps * animation.fps)).toFixed(2))) }
+    const facing = animation.facing === 'left' ? 'left' : 'right'
+    return { ...sheet, facing, sheetFacing: facing, ...(animation.stride && animation.stride > 0 ? { stride: animation.stride } : {}),
+      step: Math.min(1, Math.max(.3, +(sheet.frames / (steps * animation.fps)).toFixed(2))) }
   }
   return { ...sheet, fps: animation.fps, loop: animation.loop }
 }

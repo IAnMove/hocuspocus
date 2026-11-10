@@ -114,6 +114,9 @@ def _playing(made: dict[str, Any], direction: tuple[str, bool]) -> dict[str, Any
     found: dict[str, Any] = {"fps": fps if fps is not None else 8, "loop": made["loop"] if made.get("loop") in LOOPS else "loop"}
     if direction[1] or made.get("facing") == "left":
         found["facing"] = "left"
+    stride = _number(made.get("stride"), 0.2, 3.0)
+    if stride is not None:
+        found["stride"] = stride  # the ground a cycle of the feet covers, in heights: the player walks the figure by it
     found.update({key: value for key in ("mouth", "eyes") if (value := anchor(made.get(key)))})
     return found
 

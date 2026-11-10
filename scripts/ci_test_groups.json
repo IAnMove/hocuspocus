@@ -523,6 +523,7 @@
         "tests/test_character_animations.py",
         "tests/test_walk_guides.py",
         "tests/test_walk_gait_metrics.py",
+        "tests/test_walk_stride.py",
         "tests/test_character_styles.py",
         "tests/test_character_tools.py",
         "tests/test_series_jobs.py",
@@ -1133,6 +1134,14 @@
       "paths": [
         "tests/test_walk_puppet.py",
         "tests/test_character_animation_job.py"
+      ]
+    },
+    {
+      "prefix": "app/services/walk_stride.py",
+      "paths": [
+        "tests/test_walk_stride.py",
+        "tests/test_character_animation_job.py",
+        "tests/test_series_directional.py"
       ]
     },
     {

@@ -1468,3 +1468,20 @@ def test_a_sheet_cut_from_a_drawing_that_looks_left_says_it_looks_left(direction
     _patch_puppet(monkeypatch, installed=True, mirror=False)
     jobs.start(WS, "hero", "walk-12", method="puppet")
     assert _kit(root)["animations"]["walk-12"]["facing"] == "right"
+
+
+def test_a_walk_keeps_its_stride_on_the_kit_and_a_gesture_has_none(world):
+    root, server, jobs = world
+    assert jobs.start(WS, "hero", "walk-12")["status"] == "completed" and jobs.start(WS, "hero", "wave")["status"] == "completed"
+    animations = _kit(root)["animations"]  # read back through the library's own normaliser: the field survives the round trip
+    assert 0.5 < animations["walk-12"]["stride"] < 1.4 and "stride" not in animations["wave"]
+
+
+def test_the_stride_of_an_animation_is_a_share_of_the_figures_height_and_nothing_else():
+    from services.character_animations import CharacterAnimationError, normalize_animation
+
+    base = {"sheet": {"source": "/api/v1/file/s.png", "width": 10, "height": 10, "count": 4, "columns": 4, "rows": 1, "cell": {"width": 3, "height": 10}}, "frames": []}
+    assert normalize_animation({**base, "stride": 0.8123456})["stride"] == 0.812 and "stride" not in normalize_animation(base)
+    for bad in (0.1, 3.5, True, "0.9"):
+        with pytest.raises(CharacterAnimationError):
+            normalize_animation({**base, "stride": bad})

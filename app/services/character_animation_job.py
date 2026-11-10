@@ -44,6 +44,7 @@ from services.character_animation_directions import contract_of
 from services.character_animation_guides import gait_of, guide_for, guided_prompt, tries
 from services import character_animation_remake as remake
 from services import walk_scale
+from services import walk_stride
 from services.character_animation_review import AnimationReviewError, review_kit_animation
 from services.character_animation_verdict import CHECKS_UNAVAILABLE, report_of
 from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
@@ -583,6 +584,7 @@ class CharacterAnimationJobs:
             "view": definition["view"],
             "scaleBy": definition["scaleBy"], "model": job["model"], "reviewState": "pending", "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             **contract_of(definition["id"], definition), **clip_fields(job),
+            **self._stride_field(sheet, definition),
             **({"title": definition["title"]["es"]} if definition.get("custom") else {}), **({"prompt": job["prompt"]} if job.get("prompt") else {}),
             **({"provenance": job["puppet"]} if job.get("puppet") else {}),
         }
@@ -598,6 +600,18 @@ class CharacterAnimationJobs:
                   **({"provenance": job["puppet"]} if job.get("puppet") else {})}
         self._update(store, job, status="completed", finishedAt=_now(), generationJob=None, result=result,
                      **{key: approval[key] for key in ("autoApproved", "checks", "reviewNote") if key in approval})
+
+    @staticmethod
+    def _stride_field(sheet: dict[str, Any], definition: dict[str, Any]) -> dict[str, Any]:
+        """``stride`` of a catalog walk: the ground a cycle of its feet covers, in heights, read from the sheet just joined (the players move
+        the figure by it). Nothing for any other animation, or when the sheet cannot be read: the players keep their constants."""
+        if definition.get("custom") or definition.get("guide") != "walk":
+            return {}
+        try:
+            found = walk_stride.stride_of_sheet(sheet, contract_of(definition["id"], definition).get("dir"))
+        except Exception:  # noqa: BLE001 - a measure is never worth a sheet
+            return {}
+        return {"stride": found} if found else {}
 
     def _sheet_checks(self, job: dict[str, Any], sheet: dict[str, Any], definition: dict[str, Any]) -> list[dict[str, Any]] | None:
         """The automatic checks on the sheet just written, whatever the approval mode. None when they could not be read: the sheet is

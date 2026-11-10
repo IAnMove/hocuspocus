@@ -44,6 +44,7 @@ function sheetCore(value: Record<string, unknown>): DirectionalSheet | undefined
 function sheetExtras(value: Record<string, unknown>, sheet: DirectionalSheet): DirectionalSheet {
   if (typeof value.id === 'string' && value.id.length <= 80) sheet.id = value.id
   if (!sheet.facing && (value.facing === 'left' || value.facing === 'right' || value.facing === 'front')) sheet.facing = value.facing
+  if (finite(value.stride) && value.stride >= .2 && value.stride <= 3) sheet.stride = value.stride
   for (const key of ['feet', 'figure'] as const) {
     const share = value[key]
     if (finite(share) && share > 0 && share <= 1) sheet[key] = share

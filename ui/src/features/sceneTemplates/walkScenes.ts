@@ -20,7 +20,7 @@ type Stride = { at: number; turn: number; lean: number; lift: number }
 const SAMPLES_PER_STEP = 6
 /** Builders think in these pixels: a figure's height and its ground speed. */
 const FRAME = { width: 1280, height: 720 }
-/** One step of a walk covers this share of the figure's height (two steps are about .85). */
+/** One step of a walk covers this share of the figure's height (two steps are about .85): what a sheet that carries no stride of its own gets. */
 const STEP_REACH = .42
 /** Share of a whole-figure cutout (head to boots) that stays in the frame at each framing. */
 const FRAMING_SHARE: Record<string, number> = { waist: .43, chest: .3 }
@@ -32,6 +32,19 @@ const SHEET_FEET = 96
 const SHEET_FIGURE = .86
 type Side = { from: number; mark: number }
 const SIDES: Record<string, Side> = { left: { from: -14, mark: 52 }, right: { from: 114, mark: 48 } }
+
+/** The ground one step covers (share of the figure's height): half the `stride` of the sheet (what its feet cover in a cycle, measured when the
+ * sheet was made) so its boots do not slide, else the constant older sheets get. */
+const stepReach = (c: BuildContext): number => {
+  const stride = number(c, 'stride', 0)
+  return stride > 0 ? stride / 2 : STEP_REACH
+}
+
+/** The picture is mirrored when the card walks the other way from the one the sheet is drawn looking (`sheetFacing`: `auto` is the way the card walks). */
+const mirrorSheet = (c: BuildContext): boolean => {
+  const drawn = String(c.options.sheetFacing)
+  return (drawn === 'left' || drawn === 'right') && drawn !== (String(c.options.facing) === 'left' ? 'left' : 'right')
+}
 
 /** A profile figure walks the way it looks: looking right it comes in from the left, looking left from the right. */
 const entering = (c: BuildContext): Side => String(c.options.facing) === 'left' ? SIDES.right : SIDES.left
@@ -136,7 +149,7 @@ function crossing(c: BuildContext, spec: Pick<Route, 'side' | 'size' | 'floor'>,
 /** When a walk paced by its step reaches the mark: the feet need this speed, so the figure takes as long as the ground needs. */
 function pacedEnd(c: BuildContext, side: Side, size: number, start: number): number {
   const wanted = number(c, 'step', .55)
-  const speed = STEP_REACH * size * FRAME.height / wanted
+  const speed = stepReach(c) * size * FRAME.height / wanted
   const seconds = Math.abs(side.mark - side.from) / 100 * FRAME.width / speed
   return Math.min(.9, start + Math.max(1, Math.round(seconds / wanted)) * wanted / c.duration)
 }
@@ -252,7 +265,7 @@ export const walkScenes: Record<string, (ctx: BuildContext) => SceneLayer[]> = {
       const item = asset(c, 'subject_1', { x: -20, y: floor, scale })
       item.id = id
       item.focus = { x: 50, y: SHEET_FEET }
-      item.sequence = { kind: 'sheet', source: item.source, columns, rows: Math.ceil(count / columns), count, fps, loop }
+      item.sequence = { kind: 'sheet', source: item.source, columns, rows: Math.ceil(count / columns), count, fps, loop, ...(mirrorSheet(c) ? { mirror: true } : {}) }
       return keyframes(item, beats)
     }
     return [contactShadow(c, walk, path, figure), sheet('subject_1', walker, 'loop', Math.min(24, Math.max(1, count / stepSeconds))), sheet('rest', rest, 'once', 60),
@@ -269,14 +282,14 @@ export const walkScenes: Record<string, (ctx: BuildContext) => SceneLayer[]> = {
     // The cadence of a walk is its step and the ground one step covers is a share of the figure's height: the sheet plays at that
     // pace (a cycle is two steps) and the figure crosses at the speed its feet need, so a longer shot has more empty room, not slower feet.
     const wanted = number(c, 'step', .55)
-    const speed = STEP_REACH * SHEET_FIGURE * scale * FRAME.height / wanted
+    const speed = stepReach(c) * SHEET_FIGURE * scale * FRAME.height / wanted
     const start = .05
     const end = Math.min(.97, start + Math.abs(to - from) / 100 * FRAME.width / speed / c.duration)
     const path = (x: number): Pose => ({ x, y: floor, scale, curve: 'linear' })
     const cross = [{ at: 0, ...path(from) }, { at: start, ...path(from) }, { at: end, ...path(to) }, { at: 1, ...path(to) }]
     const item = asset(c, 'subject_1', { x: from, y: floor, scale })
     item.focus = { x: 50, y: SHEET_FEET }
-    item.sequence = { kind: 'sheet', source: item.source, columns, rows: Math.ceil(count / columns), count, fps: Math.min(24, Math.max(3, count / (2 * wanted))), loop: 'loop' }
+    item.sequence = { kind: 'sheet', source: item.source, columns, rows: Math.ceil(count / columns), count, fps: Math.min(24, Math.max(3, count / (2 * wanted))), loop: 'loop', ...(mirrorSheet(c) ? { mirror: true } : {}) }
     const shadow = (at: number, x: number): Beat => ({ at, opacity: .85, x, y: floor + .4, scale: .2, curve: 'linear' })
     return [groundShadow(c, 'contact-shadow', [shadow(0, from), shadow(start, from), shadow(end, to), shadow(1, to)]), keyframes(item, cross)]
   },

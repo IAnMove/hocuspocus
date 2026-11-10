@@ -3594,6 +3594,21 @@
           "max": 4,
           "default": 1.2,
           "exposed": false
+        },
+        "sheetFacing": {
+          "options": [
+            "auto",
+            "right",
+            "left"
+          ],
+          "default": "auto",
+          "exposed": false
+        },
+        "stride": {
+          "min": 0,
+          "max": 3,
+          "default": 0,
+          "exposed": false
         }
       },
       "limits": [
@@ -3690,6 +3705,21 @@
           "max": 12,
           "default": 4,
           "exposed": true
+        },
+        "sheetFacing": {
+          "options": [
+            "auto",
+            "right",
+            "left"
+          ],
+          "default": "auto",
+          "exposed": false
+        },
+        "stride": {
+          "min": 0,
+          "max": 3,
+          "default": 0,
+          "exposed": false
         }
       },
       "limits": [

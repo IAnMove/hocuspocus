@@ -304,6 +304,11 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
         if raw["scaleBy"] not in SCALE_BY:
             raise CharacterAnimationError(f"{label} scaleBy is one of {', '.join(SCALE_BY)}")
         result["scaleBy"] = raw["scaleBy"]
+    stride = raw.get("stride")
+    if stride is not None:  # how much ground the feet of a walk carry the figure in a cycle, in heights (services/walk_stride.py)
+        if isinstance(stride, bool) or not isinstance(stride, (int, float)) or not 0.2 <= stride <= 3.0:
+            raise CharacterAnimationError(f"{label} stride is a share of the figure's height between 0.2 and 3")
+        result["stride"] = round(float(stride), 3)
     for key in ("guideVideo", "clip"):
         if raw.get(key):
             result[key] = _source(raw[key], f"{label} {key}")

@@ -88,11 +88,16 @@ test('one cell of the sheet is shown by scaling the sheet to its grid and shifti
 })
 
 test('a made animation tells the Video 2D card that plays it which controls to use', () => {
-  assert.deepEqual(templateControls(made({ fps: 4 }) as KitAnimation, 'walk-cycle-sheet'), { frames: 4, columns: 4, facing: 'right', step: .5 })
+  assert.deepEqual(templateControls(made({ fps: 4 }) as KitAnimation, 'walk-cycle-sheet'), { frames: 4, columns: 4, facing: 'right', sheetFacing: 'right', step: .5 })
   assert.equal(templateControls(made({ facing: 'left', fps: 8 }) as KitAnimation, 'walk-cycle-sheet').facing, 'left')
+  assert.equal(templateControls(made({ facing: 'left', fps: 8 }) as KitAnimation, 'walk-cycle-sheet').sheetFacing, 'left', 'the card is told which way the picture looks, so it can mirror it')
+  // A sheet that carries its stride gives it to the card; an older one gives none and the card keeps its constant.
+  assert.equal(templateControls(made({ stride: .87 }) as KitAnimation, 'walk-cycle-sheet').stride, .87)
+  assert.equal('stride' in templateControls(made() as KitAnimation, 'walk-cycle-sheet'), false)
+  assert.equal('stride' in templateControls(made({ stride: .87 }) as KitAnimation, 'character-reaction'), false, 'a gesture has no stride')
   assert.equal(templateControls(made({ fps: 1 }) as KitAnimation, 'walk-cycle-sheet').step, 1, 'a step stays inside the card\'s range')
   // A two-pose sheet is one step, so its two poses play at twice the pace of a four-pose cycle's.
-  assert.deepEqual(templateControls(made({ sheet: { ...made().sheet, count: 2, columns: 2 }, fps: 4 }) as KitAnimation, 'walk-two-pose'), { frames: 2, columns: 2, facing: 'right', step: .5 })
+  assert.deepEqual(templateControls(made({ sheet: { ...made().sheet, count: 2, columns: 2 }, fps: 4 }) as KitAnimation, 'walk-two-pose'), { frames: 2, columns: 2, facing: 'right', sheetFacing: 'right', step: .5 })
   assert.deepEqual(templateControls(made({ fps: 3, loop: 'once', facing: 'front' }) as KitAnimation, 'character-reaction'), { frames: 4, columns: 4, fps: 3, loop: 'once' })
 })
 
@@ -187,7 +192,7 @@ test('the catalog has five directions, a twelve-pose walk for each and the sets 
   assert.deepEqual(animationSets['walk-directions'].sheets.map(step => step.reference ?? null), [null, 'walk-12', 'walk-front34', 'walk-12', 'walk-back34'])
   assert.deepEqual(Object.keys(animationSets), ['walk-12', 'walk-directions', 'idle-directions'])
   assert.deepEqual(templateControls({ ...made({ fps: 12, facing: 'right' }), reviewState: 'approved', sheet: { ...made().sheet, count: 12, columns: 6, rows: 2 } }, 'walk-cycle-sheet'),
-    { frames: 12, columns: 6, facing: 'right', step: 0.5 }, 'twelve cells at twelve a second are one cycle in a second: two steps of half a second')
+    { frames: 12, columns: 6, facing: 'right', sheetFacing: 'right', step: 0.5 }, 'twelve cells at twelve a second are one cycle in a second: two steps of half a second')
 })
 
 test('a finished sheet is judged by the job that made it and by the gait each pose kept, and says nothing when all is well', async () => {
