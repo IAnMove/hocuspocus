@@ -3683,7 +3683,7 @@
     },
     "vertical-dialogue-ots-a": {
       "title": "Por encima del hombro vertical A",
-      "description": "Por encima del hombro en vertical 9:16: el hombro de subject_1 ocupa el borde izquierdo y la cara de subject_2 queda alta a la derecha, hablando, plano medio corto con empuje lento. Monta B para el contraplano; las miradas casan."
+      "description": "Por encima del hombro en vertical 9:16: el hombro de subject_1 ocupa el borde izquierdo y la cara de subject_2 queda alta a la derecha, hablando, plano medio corto con empuje lento. Monta B para el plano inverso; las miradas casan."
     },
     "vertical-talk-bust": {
       "title": "Busto vertical a cámara",
@@ -3703,15 +3703,11 @@
     },
     "vertical-dialogue-walk": {
       "title": "Caminar y hablar en vertical",
-      "description": "Dos figuras caminan hacia la cámara una junto a otra, subject_2 medio paso detrás, hablando, y el cuadro vertical 9:16 retrocede con ellas al paso, las dos caras en el tercio superior. Pon un clip de caminar a las dos."
-    },
-    "vertical-dialogue-seated": {
-      "title": "Sentados a la mesa en vertical",
-      "description": "Dos figuras sentadas a una mesa pequeña en vertical 9:16, hablando: subject_1 cerca a la izquierda, en tres cuartos de espaldas, y subject_2 al otro lado de cara a cámara. Empuje lento a la altura de los ojos sentados; el reparto necesita un clip sentado (sit_down mantenido) o recortes sentados."
+      "description": "Dos figuras caminan hacia la cámara una junto a otra, subject_2 medio paso detrás, hablando, y el cuadro vertical 9:16 retrocede con ellas al paso, las dos caras en el tercio superior. Pon a las dos un clip walk."
     },
     "vertical-dialogue-trio": {
-      "title": "Grupo de tres en vertical",
-      "description": "Tres figuras en triángulo en vertical 9:16, hablando: subject_1 cerca en el centro, de espaldas, y subject_2 y una tercera figura detrás a cada lado de cara a cámara. Empuje lento con un arco leve. La tercera figura es el hueco prop person_3."
+      "title": "Tres en triángulo, vertical",
+      "description": "Tres figuras en triángulo en vertical 9:16, hablando: subject_1 cerca en el centro, de espaldas, y subject_2 y una tercera figura detrás a cada lado de cara a cámara. Empuje lento con un arco leve. La tercera es el hueco prop person_3."
     },
     "vertical-dialogue-listener": {
       "title": "Quien habla y quien escucha en vertical",
@@ -3727,7 +3723,7 @@
     },
     "vertical-dialogue-locked": {
       "title": "Plano de dos fijo en vertical",
-      "description": "Dos figuras frente a frente, hablando, en un plano de dos vertical 9:16 con trípode fijo, de las rodillas para arriba, las dos caras en el tercio superior. La cámara no se mueve; flota polvo en el aire y los clips del reparto llevan el plano."
+      "description": "Dos figuras frente a frente, hablando, en un plano de dos vertical 9:16 con trípode fijo, de las rodillas para arriba, las caras en el tercio superior. La cámara no se mueve; flota polvo y los clips del reparto llevan el plano."
     },
     "vertical-talk-caption": {
       "title": "Plano medio vertical con sitio para subtítulos",
@@ -3748,6 +3744,10 @@
     "vertical-talk-side": {
       "title": "Mirada de lado vertical",
       "description": "Una figura habla con alguien fuera de cuadro, como en una entrevista: en vertical 9:16 la cara queda a la izquierda con aire a la derecha hacia donde mira, y la cámara se desliza despacio en ese sentido."
+    },
+    "vertical-dialogue-table": {
+      "title": "Sentados a la mesa en vertical",
+      "description": "Dos figuras sentadas a una mesa en vertical 9:16, hablando: subject_1 cerca a la izquierda de espaldas, subject_2 enfrente de cara a cámara. Empuje lento a la altura de los ojos; clip sentado (sit_down mantenido) o recortes sentados."
     }
   },
   "atmos": {

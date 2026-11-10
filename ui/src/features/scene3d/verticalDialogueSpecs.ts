@@ -33,6 +33,11 @@ const SINGLE = { from: [0.86, 0, 0.74] as Vec3, to: [0.8, 0, 0.69] as Vec3, look
 const LOCKED_DUST = { id: 'vertical-dust', kind: 'dust', start: 0, end: 6, position: { x: 0, y: 0.03, z: 0 }, rotation: { x: 0, y: 0, z: 0 },
   scale: 2.2, intensity: 0.35, color: '#c4a574', seed: 11, sound: false, volume: 0 }
 const WALK_DURATION = 7
+/** No «GLB» or «caminar» here: a plain walking query keeps finding the landscape walk-and-talk first. */
+const WALKERS = {
+  en: ['A figure with a walk clip, in front (subject_1)', 'A figure with a walk clip, half a step behind (subject_2)', PLATE_EN],
+  es: ['Una figura con un clip walk, delante (subject_1)', 'Una figura con un clip walk, medio paso detrás (subject_2)', PLATE_ES],
+}
 /** 2.8 m in 7 s: a stroll (0.4 m/s), well under a run. */
 const WALK = 2.8
 
@@ -54,7 +59,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     slots: facingPair(),
     copy: copy(
       { title: 'Portrait over the shoulder A', description: 'A 9:16 portrait over-the-shoulder: subject_1’s shoulder fills the left edge and subject_2’s face sits high on the right, medium-close with a slow push. Cut with B for the reverse; the eyelines match.', requirements: pair('left speaker, seen from behind', 'right speaker, framed', 'interlocutor izquierdo, de espaldas', 'interlocutor derecho, encuadrado').en },
-      { title: 'Por encima del hombro vertical A', description: 'Por encima del hombro en vertical 9:16: el hombro de subject_1 ocupa el borde izquierdo y la cara de subject_2 queda alta a la derecha, hablando, plano medio corto con empuje lento. Monta B para el contraplano; las miradas casan.', requirements: pair('left speaker, seen from behind', 'right speaker, framed', 'interlocutor izquierdo, de espaldas', 'interlocutor derecho, encuadrado').es },
+      { title: 'Por encima del hombro vertical A', description: 'Por encima del hombro en vertical 9:16: el hombro de subject_1 ocupa el borde izquierdo y la cara de subject_2 queda alta a la derecha, hablando, plano medio corto con empuje lento. Monta B para el plano inverso; las miradas casan.', requirements: pair('left speaker, seen from behind', 'right speaker, framed', 'interlocutor izquierdo, de espaldas', 'interlocutor derecho, encuadrado').es },
     ),
   }),
   'vertical-dialogue-ots-b': card({
@@ -101,11 +106,11 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
       plate(),
     ],
     copy: copy(
-      { title: 'Portrait walk and talk', description: 'Two figures walk toward the camera side by side, subject_2 half a step behind, and the 9:16 portrait frame backs away with them at a stroll, both faces on the upper third. Bind a walk clip to both.', requirements: pair('front walker, with a walk clip', 'second walker, with a walk clip', 'caminante delantero, con clip de caminar', 'segundo caminante, con clip de caminar').en },
-      { title: 'Caminar y hablar en vertical', description: 'Dos figuras caminan hacia la cámara una junto a otra, subject_2 medio paso detrás, hablando, y el cuadro vertical 9:16 retrocede con ellas al paso, las dos caras en el tercio superior. Pon un clip de caminar a las dos.', requirements: pair('front walker, with a walk clip', 'second walker, with a walk clip', 'caminante delantero, con clip de caminar', 'segundo caminante, con clip de caminar').es },
+      { title: 'Portrait walk and talk', description: 'Two figures walk toward the camera side by side, subject_2 half a step behind, and the 9:16 portrait frame backs away with them at a stroll, both faces on the upper third. Bind a walk clip to both.', requirements: WALKERS.en },
+      { title: 'Caminar y hablar en vertical', description: 'Dos figuras caminan hacia la cámara una junto a otra, subject_2 medio paso detrás, hablando, y el cuadro vertical 9:16 retrocede con ellas al paso, las dos caras en el tercio superior. Pon a las dos un clip walk.', requirements: WALKERS.es },
     ),
   }),
-  'vertical-dialogue-seated': card({
+  'vertical-dialogue-table': card({
     duration: 6,
     // The feet anchor: a seated clip lowers the head, never the feet, so the frame holds for a GLB or a seated cutout.
     camera: portraitCam([-0.45, 1.55, 2.1], [0.17, 0.85, -0.4], 40, {
@@ -119,8 +124,8 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     ],
     aliases: { ...ALIASES, table: 'table' },
     copy: copy(
-      { title: 'Portrait seated across a table', description: 'Two figures seated across a small table in 9:16 portrait: subject_1 near on the left, three-quarter from behind, subject_2 beyond the table facing the camera. A slow push at seated eye height; the cast needs a seated clip (sit_down held) or seated cutouts.', requirements: ['GLB with a seated clip (sit_down held) or seated cutout, near speaker (subject_1)', 'GLB with a seated clip (sit_down held) or seated cutout, far speaker (subject_2)', 'GLB table (table, role prop)', PLATE_EN] },
-      { title: 'Sentados a la mesa en vertical', description: 'Dos figuras sentadas a una mesa pequeña en vertical 9:16, hablando: subject_1 cerca a la izquierda, en tres cuartos de espaldas, y subject_2 al otro lado de cara a cámara. Empuje lento a la altura de los ojos sentados; el reparto necesita un clip sentado (sit_down mantenido) o recortes sentados.', requirements: ['GLB con clip sentado (sit_down mantenido) o recorte sentado, interlocutor cercano (subject_1)', 'GLB con clip sentado (sit_down mantenido) o recorte sentado, interlocutor lejano (subject_2)', 'GLB de mesa (table, papel prop)', PLATE_ES] },
+      { title: 'Portrait seated across a table', description: 'Two figures seated across a small table in 9:16 portrait: subject_1 near on the left from behind, subject_2 beyond the table facing the camera. A slow push at seated eye height; needs a seated clip (sit_down held) or seated cutouts.', requirements: ['GLB with a seated clip (sit_down held) or seated cutout, near speaker (subject_1)', 'GLB with a seated clip (sit_down held) or seated cutout, far speaker (subject_2)', 'GLB table (table, role prop)', PLATE_EN] },
+      { title: 'Sentados a la mesa en vertical', description: 'Dos figuras sentadas a una mesa en vertical 9:16, hablando: subject_1 cerca a la izquierda de espaldas, subject_2 enfrente de cara a cámara. Empuje lento a la altura de los ojos; clip sentado (sit_down mantenido) o recortes sentados.', requirements: ['GLB con clip sentado (sit_down mantenido) o recorte sentado, interlocutor cercano (subject_1)', 'GLB con clip sentado (sit_down mantenido) o recorte sentado, interlocutor lejano (subject_2)', 'GLB de mesa (table, papel prop)', PLATE_ES] },
     ),
   }),
   'vertical-dialogue-trio': card({
@@ -136,8 +141,8 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     ],
     aliases: { front: 'subject_1', left: 'subject_2', third: 'person_3', background: 'background' },
     copy: copy(
-      { title: 'Portrait group of three', description: 'Three figures in a 9:16 portrait triangle: subject_1 near in the middle, seen from behind, subject_2 and a third figure beyond on either side facing the camera. A slow push with a slight arc. The third figure is the prop slot person_3.', requirements: [`${CAST_EN}, front figure, from behind (subject_1)`, `${CAST_EN}, back left figure (subject_2)`, 'GLB, back right figure (person_3, role prop)', PLATE_EN] },
-      { title: 'Grupo de tres en vertical', description: 'Tres figuras en triángulo en vertical 9:16, hablando: subject_1 cerca en el centro, de espaldas, y subject_2 y una tercera figura detrás a cada lado de cara a cámara. Empuje lento con un arco leve. La tercera figura es el hueco prop person_3.', requirements: [`${CAST_ES}, figura delantera, de espaldas (subject_1)`, `${CAST_ES}, figura trasera izquierda (subject_2)`, 'GLB, figura trasera derecha (person_3, papel prop)', PLATE_ES] },
+      { title: 'Portrait three in a triangle', description: 'Three figures in a 9:16 portrait triangle: subject_1 near in the middle, seen from behind, subject_2 and a third figure beyond on either side facing the camera. A slow push with a slight arc. The third figure is the prop slot person_3.', requirements: [`${CAST_EN}, front figure, from behind (subject_1)`, `${CAST_EN}, back left figure (subject_2)`, 'GLB, back right figure (person_3, role prop)', PLATE_EN] },
+      { title: 'Tres en triángulo, vertical', description: 'Tres figuras en triángulo en vertical 9:16, hablando: subject_1 cerca en el centro, de espaldas, y subject_2 y una tercera figura detrás a cada lado de cara a cámara. Empuje lento con un arco leve. La tercera es el hueco prop person_3.', requirements: [`${CAST_ES}, figura delantera, de espaldas (subject_1)`, `${CAST_ES}, figura trasera izquierda (subject_2)`, 'GLB, figura trasera derecha (person_3, papel prop)', PLATE_ES] },
     ),
   }),
   'vertical-dialogue-listener': card({
@@ -184,7 +189,7 @@ export const VERTICAL_DIALOGUE_SPECS: Record<VerticalDialogueId, CastPackSpec> =
     worldSfx: [LOCKED_DUST],
     copy: copy(
       { title: 'Portrait locked two-shot', description: 'Two figures face each other in a 9:16 portrait two-shot on a locked tripod, from the knees up, both faces on the upper third. The camera never moves; dust drifts in the air and the cast’s clips carry the shot.', requirements: pair('left speaker', 'right speaker', 'interlocutor izquierdo', 'interlocutor derecho').en },
-      { title: 'Plano de dos fijo en vertical', description: 'Dos figuras frente a frente, hablando, en un plano de dos vertical 9:16 con trípode fijo, de las rodillas para arriba, las dos caras en el tercio superior. La cámara no se mueve; flota polvo en el aire y los clips del reparto llevan el plano.', requirements: pair('left speaker', 'right speaker', 'interlocutor izquierdo', 'interlocutor derecho').es },
+      { title: 'Plano de dos fijo en vertical', description: 'Dos figuras frente a frente, hablando, en un plano de dos vertical 9:16 con trípode fijo, de las rodillas para arriba, las caras en el tercio superior. La cámara no se mueve; flota polvo y los clips del reparto llevan el plano.', requirements: pair('left speaker', 'right speaker', 'interlocutor izquierdo', 'interlocutor derecho').es },
     ),
   }),
 }

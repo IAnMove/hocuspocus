@@ -7,7 +7,7 @@ export const VERTICAL_DIALOGUE_IDS = [
   'vertical-dialogue-single-a',
   'vertical-dialogue-single-b',
   'vertical-dialogue-walk',
-  'vertical-dialogue-seated',
+  'vertical-dialogue-table',
   'vertical-dialogue-trio',
   'vertical-dialogue-listener',
   'vertical-dialogue-low',

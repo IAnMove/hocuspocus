@@ -3705,12 +3705,8 @@
       "title": "Portrait walk and talk",
       "description": "Two figures walk toward the camera side by side, subject_2 half a step behind, and the 9:16 portrait frame backs away with them at a stroll, both faces on the upper third. Bind a walk clip to both."
     },
-    "vertical-dialogue-seated": {
-      "title": "Portrait seated across a table",
-      "description": "Two figures seated across a small table in 9:16 portrait: subject_1 near on the left, three-quarter from behind, subject_2 beyond the table facing the camera. A slow push at seated eye height; the cast needs a seated clip (sit_down held) or seated cutouts."
-    },
     "vertical-dialogue-trio": {
-      "title": "Portrait group of three",
+      "title": "Portrait three in a triangle",
       "description": "Three figures in a 9:16 portrait triangle: subject_1 near in the middle, seen from behind, subject_2 and a third figure beyond on either side facing the camera. A slow push with a slight arc. The third figure is the prop slot person_3."
     },
     "vertical-dialogue-listener": {
@@ -3748,6 +3744,10 @@
     "vertical-talk-side": {
       "title": "Portrait side look",
       "description": "One figure talks to someone off frame, as in an interview: in 9:16 portrait the face sits left with room to look into on the right, and the camera slides slowly the same way."
+    },
+    "vertical-dialogue-table": {
+      "title": "Portrait seated across a table",
+      "description": "Two figures seated across a small table in 9:16 portrait: subject_1 near on the left from behind, subject_2 beyond the table facing the camera. A slow push at seated eye height; needs a seated clip (sit_down held) or seated cutouts."
     }
   },
   "atmos": {

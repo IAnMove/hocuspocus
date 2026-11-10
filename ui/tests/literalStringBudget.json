@@ -142,6 +142,8 @@
   "src/features/scene3d/titleTemplates.ts": 16,
   "src/features/scene3d/toonLook.ts": 1,
   "src/features/scene3d/transitionTemplates.ts": 32,
+  "src/features/scene3d/verticalDialogueSpecs.ts": 48,
+  "src/features/scene3d/verticalTalkSpecs.ts": 24,
   "src/features/sceneFx/energyShaders.ts": 3,
   "src/features/sceneFx/lightningMesh.ts": 1,
   "src/features/sceneFx/wizard.ts": 1,
