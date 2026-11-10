@@ -279,6 +279,15 @@ def _puppet_provenance(raw: Any, label: str) -> dict[str, Any] | None:
     return found
 
 
+def _stride(value: Any, label: str) -> dict[str, float]:
+    """How much ground the feet of a walk carry the figure in a cycle, in heights of the figure (``services/walk_stride.py``); none when absent."""
+    if value is None:
+        return {}
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0.2 <= value <= 3.0:
+        raise CharacterAnimationError(f"{label} stride is a share of the figure's height between 0.2 and 3")
+    return {"stride": round(float(value), 3)}
+
+
 def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
     """One animation of a kit: its sheet, the keyed pose pictures it was joined from and how it plays."""
     if not isinstance(raw, dict):
@@ -304,11 +313,7 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
         if raw["scaleBy"] not in SCALE_BY:
             raise CharacterAnimationError(f"{label} scaleBy is one of {', '.join(SCALE_BY)}")
         result["scaleBy"] = raw["scaleBy"]
-    stride = raw.get("stride")
-    if stride is not None:  # how much ground the feet of a walk carry the figure in a cycle, in heights (services/walk_stride.py)
-        if isinstance(stride, bool) or not isinstance(stride, (int, float)) or not 0.2 <= stride <= 3.0:
-            raise CharacterAnimationError(f"{label} stride is a share of the figure's height between 0.2 and 3")
-        result["stride"] = round(float(stride), 3)
+    result.update(_stride(raw.get("stride"), label))
     for key in ("guideVideo", "clip"):
         if raw.get(key):
             result[key] = _source(raw[key], f"{label} {key}")
