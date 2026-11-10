@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: the side of the head of a realistic (PS2-style) 3D character.** The front, side and back portraits of the head are now joined into one head map when the character is made, instead of being blended by angle in the viewer. The profile's eye and hairline no longer show as a second face beside the face, the ear is drawn once, and the face has no visible border. Characters already made keep their look: make them again to get the new head (`head_join: "blend"` keeps the old one).
+
 **Added: reference photos can stay together in one image, or each row can be its own generation.** Pictures in the same row keep their order. Add row starts another generation, and one prompt per line combines every line with every row. A finished image shows up in the image gallery without a reload. The HocusPocus picker remembers sidecars it has already read and shows 60 at a time.
 
 **Changed: sharing the studio on the local network no longer asks for a token.** The gate starts off. Set `LOREFRAME_LAN_AUTH=1` to require the startup token from other devices. This machine at `127.0.0.1` stays open either way.
