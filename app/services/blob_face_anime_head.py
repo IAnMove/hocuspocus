@@ -30,6 +30,13 @@ POSES["shy"].update({"lid": (0.14, 0.14)})
 
 SC = base.SCALE
 EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 560, 90, 60, 41
+# ``detail`` 2 (the face ``model3d.anime.make`` draws): eyes a tenth larger, set a little wider apart, and a mouth that reads as a mouth.
+# ``detail`` 1 is the face as it was drawn, which the painted (Qwen) kit and the real style keep.
+DIMS = {1: (EYE_GAP, EYE_RX, EYE_RY), 2: (96, 67, 46)}
+
+
+def _dims(traits: dict[str, Any]) -> tuple[int, int, int]:
+    return DIMS[int(traits.get("detail", 1))]
 BROW_GAP, NOSE_Y, MOUTH_Y, MOUTH_H = 26, 672, 726, 190
 BLUSH_Y, BLUSH_X = 680, 150
 EYE_WHITE = (240, 242, 248, 255)
@@ -48,9 +55,9 @@ def _quad(p0, p1, p2, count: int = 12) -> list:
     return out
 
 
-def _opening(cx: float, sign: int, p: dict[str, Any], shape: dict) -> dict[str, Any]:
+def _opening(cx: float, sign: int, p: dict[str, Any], shape: dict, dims: tuple = DIMS[1]) -> dict[str, Any]:
     """The eye opening as two curves (supersampled px): ``upper`` from the inner corner to the outer, ``lower`` back."""
-    rx, ry = _s(EYE_RX) * shape["wide"], _s(EYE_RY) * shape["tall"] * p["open"]
+    rx, ry = _s(dims[1]) * shape["wide"], _s(dims[2]) * shape["tall"] * p["open"]
     tilt = _s(shape["tilt"])
     cy = _s(EYE_Y)
     inner = (cx - sign * rx, cy + ry * 0.15)
@@ -88,7 +95,7 @@ def _iris(size, o: dict, color, p: dict[str, Any]) -> Image.Image:
 def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: dict[str, Any], art: Image.Image | None = None) -> None:
     lash = traits["lash"]
     shape = SHAPES[traits.get("face_shape", "soft")]
-    o = _opening(cx, sign, p, shape)
+    o = _opening(cx, sign, p, shape, _dims(traits))
     draw = ImageDraw.Draw(layer)
     width = max(4, int(traits["line"] * SC * 0.4))
     rx, ry = o["rx"], o["ry"]
@@ -142,10 +149,11 @@ def _brows(draw: ImageDraw.ImageDraw, traits: dict[str, Any], p: dict[str, Any])
         return
     thick = max(4, int(traits["brows"]["thickness"] * SC * (0.32 if traits["brows"]["style"] == "thin" else 0.55)))
     shape = SHAPES[traits.get("face_shape", "soft")]
-    y = _s(EYE_Y - EYE_RY - BROW_GAP + p["brow_dy"])
-    rx = _s(EYE_RX) * shape["wide"]
+    gap, eye_rx, eye_ry = _dims(traits)
+    y = _s(EYE_Y - eye_ry - BROW_GAP + p["brow_dy"])
+    rx = _s(eye_rx) * shape["wide"]
     for sign in (-1, 1):
-        cx = _s(512) + sign * _s(EYE_GAP)
+        cx = _s(512) + sign * _s(gap)
         inner, outer = cx - sign * rx * 0.85, cx + sign * rx * 1.15
         tilt = p["tilt"] * rx * 0.45
         peak = (cx + sign * rx * 0.3, y - _s(5) - abs(tilt) * 0.1)
@@ -214,14 +222,14 @@ def _lids(image: Image.Image, traits: dict[str, Any], p: dict[str, Any]) -> None
     patch = Image.new("RGBA", image.size, (*skin, 0))
     pdraw = ImageDraw.Draw(patch)
     for sign in (-1, 1):
-        o = _opening(_s(512) + sign * _s(EYE_GAP), sign, POSES["neutral"], shape)
+        o = _opening(_s(512) + sign * _s(_dims(traits)[0]), sign, POSES["neutral"], shape, _dims(traits))
         pdraw.polygon([(x, y - _s(14)) for x, y in o["upper"]] + [(x, y + _s(8)) for x, y in o["lower"]], fill=(*skin, 255))
         pdraw.ellipse((o["cx"] - o["rx"] * 1.25, o["cy"] - o["ry"] * 2.2, o["cx"] + o["rx"] * 1.25, o["cy"] + o["ry"] * 1.6), fill=(*skin, 255))
     patch = patch.filter(ImageFilter.GaussianBlur(_s(5)))
     image.alpha_composite(patch)
     draw = ImageDraw.Draw(image)
     for sign in (-1, 1):
-        o = _opening(_s(512) + sign * _s(EYE_GAP), sign, POSES["neutral"], shape)
+        o = _opening(_s(512) + sign * _s(_dims(traits)[0]), sign, POSES["neutral"], shape, _dims(traits))
         pts = _quad((o["inner"][0], o["cy"] + o["ry"] * 0.4), (o["cx"], o["cy"] + o["ry"] * 0.95), (o["outer"][0], o["cy"] + o["ry"] * 0.25))
         draw.line(pts, fill=traits["lash"], width=int(width * 2.0), joint="curve")
         draw.line((pts[-1][0], pts[-1][1], pts[-1][0] + sign * _s(14), pts[-1][1] - _s(8)), fill=traits["lash"], width=int(width * 1.6))
@@ -238,7 +246,7 @@ def draw_pose(traits: dict[str, Any], pose: str, *, lids_only: bool = False, eye
         _blush(image, traits, p)
         draw = ImageDraw.Draw(image)
         for sign in (-1, 1):
-            _eye(image, _s(512) + sign * _s(EYE_GAP), sign, traits, p, art=(eye_art or {}).get(sign))
+            _eye(image, _s(512) + sign * _s(_dims(traits)[0]), sign, traits, p, art=(eye_art or {}).get(sign))
         _brows(draw, traits, p)
         _nose(draw, traits)
         _mouth(draw, traits, p)
@@ -251,10 +259,16 @@ def head_mouths(traits: dict[str, Any]) -> dict[str, Image.Image]:
     ink = traits["ink"]
     inner, tongue, teeth = (96, 34, 44, 255), (214, 110, 122, 255), (250, 246, 240, 255)
     line = 9
+    detail = int(traits.get("detail", 1)) >= 2
     out: dict[str, Image.Image] = {}
     for state in STATES:
         image, draw = _mouth_canvas()
-        if state == "closed":
+        if state == "closed" and detail:
+            # a closed mouth with a lower lip under it, a little wider and bolder: at video size the plain curve read as a dash
+            draw.line([_pt(x, 3.4 * ((x / 34) ** 2) - 1.5) for x in range(-34, 35, 2)], fill=ink, width=line * 2 + 16, joint="curve")
+            tone = tuple(int(c * 0.82) for c in tuple(traits["skin"][:3])) + (255,)
+            draw.line([_pt(x, 9.5 - 3.0 * ((x / 15) ** 2)) for x in range(-14, 15, 2)], fill=tone, width=line * 2 + 2, joint="curve")
+        elif state == "closed":
             draw.line([_pt(x, 3 * ((x / 30) ** 2) - 1.5) for x in range(-30, 31, 2)], fill=ink, width=line * 2 + 6, joint="curve")
         elif state == "pressed":
             draw.line([_pt(-24, 0), _pt(24, 0)], fill=ink, width=line * 2 + 8)
@@ -279,8 +293,16 @@ def head_mouths(traits: dict[str, Any]) -> dict[str, Image.Image]:
             _mouth_shape(draw, _bowl(27, -10, 16, 1.6), inner, ink, line * 2)
             draw.line([_pt(-20, -9), _pt(20, -9)], fill=teeth, width=line)
             draw.ellipse([*_pt(-11, -4), *_pt(11, 14)], fill=tongue)
-        out[state] = image.resize((512, 320), Image.LANCZOS)
+        out[state] = _grown(image.resize((512, 320), Image.LANCZOS)) if detail else image.resize((512, 320), Image.LANCZOS)
     return out
+
+
+def _grown(sprite: Image.Image, k: float = 1.15) -> Image.Image:
+    """The sprite a seventh larger about its centre, so every mouth is as readable as the closed one."""
+    width, height = sprite.size
+    big = sprite.resize((int(width * k), int(height * k)), Image.LANCZOS)
+    left, top = (big.width - width) // 2, (big.height - height) // 2
+    return big.crop((left, top, left + width, top + height))
 
 
 def anime_head_kit(look: dict[str, Any], eye_art=None) -> dict[str, Any]:

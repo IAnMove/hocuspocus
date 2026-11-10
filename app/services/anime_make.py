@@ -228,6 +228,8 @@ def _face_block(raw: dict, chosen: dict):
     face_image = raw.get("face_image")
     _require_face_image(source, face_image)
     face = _face_fields(raw, chosen["look"], style, chosen["gender"], chosen["hair_color"], chosen["skin"], face_extra)
+    if source == "program" and chosen["look"] == "anime" and style == "anime":
+        face = {"detail": 2, **face}   # the face drawn for an anime body: larger eyes, a bolder mouth. The painted (qwen) kit, the real style and the cute face keep theirs
     return face, source, style, face_image
 
 
