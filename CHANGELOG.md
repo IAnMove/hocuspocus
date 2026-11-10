@@ -6,6 +6,10 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: turned blocks in room molds (`rot`) and a reusable vehicle cabin (`stage-cabina`).** A block may carry `rot: [x, y, z]` (Euler, radians, about its own centre): a raked seat back, a tilted dashboard, one slat of a wheel rim. `cabina` uses it for a car front / van / cab / cockpit: two seats with raked backs and headrests, a console, a dashboard with an instrument binnacle and a radio stack, a tilted steering wheel, pillars, a mirror, visors, armrests, and one skin surface per kind of window (windshield, window_side, window_rear). Skin it for a car, a van or a spaceship; the geometry stays. New interior light preset `cabin` (a low roof needs a dimmer lamp). Authored by `scripts/dev/make_cabin_mold.py`.
+
+**Added: `layout.placement` and `placement_*` warnings in `world3d.scene.inspect` / `patch`.** The numbers of a scene now say what is wrong with where STILL objects stand, with the position that fixes it: `sinks_into_support` (a sleeper in the mattress), `overhangs_support` (a body hanging off its couch), `outside_room`, `below_floor`, `floating`, `cropped` and `tiny` (a character cut by the camera at the start, middle or end, or a dot), plus one `placement_fix_all` position when an object has several fixes. Characters are judged by their idle body, not the T-shaped bind pose. No render, no picture.
+
 **Added: a real night for the meadow and clearing worlds.** `atmos.timeOfDay: "night"` paints a dark palette (grass, ground, fog, clouds, hills), a night sky gradient, stars and a lit moon with a halo, and dims the forest's self-glow; before, a night scene was a day world at very low exposure (lime grass, bright fog, a grey sphere for a moon). The meadow also gains `timeOfDay: "dawn"` and its clouds follow the `motes` setting (0 = clear sky); the clearing drops its falling leaf at night.
 
 **Fixed: a repainted texture or re-rendered clip showed the old picture.** `/api/v1/file/` answers `Cache-Control: no-cache` (the browser revalidates on the ETag; a URL pinned with `sha256` stays cacheable), so a file rewritten under the same name is picked up.

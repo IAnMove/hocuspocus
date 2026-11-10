@@ -27,6 +27,7 @@ from services.world3d_modifiers import apply_camera_template, apply_lens, check_
 from services.world3d_blank_scene import editor_warnings
 from services.world3d_scene_fit import apply_fit
 from services.world3d_scene_collisions import scene_collisions
+from services.world3d_scene_placement import placement_warnings
 from services.world3d_scene_layout import scene_layout
 from services.world3d_scene_motion import bind_motion, retime as retime_motion
 from services.world3d_world_fx import set_world_fx, world_fx_view
@@ -819,7 +820,7 @@ def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_d
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document), "worldFx": world_fx_view(document),
-        "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"]], "traits": _traits(document),
+        "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"], *placement_warnings(shown["layout"].get("placement") or [], shown["layout"]["items"])], "traits": _traits(document),
         **shown,
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationX", "rotationY", "rotationZ", "scale",
                      "motion", "collide", "grounded", "camera", "playbackSpeed", "worldFx", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
