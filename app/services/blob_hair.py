@@ -18,6 +18,9 @@ from services.procedural_3d.compose import linear_color
 
 HELMET = 1.10
 _SAMPLES = 7
+FRINGE_LEVELS = (1.0, 0.95, 0.975)   # the anime fringe's three lengths: a clean edge, not a stagger
+FRINGE_V = 0.56                      # the share of the strand map a fringe lock reads: every strand is still opaque there, so the edge is cut clean, not frayed
+FRINGE_REACH = 0.855                 # its share of the old length: the lowest tip ends at 6 degrees over the equator, above the brows (4 under it)
 
 
 class UVMesh(Mesh):
@@ -123,16 +126,17 @@ def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:
         _emit(mesh, grid, colors, centers, closed, None)
 
 
-def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: float = 0.15, flat: float = 0.3, ring: int = 8) -> None:
+def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: float = 0.15, flat: float = 0.3, ring: int = 8, vmax: float = 1.0) -> None:
     """A lock: a curved card from the root through the pull to the tip, ``r0`` and ``r1`` the half width in head-width units
     (narrow at the very root, so it vanishes under the hair above). A thick lock (``flat`` 0.5 or more: a tail, a ponytail)
-    is two cards crossed, so it has volume from every side."""
+    is two cards crossed, so it has volume from every side. ``vmax`` is how much of the strand map a lock reads, root to tip: 1 reaches the
+    frayed tips, less ends the lock in the opaque part, a clean cut."""
     points = bezier(root, pull, tip, _SAMPLES)
     widths = [1.35 * head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) * min(1.0, 0.4 + 3.0 * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
     widths[-1] = max(widths[-1], head.rx * 0.012)
-    _card(mesh, head, color, points, widths, 0.0)
+    _card(mesh, head, color, points, widths, 0.0, vmax=vmax)
     if flat >= 0.5:
-        _card(mesh, head, color, points, widths, math.pi / 2)
+        _card(mesh, head, color, points, widths, math.pi / 2, vmax=vmax)
 
 
 def _card_faces(mesh: Mesh, grid, rows: int, cols: int) -> None:
@@ -145,7 +149,7 @@ def _card_faces(mesh: Mesh, grid, rows: int, cols: int) -> None:
                 mesh.triangle([v[0] for v in back], [_mul(v[1], -1.0) for v in back], [v[2] for v in back], [v[3] for v in back])
 
 
-def _card(mesh: Mesh, head: _Head, color: str, points: list, widths: list, turn: float, cols: int = 3) -> None:
+def _card(mesh: Mesh, head: _Head, color: str, points: list, widths: list, turn: float, cols: int = 3, vmax: float = 1.0) -> None:
     """A strip along ``points`` with ``cols`` segments across, bowed outward a little, with strand UVs (``u`` across, ``v``
     from the root 0 to the tip 1), roots a shade darker, both faces. ``turn`` rotates it round the path."""
     base = linear_color(color)
@@ -165,7 +169,7 @@ def _card(mesh: Mesh, head: _Head, color: str, points: list, widths: list, turn:
             t = j / cols
             s = 2 * t - 1
             position = _add(_add(point, _mul(side, widths[i] * s)), _mul(deep, widths[i] * 0.3 * (1 - s * s)))
-            row.append((position, _unit(_add(deep, _mul(side, s * 0.45))), tuple(c * shade for c in base), (t, i / (rows - 1))))
+            row.append((position, _unit(_add(deep, _mul(side, s * 0.45))), tuple(c * shade for c in base), (t, vmax * i / (rows - 1))))
         grid.append(row)
     _card_faces(mesh, grid, rows, cols)
 
@@ -180,11 +184,12 @@ def _crown(mesh: Mesh, head: _Head, color: str) -> None:
 
 
 def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 11, length: float = 0.62) -> None:
-    """Pointed locks from a root on the dome's hairline (outside the face patch) down over the forehead to the brows, in three lengths so
-    the tips stagger, flaring a little to the sides."""
-    levels = (1.0, 0.85, 0.92)
-    if head.L.get("real"):
-        length *= 0.78   # a real fringe ends at the brow, it does not cover the eyes
+    """Locks from a root on the dome's hairline (outside the face patch) down over the forehead, flaring a little to the sides. The real style
+    ends them at the brow in three staggered lengths with pointed tips. The anime mould cuts them clean: blunt locks that overlap, nearly one
+    length, ending above the brows (the eyes sit at 15 degrees under the equator, the brows at 4), not a row of triangles over the eyes."""
+    real = head.L.get("real")
+    levels = (1.0, 0.85, 0.92) if real else FRINGE_LEVELS
+    length = length * 0.78 if real else length * FRINGE_REACH
     for i in range(count):
         u = (i - (count - 1) / 2) / max(1, (count - 1) / 2)
         yaw = u * 48
@@ -192,18 +197,21 @@ def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 11, length: float 
         root = head.at(yaw, 46, 1.05)
         pull = head.off(head.at(yaw * 1.05, 32, 1.11), dy=0.02)
         tip = head.off(head.at(yaw * 1.2, 56 - reach * 95, 1.06), dx=u * 0.08)
-        _clump(mesh, head, color, root, pull, tip, 0.36, 0.04, flat=0.18)
+        _clump(mesh, head, color, root, pull, tip, 0.36, 0.04 if real else 0.13, flat=0.18, vmax=1.0 if real else FRINGE_V)
 
 
 def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
-    """One lock in front of each ear. ``length`` is in head heights below the chin (0 ends at the jaw)."""
+    """One lock in front of each ear. ``length`` is in head heights below the chin (0 ends at the jaw). The anime mould keeps them behind the
+    cheek line (roots at 66 and 62 degrees, tips beside the ear), so a three-quarter view shows the cheek; the real style keeps its own."""
+    real = head.L.get("real")
+    outer_yaw, inner_yaw, outer_z, inner_z = (58, 52, 0.18, 0.34) if real else (66, 62, 0.06, 0.18)
     for sign in (-1, 1):
-        root = head.at(sign * 58, 46, 1.05)
+        root = head.at(sign * outer_yaw, 46, 1.05)
         pull = head.off(head.at(sign * 74, -16, 1.13), dz=0.1)
-        tip = (root[0] + sign * head.rx * 0.1, head.chin - head.ry * length, head.cz + head.rz * 0.18)
+        tip = (root[0] + sign * head.rx * 0.1, head.chin - head.ry * length, head.cz + head.rz * outer_z)
         _clump(mesh, head, color, root, pull, tip, 0.30, 0.04, flat=0.36)
-        inner = head.at(sign * 52, 42, 1.06)   # a second, shorter lock in front of it: the side of the face is hair, not a gap
-        _clump(mesh, head, color, inner, head.off(head.at(sign * 66, 0, 1.12), dz=0.12), (inner[0] + sign * head.rx * 0.05, head.chin + head.ry * 0.2, head.cz + head.rz * 0.34), 0.24, 0.04, flat=0.3)
+        inner = head.at(sign * inner_yaw, 42, 1.06)   # a second, shorter lock in front of it: the side of the face is hair, not a gap
+        _clump(mesh, head, color, inner, head.off(head.at(sign * 66, 0, 1.12), dz=0.12), (inner[0] + sign * head.rx * 0.05, head.chin + head.ry * 0.2, head.cz + head.rz * inner_z), 0.24, 0.04, flat=0.3)
 
 
 def _short(mesh: Mesh, head: _Head, color: str) -> None:
@@ -224,7 +232,8 @@ def _bangs(mesh: Mesh, head: _Head, color: str) -> None:
 def _bob(mesh: Mesh, head: _Head, color: str) -> None:
     _fringe(mesh, head, color)
     for i in range(14):
-        yaw = 42 + i * 23.5
+        # the ring of locks from the right cheek line round the back to the left one: from 42 degrees it started in front of the face on one side
+        yaw = 42 + i * 23.5 if head.L.get("real") else 62 + i * 18.15
         root = head.at(yaw, 26)
         pull = head.at(yaw, -10, 1.2)
         tip = head.off(head.at(yaw, -42, 1.0), dy=-0.35)

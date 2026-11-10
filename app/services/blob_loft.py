@@ -284,10 +284,25 @@ def _spow(x: float, e: float) -> float:
     return math.copysign(abs(x) ** e, x)
 
 
+CHIN_ROUND = (0.12, 0.70, 0.22, 0.06)   # reach (share of the skull's height), how far a round chin pulls the V, the flat chin's width, its height
+
+
+def soft_chin(v: float, width: float, kind: str) -> float:
+    """The width of the anime skull ``v`` (0 chin to 1 crown) up the head, with the chin made round: the measured V narrows to a point,
+    here its lowest eighth is pulled most of the way toward an arc and the very bottom keeps a small flat plate. Only the anime mould, not the real one."""
+    reach, pull, plate, plate_v = CHIN_ROUND
+    if v >= reach:
+        return width
+    arc = skull_profile(math.degrees(math.asin(2 * reach - 1)), kind)[0] * math.sqrt(max(0.0, 1.0 - ((reach - v) / reach) ** 2))
+    return max(width + pull * max(0.0, arc - width), plate * max(0.0, 1.0 - v / plate_v))
+
+
 def skull_point(L: dict, yaw: float, lat: float, out: float = 1.0):
     """A point on the skull at ``yaw`` degrees from the face (+Z) and ``lat`` degrees up, ``out`` times outside it."""
     rx, ry, rz = L["sx"] / 2 * out, L["sy"] / 2 * out, L["sz"] / 2 * out
     width, back, front, box = skull_profile(lat, L.get("head_kind", "fem"))
+    if not L.get("real"):
+        width = soft_chin((math.sin(math.radians(lat)) + 1.0) / 2.0, width, L.get("head_kind", "fem"))
     fit = L.get("skull_fit")
     if fit:   # a skull fitted to the head picture it wears (blob_head_fit): the painted silhouette's width and depths at this height
         from services.blob_head_fit import factor_at
@@ -432,16 +447,27 @@ def face_patch(L: dict, fit, half_angle: float = 100.0) -> tuple[Mesh, list]:
     return mesh, out
 
 
+NECK_DROP = 0.035       # how far under the chin the old anime torso closed round the neck, as a share of the height
+NECK_DROP_SOFT = 0.026  # the anime mould now closes higher: a shorter neck that flares into the shoulders (the arms stay where they hung)
+
+
 def shoulder_top(L: dict) -> float:
     """Where the torso closes round the neck: a short neck under the chin. The primitives' torso_top reaches into the head."""
-    return L["head_y"] - L["sy"] / 2 - (0.022 if L.get("real") else 0.035) * L["h"]
+    return L["head_y"] - L["sy"] / 2 - (0.022 if L.get("real") else NECK_DROP_SOFT) * L["h"]
+
+
+def arm_line(L: dict) -> float:
+    """The height the arms hang from: 3 % of the height under where the torso used to close, so a shorter neck does not lift the shoulders."""
+    return L["head_y"] - L["sy"] / 2 - (0.022 if L.get("real") else NECK_DROP) * L["h"] - 0.03 * L["h"]
 
 
 NECK_SHARE = {"fem": 0.42, "boy": 0.46, "man": 0.58}   # a man's neck is as wide as most of his head
+NECK_SHARE_SOFT = {"fem": 0.37, "boy": 0.41, "man": 0.50}   # the anime mould's: a slimmer column
 
 
 def neck_width(L: dict) -> float:
-    return min(L["sx"] * NECK_SHARE.get(L.get("head_kind", "fem"), 0.42), L["torso_w"] * 0.52)
+    shares = NECK_SHARE if L.get("real") else NECK_SHARE_SOFT
+    return min(L["sx"] * shares.get(L.get("head_kind", "fem"), 0.42), L["torso_w"] * 0.52)
 
 
 def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
@@ -453,6 +479,8 @@ def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     closing = shoulder_top(L)
     arm_y = wear["arm_y"]
     shirt = wear.get("shirt")
+    # the shoulder's slope up to the neck, as shares of the half width and depth: the anime mould keeps more of the shoulder and flares into the neck
+    shoulder, slope, flare = ((0.84, 0.86), (0.5, 0.66), (1.25, 0.42)) if L.get("real") else ((0.90, 0.88), (0.60, 0.70), (1.40, 0.46))
     lapel = lambda half: {}   # the shirt V is its own panel (below), so its edges stay crisp
     lower = bottom if wear["legs"] != "skirt" else wear["legs_color"]
     stations = [
@@ -464,17 +492,24 @@ def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
         _st((0, L["waist_y"] + 0.05 * h, 0), L["waist_w"] / 2 * 1.1, d / 2 * 0.88, top),
         _st((0, chest, 0), w / 2 * 0.95, d / 2, top, **lapel(10)),
         _st((0, arm_y - 0.015 * h, 0), w / 2, d / 2 * 0.95, top, **lapel(22)),
-        _st((0, arm_y + 0.012 * h, 0), w / 2 * 0.84, d / 2 * 0.86, top, **lapel(30)),
-        _st((0, closing - 0.008 * h, 0), w / 2 * 0.5, d / 2 * 0.66, top, **lapel(38)),
-        _st((0, closing + 0.004 * h, 0), neck_w / 2 * 1.25, d / 2 * 0.42, top, **lapel(44)),
+        _st((0, arm_y + 0.012 * h, 0), w / 2 * shoulder[0], d / 2 * shoulder[1], top, **lapel(30)),
+        _st((0, closing - 0.008 * h, 0), w / 2 * slope[0], d / 2 * slope[1], top, **lapel(38)),
+        _st((0, closing + 0.004 * h, 0), neck_w / 2 * flare[0], d / 2 * flare[1], top, **lapel(44)),
     ]
     _tube(mesh, stations, "y", ring=48)
     if shirt:
         _shirt_v(mesh, stations[5:9], (10, 22, 30, 34), shirt)
-    skin = spec["colors"]["head"]
-    neck = [_st((0, closing - 0.02 * h, 0), neck_w / 2, neck_w / 2 * 0.92, skin),
-            _st((0, L["head_y"] - L["sy"] * 0.3, 0), neck_w / 2 * 0.96, neck_w / 2 * 0.9, skin)]
-    _tube(mesh, neck, "y")
+    _tube(mesh, _neck(L, closing, neck_w, spec["colors"]["head"]), "y")
+
+
+def _neck(L: dict, closing: float, neck_w: float, skin: str) -> list[dict]:
+    """The neck: a column inside the head and the torso's collar. The anime mould tapers it (a flared base, a slimmer middle), the real one stays a column."""
+    h, base, top = L["h"], closing - 0.02 * L["h"], L["head_y"] - L["sy"] * 0.3
+    if L.get("real"):
+        return [_st((0, base, 0), neck_w / 2, neck_w / 2 * 0.92, skin), _st((0, top, 0), neck_w / 2 * 0.96, neck_w / 2 * 0.9, skin)]
+    chin = L["head_y"] - L["sy"] / 2
+    return [_st((0, base, 0), neck_w / 2 * 1.16, neck_w / 2 * 1.06, skin), _st((0, base + 0.55 * (chin - base), 0), neck_w / 2 * 0.92, neck_w / 2 * 0.88, skin),
+            _st((0, top, 0), neck_w / 2 * 0.96, neck_w / 2 * 0.9, skin)]
 
 
 def _shirt_v(mesh: Mesh, rows: list, halves: tuple, color: str) -> None:
@@ -489,6 +524,28 @@ def _shirt_v(mesh: Mesh, rows: list, halves: tuple, color: str) -> None:
     _emit(mesh, grid, colors, [st["p"] for st in rows], False, None)
 
 
+ARM_RING_SHARE = 0.016   # the rings of an anime arm lie at most this share of the height apart: four cells of the rig's weight grid (h / 240)
+
+
+def _densify_x(stations: list[dict], spacing: float) -> list[dict]:
+    """Rings between every pair that lies further apart than ``spacing`` along X, with the radii and the position
+    interpolated and the colour of the ring before. Pairs closer than that (the double rings of a colour change) stay as they are.
+
+    The rig weighs each bone from the rings nearest to its middle and then smooths over neighbouring rings: an upper arm
+    of three rings 15 cm apart has no ring in the clavicle's span and the whole arm took its weight from the shoulder,
+    which bowed the arms of a body without a skirt like hoops (see ``tests/test_anime_mould.py``)."""
+    out = []
+    for before, after in zip(stations, stations[1:]):
+        out.append(before)
+        gap = abs(after["p"][0] - before["p"][0])
+        count = int(gap // spacing) if gap > 0.004 else 0
+        for k in range(1, count + 1):
+            u = k / (count + 1)
+            out.append({**before, "p": tuple(before["p"][i] + (after["p"][i] - before["p"][i]) * u for i in range(3)),
+                        "a": before["a"] + (after["a"] - before["a"]) * u, "b": before["b"] + (after["b"] - before["b"]) * u})
+    return out + stations[-1:]
+
+
 def _arms(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     sleeve, skin = wear["sleeves"], spec["colors"]["hands"]
     y, r = wear["arm_y"], L["arm_d"] / 2
@@ -499,30 +556,62 @@ def _arms(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     for sign in (-1, 1):
         def at(x, k, color):
             return _st((sign * x, y, 0), r * k, r * k, color)
-        arm = [at(x0 - 0.01 * L["h"], 1.18, sleeve), at(x0, 1.2, sleeve), at(x0 + (elbow - x0) * 0.22, 1.12, sleeve), at(x0 + (elbow - x0) * 0.55, 1.0, sleeve)]
+        if L.get("real"):
+            arm = [at(x0 - 0.01 * L["h"], 1.18, sleeve), at(x0, 1.2, sleeve), at(x0 + (elbow - x0) * 0.22, 1.12, sleeve), at(x0 + (elbow - x0) * 0.55, 1.0, sleeve)]
+        else:   # the root starts deep inside the torso (no cap peeks out above the shoulder) and swells into a deltoid that runs into the sleeve
+            arm = [at(x0 - 0.045 * L["h"], 0.92, sleeve), at(x0 - 0.02 * L["h"], 1.1, sleeve), at(x0 + 0.004 * L["h"], 1.2, sleeve),
+                   at(x0 + (elbow - x0) * 0.24, 1.1, sleeve), at(x0 + (elbow - x0) * 0.55, 1.0, sleeve)]
         if short:
             arm += [at(cuff, 1.04, sleeve), at(cuff + 0.001, 0.9, skin)]
         lower = skin if short else sleeve
         arm += [at(elbow - bend, 0.92, lower), at(elbow, 0.9, lower), at(elbow + bend, 0.9, lower),
                 at(elbow + (wrist - elbow) * 0.35, 0.86, lower), at(elbow + (wrist - elbow) * 0.75, 0.7, lower), at(wrist, 0.58, lower)]
-        _tube(mesh, arm, "x")
-        d = r * 2
-        palm_end = wrist + (tip - wrist) * 0.52
-        hand = [_st((sign * (wrist - 0.004), y, 0), d * 0.34, d * 0.22, skin), _st((sign * (wrist + (tip - wrist) * 0.22), y, 0), d * 0.5, d * 0.24, skin),
-                _st((sign * palm_end, y, 0), d * 0.5, d * 0.22, skin), _st((sign * (palm_end + (tip - palm_end) * 0.55), y, 0), d * 0.44, d * 0.2, skin),
-                _st((sign * (palm_end + (tip - palm_end) * 0.92), y, 0), d * 0.2, d * 0.12, skin)]
-        _tube(mesh, hand, "x")
-        # four fingers fanned from the palm's end, the thumb from its side
-        for k, (dy, length) in enumerate(((0.18, 0.86), (0.06, 1.0), (-0.06, 0.96), (-0.18, 0.8))):
-            fx0 = sign * (palm_end + (tip - palm_end) * 0.3)
-            fx1 = sign * (palm_end + (tip - palm_end) * length)
-            finger = [_st((fx0, y + d * dy, 0), d * 0.15, d * 0.08, skin), _st(((fx0 + fx1) / 2, y + d * dy * 1.05, 0), d * 0.13, d * 0.08, skin),
-                      _st((fx1, y + d * dy * 1.1, 0), d * 0.08, d * 0.06, skin)]
-            _tube(mesh, finger, "x", ring=6)
-        px = sign * (wrist + (tip - wrist) * 0.2)
-        thumb = [_st((px, y + d * 0.1, d * 0.12), d * 0.13, d * 0.1, skin), _st((px + sign * d * 0.12, y + d * 0.16, d * 0.32), d * 0.1, d * 0.09, skin),
-                 _st((px + sign * d * 0.22, y + d * 0.2, d * 0.46), d * 0.05, d * 0.05, skin)]
-        _tube(mesh, thumb, "z", ring=6)
+        _tube(mesh, arm if L.get("real") else _densify_x(arm, ARM_RING_SHARE * L["h"]), "x")
+        (_paddle_hand if L.get("real") else _relaxed_hand)(mesh, sign, y, r * 2, wrist, tip, skin)
+
+
+def _paddle_hand(mesh: Mesh, sign: int, y: float, d: float, wrist: float, tip: float, skin: str) -> None:
+    """The realistic style's hand, as it was approved: a mitten flat in the xy plane with four fingers and a thumb."""
+    palm_end = wrist + (tip - wrist) * 0.52
+    hand = [_st((sign * (wrist - 0.004), y, 0), d * 0.34, d * 0.22, skin), _st((sign * (wrist + (tip - wrist) * 0.22), y, 0), d * 0.5, d * 0.24, skin),
+            _st((sign * palm_end, y, 0), d * 0.5, d * 0.22, skin), _st((sign * (palm_end + (tip - palm_end) * 0.55), y, 0), d * 0.44, d * 0.2, skin),
+            _st((sign * (palm_end + (tip - palm_end) * 0.92), y, 0), d * 0.2, d * 0.12, skin)]
+    _tube(mesh, hand, "x")
+    # four fingers fanned from the palm's end, the thumb from its side
+    for k, (dy, length) in enumerate(((0.18, 0.86), (0.06, 1.0), (-0.06, 0.96), (-0.18, 0.8))):
+        fx0 = sign * (palm_end + (tip - palm_end) * 0.3)
+        fx1 = sign * (palm_end + (tip - palm_end) * length)
+        finger = [_st((fx0, y + d * dy, 0), d * 0.15, d * 0.08, skin), _st(((fx0 + fx1) / 2, y + d * dy * 1.05, 0), d * 0.13, d * 0.08, skin),
+                  _st((fx1, y + d * dy * 1.1, 0), d * 0.08, d * 0.06, skin)]
+        _tube(mesh, finger, "x", ring=6)
+    px = sign * (wrist + (tip - wrist) * 0.2)
+    thumb = [_st((px, y + d * 0.1, d * 0.12), d * 0.13, d * 0.1, skin), _st((px + sign * d * 0.12, y + d * 0.16, d * 0.32), d * 0.1, d * 0.09, skin),
+             _st((px + sign * d * 0.22, y + d * 0.2, d * 0.46), d * 0.05, d * 0.05, skin)]
+    _tube(mesh, thumb, "z", ring=6)
+
+
+# finger fan across the palm (Z, in arm thicknesses), the share of the reach each one covers, and how far its tip curls toward the palm
+HAND_FINGERS = ((0.30, 0.90), (0.10, 1.0), (-0.10, 0.96), (-0.30, 0.80))
+
+
+def _relaxed_hand(mesh: Mesh, sign: int, y: float, d: float, wrist: float, tip: float, skin: str) -> None:
+    """A hand at rest: palm down in the T pose (the lowered arm turns the palm toward the thigh), a flat palm wider than it is thick, four
+    fingers side by side that curl a little toward the palm, a thumb forward. The rig moves the hand as one; there are no finger bones."""
+    span = tip - wrist
+
+    def at(u, dy=0.0, dz=0.0):
+        return (sign * (wrist + span * u), y + d * dy, d * dz)
+
+    palm = [_st(at(-0.015, 0.0), d * 0.20, d * 0.30, skin), _st(at(0.16, 0.0), d * 0.24, d * 0.40, skin), _st(at(0.40, -0.03), d * 0.23, d * 0.45, skin),
+            _st(at(0.56, -0.06), d * 0.20, d * 0.42, skin), _st(at(0.64, -0.08), d * 0.14, d * 0.34, skin)]
+    _tube(mesh, palm, "x", ring=12)
+    for dz, reach in HAND_FINGERS:
+        end = 0.52 + 0.48 * reach
+        finger = [_st(at(0.52, -0.06, dz), d * 0.11, d * 0.115, skin), _st(at((0.52 + end) / 2, -0.12, dz), d * 0.095, d * 0.10, skin),
+                  _st(at(end, -0.21, dz), d * 0.06, d * 0.07, skin)]
+        _tube(mesh, finger, "x", ring=6)
+    thumb = [_st(at(0.14, -0.02, 0.28), d * 0.12, d * 0.11, skin), _st(at(0.24, -0.05, 0.50), d * 0.10, d * 0.095, skin), _st(at(0.34, -0.08, 0.62), d * 0.06, d * 0.06, skin)]
+    _tube(mesh, thumb, "z", ring=6)
 
 
 def _legs(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
@@ -607,7 +696,7 @@ def wear_of(spec: dict, L: dict) -> dict:
         "top": colors["top"], "sleeves": colors["sleeves"], "bottom": colors["bottom"], "shoes": colors["shoes"],
         "sleeves_len": "long", "legs": "skirt" if skirt else "trousers", "legs_color": kinds.get("skirt", colors["bottom"]),
         "socks": None, "collar": None, "ribbon": None, "tie": None, "shirt": None, "shoe_style": "loafer",
-        "arm_y": max(L["shoulder_y"], shoulder_top(L) - 0.03 * L["h"]),
+        "arm_y": max(L["shoulder_y"], arm_line(L)),
     }
     if outfit == "school":
         found.update({
@@ -656,7 +745,8 @@ def loft_parts(spec: dict, layout: dict, fit=None, relief=None) -> list[tuple[Me
     if spec.get("atlas"):
         from services.blob_texture import atlas_frame, atlas_uv, atlas_uvs
         frame = atlas_frame([mesh], layout)
-        body_uvs = atlas_uvs(mesh, frame)
+        head_map = spec.get("atlas") == "map"
+        body_uvs = atlas_uvs(mesh, frame, head_map)
         # without a kit the face patch shows the atlas too: the front tile whole (the patch is only the face, 52 degrees each way), not a white mask
         if relief is not None:
             face, uvs = face_relief_patch(layout, relief, frame)
@@ -666,7 +756,7 @@ def loft_parts(spec: dict, layout: dict, fit=None, relief=None) -> list[tuple[Me
     if hair.vertices:
         hair_uvs = hair.uvs
         if atlas and spec["hair"].get("texture") == "photo":
-            hair_uvs = atlas_uvs(hair, frame)   # the cap takes the head picture's own hair, draped like the skull
+            hair_uvs = atlas_uvs(hair, frame, spec.get("atlas") == "map")   # the cap takes the head picture's own hair, draped like the skull
         parts.append((hair, "hair", hair_uvs))
     return parts
 

@@ -73,16 +73,32 @@ def _is_head(points, frame: dict) -> bool:
     return sum(p[1] for p in points) / 3 >= cut and max(max(abs(p[0]), abs(p[2])) for p in points) <= span / 1.5 * 0.49
 
 
-def atlas_uvs(mesh, frame: dict) -> list[tuple[float, float]]:
+def head_map_uvs(points, frame: dict) -> list[tuple[float, float]]:
+    """The UVs of one head triangle in the joined head map (``blob_head_map``): the yaw from the face across the two thirds of the
+    head half that follow the front tile, the tile's own height. A triangle across the nape stays whole on one end of the map."""
+    cy, span_y, _cut = frame["head"]
+    turns = [math.atan2(p[0], p[2]) / (2 * math.pi) for p in points]
+    if max(turns) - min(turns) > 0.5:
+        turns = [t + 1.0 if t < 0 else t for t in turns]
+        if sum(turns) / 3 > 0.5 + 1.0 / 3:
+            turns = [t - 1.0 for t in turns]
+    return [((1 + 2 * min(1.0, max(0.0, turn + 0.5))) / HEAD_TILES, 0.5 + (0.5 - (p[1] - cy) / span_y) * 0.5) for p, turn in zip(points, turns)]
+
+
+def atlas_uvs(mesh, frame: dict, head_map: bool = False) -> list[tuple[float, float]]:
     """One UV per vertex. A triangle takes the view it faces (front when its normals look toward +Z), whole, so no triangle smears
     across the halves; a triangle at or above the shoulders and inside the head tile's width takes a head tile instead (front, side
-    or back by where it faces). The edges between views are seams, like an old game's."""
+    or back by where it faces). The edges between views are seams, like an old game's. With ``head_map`` the head's triangles that
+    are not on the front tile point into the joined head map instead of the side and back tiles."""
     uvs: list[tuple[float, float]] = []
     for i in range(0, len(mesh.vertices), 3):
         points = mesh.vertices[i:i + 3]
         normal = tuple(sum(mesh.normals[i + k][j] for k in range(3)) / 3 for j in range(3))   # the stored normals point outward
         head = _is_head(points, frame)
-        uvs.extend(atlas_uv(p, normal[2] < 0, frame, head, head_tile(normal)) for p in points)
+        if head and head_map and head_tile(normal) != 0:
+            uvs.extend(head_map_uvs(points, frame))
+        else:
+            uvs.extend(atlas_uv(p, normal[2] < 0, frame, head, head_tile(normal)) for p in points)
     return uvs
 
 
@@ -196,9 +212,11 @@ def match_tiles(head):
     return Image.fromarray(np.concatenate(out + [rgb[:, 3 * third:]] if rgb.shape[1] > 3 * third else out, axis=1))
 
 
-def stack_atlas(body, head=None, guides=None, match: bool = False) -> bytes:
+def stack_atlas(body, head=None, guides=None, match: bool = False, join: dict | None = None) -> bytes:
     """The atlas picture (PNG bytes) from the painted ``body`` picture (2:1) and, when there is one, the painted ``head`` picture
-    (2:1). Without a head picture the head tiles are cut from the body picture and enlarged, softer but the same man."""
+    (2:1). Without a head picture the head tiles are a flat dark skin. With ``join`` (``{radius, frame, face_yaw, blend}``: the
+    mould's ``blob_head_map.radius_map``, the atlas frame and the face patch's reach) the side and back tiles give way to the joined
+    head map: the three portraits made one picture round the skull, so a viewer blends nothing."""
     import io
 
     from PIL import Image
@@ -206,10 +224,11 @@ def stack_atlas(body, head=None, guides=None, match: bool = False) -> bytes:
     top = body.convert("RGB").resize(HALF_SIZE, Image.LANCZOS)
     top = bleed(top, guides[0]) if guides else top
     if head is not None:
-        bottom = head.convert("RGB").resize(HALF_SIZE, Image.LANCZOS)
-        if match:
-            bottom = match_tiles(bottom)
+        raw = head.convert("RGB").resize(HALF_SIZE, Image.LANCZOS)
+        bottom = match_tiles(raw) if match else raw
         bottom = bleed(bottom, guides[1]) if guides else bottom
+        if join is not None:
+            bottom = _with_head_map(bottom, raw, join)
     else:
         bottom = Image.new("RGB", HALF_SIZE, (90, 70, 60))
     atlas = Image.new("RGB", ATLAS)
@@ -218,6 +237,22 @@ def stack_atlas(body, head=None, guides=None, match: bool = False) -> bytes:
     out = io.BytesIO()
     atlas.save(out, format="PNG")
     return out.getvalue()
+
+
+def _with_head_map(bottom, raw, join: dict):
+    """The head half with the joined head map in place of its side and back tiles (the front tile stays: the face patch and a face
+    kit read it)."""
+    import numpy as np
+    from PIL import Image
+
+    from services.blob_head_map import head_map
+
+    pixels = np.asarray(bottom).copy()
+    third = pixels.shape[1] // HEAD_TILES
+    joined = head_map(pixels, join["radius"], join["frame"], join.get("face_yaw", 40.0), join.get("blend", 10.0), (2 * third, pixels.shape[0]), raw=np.asarray(raw))
+    pixels[:, third:3 * third] = joined
+    pixels[:, 3 * third:] = joined[:, -1:]   # the columns left over by the division take the map's last one
+    return Image.fromarray(pixels)
 
 
 def neck_skin(head) -> list[float]:
@@ -245,7 +280,7 @@ def hair_of(head) -> str:
     return "#%02X%02X%02X" % (r, g, b)
 
 
-def frame_extras(frame: dict, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None, split: bool = True, bands: float | None = None) -> dict:
+def frame_extras(frame: dict, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None, split: bool = True, bands: float | None = None, head_map: bool = False) -> dict:
     """The atlas frame as numbers a viewer can read from the material's ``extras``: the body views ``[centre x, centre y, span]``,
     the head tiles ``[centre y, tile height in metres, the cut]``."""
     out = {"body": [round(v, 6) for v in frame["body"]]}
@@ -259,13 +294,15 @@ def frame_extras(frame: dict, skin: list[float] | None = None, hold: float = 0.0
         out["noUpperSplit"] = True   # one blend height for the whole head: a fitted skull needs no longer hold of the front picture above the brows
     if bands is not None:
         out["bandDetail"] = round(float(bands), 3)   # frequency split of the head blend: fine texture cut hard, tone blended wide; this much of the fine texture is kept off the face patch
+    if head_map:
+        out["headMap"] = 1   # the head half holds the front tile and the joined head map (yaw by height) in place of the side and back tiles
     if face:
         out["faceYaw"] = round(float(face[0]), 2)       # degrees each way the face patch reaches
         out["faceFeather"] = round(float(face[1]), 2)   # degrees over which the patch fades into the skull at its border
     return out
 
 
-def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None, nearest: bool = False, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None, unlit: bool = False, split: bool = True, bands: float | None = None) -> bytes:
+def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None, nearest: bool = False, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None, unlit: bool = False, split: bool = True, bands: float | None = None, head_map: bool = False) -> bytes:
     """The GLB with ``png`` as the base colour texture of the materials named in ``materials`` (one shared image), and no vertex
     colours on the primitives that use them (they would tint the picture). Everything else, skin and animations included, is kept
     byte for byte."""
@@ -299,7 +336,7 @@ def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body",
             document["materials"][index].setdefault("extensions", {})["KHR_materials_unlit"] = {}
     for index in found:
         if frame is not None:
-            document["materials"][index].setdefault("extras", {})["atlas"] = frame_extras(frame, skin, hold, face, split, bands)
+            document["materials"][index].setdefault("extras", {})["atlas"] = frame_extras(frame, skin, hold, face, split, bands, head_map)
         document["materials"][index].setdefault("pbrMetallicRoughness", {})["baseColorTexture"] = {"index": len(document["textures"]) - 1}
         document["materials"][index]["pbrMetallicRoughness"]["baseColorFactor"] = [1, 1, 1, 1]
     for mesh in document.get("meshes", []):

@@ -67,6 +67,9 @@ _SHOULDER_AT = {"blob": 0.40, "anime": 0.74, "chibi": 0.46}
 # Drawn reach as a fraction of height. The stored trait can be longer; a wave folds that reach up.
 # Anime arms end near the hip, not the knee: 0.42 of the height from the shoulder.
 _ARM_CAP = {"blob": 0.30, "anime": 0.42, "chibi": 0.26}
+# A lofted anime arm (not the realistic one): the fingertips of a hanging arm end at mid-thigh, as a person's do. 0.42 left them
+# two thirds of the way down the thigh on legs as long as these (0.52 of the height).
+_LOFT_ARM_CAP = 0.385
 _COLOR_DEFAULT = {
     "head": "#F2C7A0", "top": "#3A6EA5", "sleeves": "#F2C7A0",
     "bottom": "#2C3340", "shoes": "#201A18", "hands": "#F2C7A0",
@@ -277,7 +280,7 @@ def _normalize(traits: dict) -> dict:
         **({"mesh": mesh} if "mesh" in traits else {}),
         **({"outfit": outfit} if "outfit" in traits else {}),
         **({"realism": _choice(traits["realism"], _REALISMS, "invalid_realism", "realism")} if "realism" in traits else {}),
-        **({"atlas": True} if traits.get("atlas") is True and mesh == "loft" else {}),
+        **({"atlas": traits["atlas"]} if (traits.get("atlas") is True or traits.get("atlas") == "map") and mesh == "loft" else {}),   # "map": the head's UVs point into the joined head map
         **({"skull_fit": _skull_fit(traits["skull_fit"])} if traits.get("skull_fit") else {}),
         **(_blocky_fields(traits) if mesh == "blocky" else {}),
         "height": _height(traits.get("height", 1.8)),
@@ -482,7 +485,7 @@ def _layout(spec: dict) -> dict:
     torso_h = stack["torso_top"] - stack["torso_bottom"]
     arm_d = min(spec["arms"]["thickness"] * height, torso_w * 0.45)
     # A wave folds the forearm up by about a third of the reach. A wide head meets a longer arm.
-    arm_len = min(spec["arms"]["length"], _ARM_CAP[spec["family"]]) * height
+    arm_len = min(spec["arms"]["length"], _arm_cap(spec)) * height
     upper_x, fore_x, upper_len, fore_len, wrist_x, tip_x = _arm_centers(torso_w / 2, torso_w, arm_len)
     gap = max(0.045 * height, leg_d * 0.55)
     # Above the belly. Higher than about half the torso swings a bent wave into the head.
@@ -503,6 +506,12 @@ def _layout(spec: dict) -> dict:
         "upper_x": upper_x, "fore_x": fore_x, "upper_len": upper_len, "fore_len": fore_len,
         "elbow_x": upper_x + upper_len / 2, "wrist_x": wrist_x, "tip_x": tip_x,
     }
+
+
+def _arm_cap(spec: dict) -> float:
+    if spec["family"] == "anime" and spec.get("mesh") == "loft" and spec.get("realism") != "real":
+        return _LOFT_ARM_CAP
+    return _ARM_CAP[spec["family"]]
 
 
 def _widths(spec: dict, sx: float, sz: float, height: float):
