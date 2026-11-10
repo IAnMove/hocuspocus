@@ -120,6 +120,7 @@ Every mold is a card `stage-<mold>` built by `app/services/world3d_stage_cards.p
 | --- | --- | --- | --- |
 | `stage-aula`, `stage-cocina`, `stage-dormitorio`, `stage-hospital`, `stage-pasillo`, `stage-plato_tv`, `stage-sala_prensa` | wide, 4.4 / 3.5 / 3.7 / 2.6 / 3.3 / 3.8 / 4.3 m | 2 standing + entrance | `entrance` |
 | `stage-bar`, `stage-coche_interior`, `stage-salon` | wide, 3.8 / 2.9 / 2.9 m | 2 seated + entrance | `seated`, `entrance` |
+| `stage-cabina` | two_shot from behind the seats | 2 seated (driver, passenger) + entrance | `seated`, `entrance` |
 | `stage-despacho` | wide, 4.4 m | `behind_desk` seated, `visitor`, `door` | `seated` |
 | `stage-sala`, `stage-sala_ventana`, `stage-mostrador`, `stage-umbral`, `stage-escalera`, `stage-calle`, `stage-orilla`, `stage-azotea` | wide, 3.5 / 3.5 / 3.9 / 3.7 / 3.6 / 4.1 / 4.1 / 4.1 m | 3 standing + entrance | `entrance` |
 | `stage-escenario_publico` | wide, 4.3 m | 3 standing + entrance, audience seats | `entrance`, `crowd` |
@@ -130,6 +131,12 @@ Every mold is a card `stage-<mold>` built by `app/services/world3d_stage_cards.p
 | `stage-hemiciclo`, `stage-juzgado` | **far**, 6.5 / 5.4 m | 2 standing + entrance | `entrance`, `crowd` |
 
 The five `far` stages carry `talk` and `figure` but not `dialogue`, so `{"use": "dialogue"}` does not list them: ask for them by `place` or `kind` and shoot the lines from `ots_a`, `ots_b` or `close_1`. A stage shot whose skin is only colours warns `stage_unskinned` in the dry run.
+
+### The vehicle cabin (`stage-cabina`)
+
+A reusable base for anything that has two front seats and a windshield: a car, a van, a lorry cab, a boat, a spaceship cockpit. Built from **turned blocks** (`rot: [x, y, z]` radians about the block's centre; `scripts/dev/make_cabin_mold.py` writes it): seats with raked backs and headrests, a console, a dashboard with an instrument binnacle and a radio stack, a tilted steering wheel (a ring of slats), pillars, a mirror, visors, armrests. Size: small 1.8 x 2.5 x 1.25 m, medium 2.1 x 3.0 x 1.45 m, large 2.6 x 3.9 x 1.8 m. Light preset `cabin` (the roof is 1.45 m: the lamp sits under it).
+
+The windshield faces -z; seats at x = +-0.5, z = -0.25 (seat cushion top at y = 0.36). A model with no sit clip is lowered into its seat: `position[1]` about `0.36 - 0.95 * height / 1.8` (the seat blocks hide the legs), `rotationY = pi` to face the windshield. Skin surfaces: `windshield` (put a video here: the road), `window_side`, `window_rear`, `floor`, `ceiling`, `wall_left`, `wall_right`, `seat_front/top`, `console_*`, `dash_front/top`, `cluster_front` (an image of dials), `radio_front`, `wheel_*`, `trim_*`. Skin it as a car (leather, dials, door panels), a van or a spaceship (metal panels, a glowing console); the geometry stays. `texture` + `tile_m` repeats a tile, `image` stretches one picture (give it `sideColor` for the ends of a block).
 
 ## Packs by intent
 
@@ -253,6 +260,12 @@ Forty-four real ids an agent can reach for before searching, grouped by intent. 
 - `pixel-orbit`: High above a planet: its curved horizon glows with atmosphere, city lights dot the night side, nebula clouds breathe among dense stars.
 - `drive-hood`: Immersive forward view with a restrained road bump.
 - `motion-lighthouse-story`: A geometric keeper climbs a coastal lighthouse; the beacon rotates over a volumetric sea and island.
+
+## Check before you look: the cheap scene QA loop
+
+Do not find placement defects with a picture. After `world3d.scene.patch` (or `inspect`) read `warnings` and `layout.placement`: `placement_sinks_into_support`, `placement_overhangs_support`, `placement_outside_room`, `placement_below_floor`, `placement_floating`, `placement_cropped`, `placement_tiny`, each with the `position` that fixes it, and `placement_fix_all` when an object has several. Apply the fixes in one patch. Then the existing ones: `collision: ...` for a mover through a model, `camera_inside_geometry`. Only when the warnings are clean ask `world3d.scene.preview` for one to three frames (at the start, the middle and the end of the shot) and look at them yourself. A reviewer model (a second agent that reads every frame) is for a pilot or a milestone, not for every revision: its 1-5 scores drifted 0.2 between runs on identical frames, a text warning does not drift.
+
+What the check knows: the room's blocks and every other still prop are the supports; a character is judged by its idle body (its bind pose is a T, `boundsM` is that T), and from the cushion up when it is lowered into a seat block. A lying figure pivots at its FEET (`rotationX` about the position), so its body spreads along -z (head toward -z at `rotationX = -1.5`): read `placement` instead of guessing the offset. A tight close-up of a character the camera is meant to crop will still say `cropped`: it is information, not a refusal.
 
 ## Present a robot
 

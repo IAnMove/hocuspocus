@@ -43,7 +43,7 @@ def scene_placement(document: dict, items: list[dict]) -> dict:
         for body in bodies:
             if not body["character"]:
                 continue
-            issues += _room_issues(document, body) + _rest_issues(body, supports) + _frame_issues(document, body, centers)
+            issues += _room_issues(document, body) + _rest_issues(body, supports) + _frame_issues(document, _above_seat(body, supports), centers)
         for body in bodies:
             if not body["character"]:
                 issues += _room_issues(document, body)
@@ -151,6 +151,14 @@ def _room_issues(document: dict, body: dict) -> list[dict]:
         shift[axis] = delta
     names = ("x", "y", "z")
     return [_issue("outside_room", body, f"goes {', '.join(f'{abs(delta):.2f} m past the room along {names[axis]}' for axis, delta in out)}", _moved(body, shift))]
+
+
+def _above_seat(body: dict, supports: list[dict]) -> dict:
+    """A person lowered into a seat shows from the cushion up: the camera is not asked to see the legs that went into it."""
+    for s in supports:
+        if s["kind"] in SEAT_KINDS and _overlap(body["lo"], body["hi"], s["lo"], s["hi"], 0) > 0 and _overlap(body["lo"], body["hi"], s["lo"], s["hi"], 2) > 0 and body["lo"][1] < s["hi"][1]:
+            return {**body, "lo": [body["lo"][0], s["hi"][1], body["lo"][2]]}
+    return body
 
 
 def _rest_issues(body: dict, supports: list[dict]) -> list[dict]:

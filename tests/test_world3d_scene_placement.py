@@ -84,3 +84,11 @@ def test_a_humanoid_bind_pose_is_not_a_t_a_sleeper_is_judged_by_her_idle_body():
     betty["boundsM"]["size"] = [1.666, 1.65, 0.337]
     codes = [i["code"] for i in scene_placement(room([bed]), [betty])["issues"]]
     assert "overhangs_support" not in codes and "outside_room" not in codes
+
+
+def test_a_seated_person_is_judged_from_the_cushion_up():
+    seat = {"id": "seat_driver", "kind": "seat", "box": [0, 0, -1, 0.52, 0.36, 0.56], "surfaces": ["seat_front", "seat_top"]}
+    doc = room([seat], (2.1, 3.0, 1.45))
+    doc["camera"] = {"family": "fixed", "eye": [0, 1.15, 1.2], "look": [0, 0.95, -1], "fov": 50}
+    driver = item("subject_1", [-0.2, -0.5, -1.1], [0.2, 1.2, -0.9], [0, -0.5, -1])
+    assert [i["code"] for i in scene_placement(doc, [driver])["issues"] if i["code"] == "cropped"] == []
