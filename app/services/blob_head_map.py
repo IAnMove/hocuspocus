@@ -169,13 +169,12 @@ def hair_hold(front: np.ndarray, shape: dict, tile_w: float, mould_edge: np.ndar
         wide, hair = np.median(outline_row[jaw] / mould_row[jaw]), np.median(1 - np.minimum(skin_row[jaw] / outline_row[jaw], 1.0))
         if wide < LONG_HAIR[0] or hair < LONG_HAIR[1]:
             continue
+        # an ear that shows through the hair: the hair is behind it, the two portraits agree, and the front picture kept on would
+        # draw a second ear, stretched along the head's edge. That side is joined as a short-haired head is
+        if np.isfinite(nearest(face["ear_" + key])[:int(below[0])]).any():
+            continue
         curtain = (rows(face["rows"]) > 0.5) & (skin_row < edge_row * HAIR_GAP)
         far = skin_row + HAIR_SHARE * (np.minimum(edge_row, mould_row) - skin_row)
-        # in the rows of an ear that shows through the hair there is no curtain to keep: the front picture goes from the cheek to
-        # the ear as the profile does, and the side picture has that ear at its place (kept on, the front one would be a second
-        # ear, stretched along the head's edge)
-        ear = np.isfinite(nearest(face["ear_" + key])) & (np.arange(height) < below[0])
-        curtain &= ~ndimage.binary_dilation(ear, iterations=max(1, height // 35))
         later = np.where(curtain, np.clip(np.degrees(np.arcsin(np.clip(far / mould_row, 0.0, 1.0))), hold + 1.0, HAIR_UNTIL) - hold - 1.0, 0.0)
         later = ndimage.gaussian_filter1d(later, height / 50, mode="nearest")
         out[half] = np.repeat(later[:, None], mould_edge.shape[1], axis=1)[half]

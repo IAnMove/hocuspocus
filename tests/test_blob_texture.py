@@ -347,14 +347,18 @@ def _long_hair(picture):
     return picture
 
 
-def test_beside_long_hair_the_front_picture_is_kept_until_the_hair_and_a_short_haired_head_is_joined_as_before():
+def test_beside_long_hair_the_front_picture_is_kept_until_the_hair_and_a_short_haired_head_is_joined_as_before(monkeypatch):
     import numpy as np
 
+    from services import blob_head_map
     from services.blob_head_map import head_map
 
     lofted, parts = _real("woman")
     picture, frame, radius = _painted_head(parts, lofted["layout"])
     short = head_map(picture, radius, frame, 40.0, 18.0).astype(int)
+    monkeypatch.setattr(blob_head_map, "hair_hold", lambda *_args: np.zeros((short.shape[0], short.shape[1])))
+    assert (head_map(picture, radius, frame, 40.0, 18.0) == short).all(), "no long hair: the map is the one made without this step"
+    monkeypatch.undo()
     long = head_map(_long_hair(picture.copy()), radius, frame, 40.0, 18.0).astype(int)
     width = short.shape[1]
     column = lambda yaw: int((yaw + 180) / 360 * width)
@@ -368,19 +372,23 @@ def test_beside_long_hair_the_front_picture_is_kept_until_the_hair_and_a_short_h
     assert green[:, : width // 2].any() and green[:, width // 2:].any(), "the ear is still the side picture's, on both sides"
 
 
-def test_an_ear_through_long_hair_is_not_kept_from_the_front_picture():
+def test_a_side_with_an_ear_through_long_hair_is_joined_as_a_short_haired_head_is():
     import numpy as np
 
-    from services.blob_head_map import face_outline
+    from services.blob_head_map import face_outline, head_map
 
     lofted, parts = _real("woman")
-    picture, frame, _radius = _painted_head(parts, lofted["layout"])
+    picture, frame, radius = _painted_head(parts, lofted["layout"])
     picture = _long_hair(picture)
     third = HALF_SIZE[0] // 3
     picture[400:500, third // 2 + 150: third // 2 + 200] = (205, 160, 130)   # an ear through the hair, on the picture's right
     face = face_outline(picture[:, :third], 1.0)
     assert np.isfinite(face["ear_high"][420:480]).all() and not np.isfinite(face["ear_low"]).any()
     assert abs(face["high"][450] * third - 120) < 12, "the ear is not the face's edge"
+    joined = head_map(picture, radius, frame, 40.0, 18.0).astype(int)
+    column = lambda yaw: int((yaw + 180) / 360 * joined.shape[1])
+    assert np.abs(joined[620, column(-52)] - (60, 40, 30)).max() < 25, "the side without an ear keeps the front picture's hair"
+    assert np.abs(joined[620, column(52)] - (200, 155, 125)).max() < 25, "the side with the ear has the profile there, as before"
 
 
 def test_the_atlas_holds_the_front_tile_and_the_head_map_and_says_so():
