@@ -119,6 +119,8 @@ def face_traits(value: Any) -> dict[str, Any]:
         "blush": raw.get("blush") is True if "blush" in raw else raw.get("style") in ("anime", "anime_head"),
         "lash": _color(raw.get("lashColor"), "lashColor", _color(raw.get("ink"), "ink", INK)),
         "face_shape": _choice(raw.get("faceShape", "soft"), ("soft", "sharp"), "faceShape"),
+        # the anime_head drawing: 1 as it was, 2 larger eyes and a bolder mouth (what model3d.anime.make draws; the painted kit keeps 1)
+        "detail": 2 if raw.get("detail") == 2 else 1,
         # a blocky face: which one (voxel pixels or roblox curves) and the hair colour of its fringe
         "blocky": _choice(raw.get("blocky", "voxel"), ("voxel", "roblox"), "blocky"),
         "hair": _color(raw.get("hairColor"), "hairColor", (58, 42, 28, 255)),
@@ -142,6 +144,7 @@ def public_traits(traits: dict[str, Any]) -> dict[str, Any]:
         "style": look["style"], "eyeColor": _hex(look["eye_color"]), "blush": look["blush"],
         **({"lashColor": _hex(look["lash"])} if look.get("lash") and look["lash"] != look["ink"] else {}),
         **({"faceShape": look["face_shape"]} if look.get("face_shape", "soft") != "soft" else {}),
+        **({"detail": look["detail"]} if look.get("detail", 1) != 1 else {}),
     }
 
 

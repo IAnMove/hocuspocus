@@ -216,6 +216,7 @@ def _face_fields(raw: dict, look: str, style: str, gender: str, hair_color: str,
             "lashColor": _color(raw.get("lash_color"), "lash_color", darker(hair_color, 0.75)),
             "faceShape": _choice(raw.get("face_shape", "sharp" if gender == "man" else "soft"), ("soft", "sharp"), "invalid_face_shape", "face_shape"),
             "blush": raw.get("blush", gender in ("girl", "woman")) is True,
+            **({"detail": 2} if look == "anime" and style == "anime" else {}),   # the drawn anime face: larger eyes, a bolder mouth (the real style and the cute face keep theirs)
             **{k: v for k, v in face_extra.items() if k not in ("style", "skin")}}
 
 
