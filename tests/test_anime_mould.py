@@ -128,10 +128,10 @@ def test_arms_follow_their_bones_and_hang_to_mid_thigh(case):
     L, world = rig["L"], rig["skeleton"]["world"]
     assert not {"arms_steep", "short_arms", "hands_stuck"} & set(rig["found"]["warnings"])
     for side in ("Left", "Right"):
-        # The joints sit on the mould's elbow and wrist. The rig puts the shoulder 0.4 to 7 cm inboard of the torso edge (its opening rounds the
-        # shoulder corner; a skirt drops the hips to the hem) and the elbow and wrist at 44 % and 76 % of the path from there: measured worst 6.3 % and 2.8 %.
-        assert abs(abs(world[f"{side}ForeArm"][0]) - L["elbow_x"]) <= 0.07 * L["arm_len"]
-        assert abs(abs(world[f"{side}Hand"][0]) - L["wrist_x"]) <= 0.035 * L["arm_len"]
+        # The joints sit on the mould's elbow and wrist. The rig puts the shoulder 0.4 to 3.7 cm inboard of the torso edge (its opening rounds the
+        # shoulder corner; a skirt drops the hips to the hem) and the elbow and wrist at 44 % and 76 % of the path from there: measured worst 3.6 % and 1.7 %.
+        assert abs(abs(world[f"{side}ForeArm"][0]) - L["elbow_x"]) <= 0.045 * L["arm_len"]
+        assert abs(abs(world[f"{side}Hand"][0]) - L["wrist_x"]) <= 0.025 * L["arm_len"]
         # an upper arm weighs on the arm and the forearm, not on the clavicle (that is what bowed the arms)
         share = _arm_share(rig, side, _upper_arm_band(rig, side))
         assert share.mean() >= 0.95 and share.min() >= 0.8   # before the rings: a mean of 0.64 to 0.91; the clavicle keeps a little near the joint
@@ -227,7 +227,9 @@ def test_the_drawn_anime_face_is_larger_and_the_painted_and_real_faces_keep_thei
     assert resolve_traits({"gender": "girl"})["face"]["detail"] == 2
     assert "detail" not in resolve_traits({"gender": "man", "style": "real"})["face"]
     assert "detail" not in resolve_traits({"face_style": "cute"})["face"]
-    assert face_traits({"style": "anime_head"})["detail"] == 1   # the Qwen painted kit asks for the face as it was
+    assert "detail" not in resolve_traits({"face_source": "qwen", "face_image": "painted.png"})["face"]   # the painted kit keeps the face as it was
+    assert "detail" not in face_traits({"style": "anime_head"})   # no key, so no id derived from the traits of any other style changes
+    assert "detail" not in face_traits({"style": "blob"}) and "detail" not in face_traits({})
     assert DIMS[2][1] > 1.1 * DIMS[1][1] and DIMS[2][2] > 1.1 * DIMS[1][2]
     wide = {}
     for detail in (1, 2):
