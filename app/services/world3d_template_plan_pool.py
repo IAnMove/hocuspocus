@@ -3,7 +3,8 @@
 The scoring is the one of ``world3d.templates.catalog`` (``search_pool``); this module only decides which searches to
 ask for one shot, strictest first, until it has cards enough to vary:
 
-1. the shot's words with the filters its cast and speakers imply (``subjects``, ``use``, ``format``);
+1. the shot's words with the filters its cast and speakers imply (``subjects``, ``use``, ``format``; a plan without a
+   ``format`` is for the production's 16:9 frame, so it takes landscape cards);
 2. the place words alone with the same filters, so a place card surfaces from a long line the half-of-the-words rule
    of a single query would drop;
 3. a portrait frame with too few portrait cards also takes landscape cards (``adapted``);
@@ -29,6 +30,7 @@ USE_COST = 60           # what a card loses for answering a shot with the asked 
 ACTION_USES = {"action", "speed", "impact", "drive"}
 STYLE_TAGS = {"pixel", "psx", "anime", "creative", "dark-fantasy", "perspective"}   # a look, not a place
 ADAPT_COST = 25         # what a landscape card loses in a portrait frame
+DEFAULT_FRAME = "landscape"   # the frame of a plan that names none (production_template_fit.FRAME)
 
 Search = Callable[..., dict]
 
@@ -61,7 +63,8 @@ def spread(seed: int, *parts) -> float:
 def ladder(need: Need, frame: str | None) -> list[Rung]:
     subject = {"subjects": need.subjects} if need.subjects else {}
     use = {"use": need.use} if need.use else {}
-    asked = {"format": frame} if frame else {}
+    # A portrait card in a 16:9 production is cropped to fill the frame: without a format the plan stays landscape.
+    asked = {"format": frame or DEFAULT_FRAME}
     rungs = [Rung({**subject, **use, **asked}, 0, False, "")]
     if frame == "portrait":
         rungs.append(Rung({**subject, **use}, ADAPT_COST, True, ""))

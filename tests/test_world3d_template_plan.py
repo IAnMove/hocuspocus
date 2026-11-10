@@ -188,15 +188,63 @@ def test_portrait_takes_portrait_cards_and_falls_back_to_adapted_landscape_ones(
     result = plan_templates({"shots": shots, "format": "portrait"})
     entries = primaries(result)
     assert all(entry and entry["scene3d"]["width"] == 1080 and entry["scene3d"]["height"] == 1920 for entry in entries)
-    assert entries[0]["adapted"] is True and entries[0]["format"] == "landscape" and "portrait" in entries[0]["note"]
-    assert "adapted" not in entries[2] and entries[2]["format"] == "portrait"
-    assert len(entries[0]["note"].splitlines()) == 1
-    native = plan_templates({"shots": [{"key": "a", "text": "", "speakers": 1}], "format": "portrait", "avoid": []})
-    assert primaries(native)[0]["format"] in ("portrait", "landscape")
+    assert all("adapted" not in entry and entry["format"] == "portrait" for entry in entries), entries
+    # A place with a landscape stage and no portrait card still falls back to that stage, reframed.
+    kitchen = primaries(plan_templates({"shots": [{"key": "k", "text": "two friends argue in the kitchen", "speakers": 2}],
+                                        "format": "portrait"}))[0]
+    assert kitchen["id"] == "stage-cocina" and kitchen["adapted"] is True and kitchen["format"] == "landscape"
+    assert "portrait" in kitchen["note"] and len(kitchen["note"].splitlines()) == 1
+    assert kitchen["scene3d"]["width"] == 1080 and kitchen["scene3d"]["height"] == 1920
     landscape = plan_templates({"shots": shots, "format": "landscape"})
     assert all("width" not in entry["scene3d"] and "adapted" not in entry and entry["format"] == "landscape" for entry in primaries(landscape))
     none = plan_templates({"shots": shots})
-    assert all("width" not in entry["scene3d"] and "adapted" not in entry for entry in primaries(none))
+    assert all("width" not in entry["scene3d"] and "adapted" not in entry and entry["format"] == "landscape"
+               for entry in primaries(none))
+
+
+def test_a_vertical_dialogue_plan_takes_the_cards_drawn_for_nine_by_sixteen():
+    cards = {card["id"]: card for card in builtin_cards()}
+    for seed in range(3):
+        dialogue = plan_templates({"shots": shots_of([""] * 12, speakers=2), "format": "portrait", "seed": seed})
+        ids = ids_of(dialogue)
+        assert all(name.startswith("vertical-dialogue-") for name in ids), ids
+        assert all(cards[name]["format"] == "portrait" and "dialogue" in cards[name]["uses"] and cards[name]["subjects"] == 2
+                   and not cards[name]["still"] for name in ids)
+        assert all("adapted" not in entry for entry in primaries(dialogue)) and max(ids.count(name) for name in ids) <= 2
+        assert dialogue["summary"]["formats"] == {"portrait": 12}
+        talk = plan_templates({"shots": shots_of(["she answers"] * 6, speakers=1), "format": "portrait", "seed": seed})
+        assert all(entry["format"] == "portrait" and "adapted" not in entry for entry in primaries(talk))
+    lines = plan_templates({"shots": shots_of(["two friends argue", "they keep talking", "he answers back"], speakers=2),
+                            "format": "portrait"})
+    assert all(name.startswith("vertical-dialogue-") for name in ids_of(lines))
+    desert = plan_templates({"shots": shots_of(["two travellers talk in the desert", "they keep talking in the desert"], speakers=2),
+                             "format": "portrait"})
+    assert all(entry["id"].startswith("vertical-") and entry["scene3d"]["world"].startswith("atmos-desert")
+               for entry in primaries(desert))
+
+
+def test_the_vertical_cards_answer_vertical_words_and_leave_plain_dialogue_to_the_landscape_ones():
+    for query in ("diálogo vertical", "dos personas hablando en vertical", "portrait dialogue", "conversación vertical"):
+        top = search_report(query, limit=8)["templates"]
+        assert top and all(card["id"].startswith("vertical-dialogue-") and card["match"] == "full" for card in top[:4]), (query, top)
+    for query in ("contraplano vertical", "over the shoulder portrait"):
+        assert {card["id"] for card in search_report(query, limit=2)["templates"]} == {"vertical-dialogue-ots-a", "vertical-dialogue-ots-b"}
+    for query in ("habla a cámara en vertical", "talking to camera vertical"):
+        assert all(card["id"].startswith("vertical-") for card in search_report(query, limit=5)["templates"]), query
+    # Without a vertical word the landscape cards lead as before; the vertical ones follow at a lower score.
+    plain = search_report("diálogo", limit=8)["templates"]
+    assert [card["id"] for card in plain[:3]] == ["duo-diagonal", "speech-dialogue", "two-shot"]
+    assert not any(card["id"].startswith("vertical-") for card in plain[:5])
+    assert all(card["score"] < plain[0]["score"] for card in plain if card["id"].startswith("vertical-"))
+
+
+def test_a_plan_without_a_format_is_for_the_production_frame_and_takes_landscape_cards():
+    for seed in range(3):
+        for speakers in (0, 1, 2):
+            for texts in (TWELVE, [""] * 12):
+                result = plan_templates({"shots": shots_of(texts, speakers=speakers), "seed": seed})
+                assert result["summary"]["formats"] == {"landscape": 12}, (speakers, seed, ids_of(result))
+                assert all(item["format"] == "landscape" for entry in result["plan"] for item in entry["alternates"])
 
 
 def test_a_compact_card_is_under_four_hundred_bytes_for_every_card():
