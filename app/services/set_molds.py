@@ -80,6 +80,8 @@ def _blocks(mold, dims):
             raise ValueError("block outside room")
         if not set(block.get("surfaces", [])) <= set(mold["surfaces"]):
             raise ValueError("block: unknown surface")
+        if "rot" in block and not _vector(block["rot"], 3):        # a turned block: Euler XYZ in radians about its own centre
+            raise ValueError("block: rot must be three numbers")
 
 
 def _places(mold, dims, surfaces):

@@ -1,4 +1,5 @@
 /** Interior and exterior geometry, authored in metres; surfaces retain wall UVs across opening cuts. */
+import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
 import presets from '../../../../app/shared/set_lights.json' with { type: 'json' }
 import type { WorldSfx } from '../sceneFx/world'
 import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
@@ -13,7 +14,8 @@ export type RoomMold = {
   kind?: RoomKind
   /** `false` switches off the ambient life: the dust motes and the breathing key light. */
   ambient?: boolean
-  openings: RoomOpening[]; blocks: { id: string; box: [number, number, number, number, number, number]; surfaces: string[] }[]
+  /** `rot` turns a block about its own centre (Euler XYZ, radians): a raked seat back, a tilted dashboard, one slat of a wheel rim. */
+  openings: RoomOpening[]; blocks: { id: string; box: [number, number, number, number, number, number]; surfaces: string[]; rot?: [number, number, number] }[]
   marks: { id: string; pose: string; position: Vec3; facing: number }[]
   propAnchors: { id: string; on: string; position: Vec3; maxHeight: number }[]
   cameras: { id: string; position: Vec3; lookAt: Vec3; fov: number }[]
@@ -74,7 +76,7 @@ export function validRoomSet(value: unknown): value is RoomSet {
   if (![mold.walls, mold.openings, mold.blocks, mold.cameras, mold.surfaces, mold.marks, mold.propAnchors].every(Array.isArray)) return false
   if (mold.blocks.length > 128 || mold.openings.length > 64 || !mold.defaultSkin) return false
   if (!mold.cameras.every(c => vector(c.position) && vector(c.lookAt) && c.fov > 0 && c.fov < 180)) return false
-  return mold.blocks.every(b => Array.isArray(b.box) && b.box.length === 6 && b.box.every(Number.isFinite) && b.box.slice(3).every(n => n > 0))
+  return mold.blocks.every(b => Array.isArray(b.box) && b.box.length === 6 && b.box.every(Number.isFinite) && b.box.slice(3).every(n => n > 0) && (b.rot === undefined || vector(b.rot)))
 }
 
 /** A no-room request is a strict no-op, including object identity. */
@@ -93,6 +95,17 @@ export function stageRoomSet(document: Scene3DDocument, room?: RoomSet): Scene3D
   if (cues.length) document.worldSfx = cues
   else delete document.worldSfx
   return document
+}
+
+/** A face of a turned block: its offset and rotation are given in the block's own frame; the result is in the room's. */
+function turnAbout(centre: Vec3, rot: Vec3, offset: Vec3, rotation: Vec3): [Vec3, Vec3] {
+  const turn = new Matrix4().makeRotationFromEuler(new Euler(rot[0], rot[1], rot[2]))
+  const local = new Matrix4().compose(new Vector3(...offset), new Quaternion().setFromEuler(new Euler(...rotation)), new Vector3(1, 1, 1))
+  const world = new Matrix4().makeTranslation(...centre).multiply(turn).multiply(local)
+  const position = new Vector3(), quaternion = new Quaternion(), scale = new Vector3()
+  world.decompose(position, quaternion, scale)
+  const euler = new Euler().setFromQuaternion(quaternion)
+  return [[position.x, position.y, position.z], [euler.x, euler.y, euler.z]]
 }
 
 export function roomPanels(room: RoomSet): RoomPanel[] {
@@ -131,12 +144,19 @@ export function roomPanels(room: RoomSet): RoomPanel[] {
     const top = block.surfaces.find(s => s.endsWith('_top')) ?? front
     // A painting drawn for the front would stretch over the ends; they keep the skin's `sideColor`, else the mold's own colour, instead.
     const faced = skin[front] ?? FALLBACK, side = faced.image ? (faced.sideColor ? { color: faced.sideColor } : mold.defaultSkin[front] ?? FALLBACK) : faced
-    add(front, [x,y+bh/2,z+bd/2], [0,0,0], [bw,bh])
-    add(front, [x,y+bh/2,z-bd/2], [0,Math.PI,0], [bw,bh], undefined, undefined, side)
-    add(front, [x-bw/2,y+bh/2,z], [0,-Math.PI/2,0], [bd,bh], undefined, undefined, side)
-    add(front, [x+bw/2,y+bh/2,z], [0,Math.PI/2,0], [bd,bh], undefined, undefined, side)
-    add(top, [x,y+bh,z], [-Math.PI/2,0,0], [bw,bd], undefined, undefined, top === front ? side : undefined)
-    add(front, [x,y,z], [Math.PI/2,0,0], [bw,bd], undefined, undefined, side)
+    const faces: [string, Vec3, Vec3, [number, number], RoomMaterial | undefined][] = [
+      [front, [0, 0, bd / 2], [0, 0, 0], [bw, bh], undefined],
+      [front, [0, 0, -bd / 2], [0, Math.PI, 0], [bw, bh], side],
+      [front, [-bw / 2, 0, 0], [0, -Math.PI / 2, 0], [bd, bh], side],
+      [front, [bw / 2, 0, 0], [0, Math.PI / 2, 0], [bd, bh], side],
+      [top, [0, bh / 2, 0], [-Math.PI / 2, 0, 0], [bw, bd], top === front ? side : undefined],
+      [front, [0, -bh / 2, 0], [Math.PI / 2, 0, 0], [bw, bd], side],
+    ]
+    const centre: Vec3 = [x, y + bh / 2, z]
+    for (const [surface, offset, rotation, size, material] of faces) {
+      const [position, turned] = block.rot ? turnAbout(centre, block.rot, offset, rotation) : [[centre[0] + offset[0], centre[1] + offset[1], centre[2] + offset[2]] as Vec3, rotation]
+      add(surface, position, turned, size, undefined, undefined, material)
+    }
   }
   return panels
 }
