@@ -132,6 +132,16 @@ Every mold is a card `stage-<mold>` built by `app/services/world3d_stage_cards.p
 
 The five `far` stages carry `talk` and `figure` but not `dialogue`, so `{"use": "dialogue"}` does not list them: ask for them by `place` or `kind` and shoot the lines from `ots_a`, `ots_b` or `close_1`. A stage shot whose skin is only colours warns `stage_unskinned` in the dry run.
 
+### Authoring a stage that reads as a place
+
+A mold is data (`app/shared/set_molds/<id>.json`), written by a generator so it can be reviewed and tuned: `scripts/dev/make_cabin_mold.py`, `make_bedroom_mold.py` and `make_office_mold.py` are the examples. The loop that keeps a stage from looking like a pile of boxes:
+
+1. Keep the old block ids, surface names, marks and the seven cameras when you rebuild a mold: skins, scenes and cards that use them keep working.
+2. Build from blocks that name what they are (`bed`, `pillow`, `duvet`, `chair`, `curtain`, `lamp`, `art`, `rug`, `trim`: each kind needs a word in both languages in `BLOCK_WORDS` of `world3d_stage_cards.py`). A block turns about its own centre with `rot`; mold validation measures the turned box.
+3. Skin it with `pattern` and `view` (see below) so the default look needs no picture. `set_lights.json` is bundled into the UI: rebuild the UI after changing a preset.
+4. `services.set_molds.mold_problems(resolved_mold)` says what validation cannot: `hidden_opening` (furniture within a metre of a wall that covers an opening: a wardrobe in front of the window). `tests/test_set_molds_catalog.py` runs it on every mold at every size.
+5. Test the bare card as an agent receives it: `world3d.scene.instantiate`, bind two models by object id without a position or a clip, read `warnings`, `world3d.scene.fix_placement` if any, export a few seconds and look.
+
 ### The vehicle cabin (`stage-cabina`, `stage-coche_interior`, `stage-cabina_nave`)
 
 One geometry, three cards: `stage-cabina` (the neutral vehicle cabin), `stage-coche_interior` (a car: dark leather, carpet, an instrument cluster and a radio painted by the room, a road at night) and `stage-cabina_nave` (a spaceship cockpit: metal panels, glowing side consoles, a yoke, stars streaming past). Any of them is a base for a car, a van, a lorry cab, a boat or a ship: change the skin, the geometry stays. Built from **turned blocks** (`rot: [x, y, z]` radians about the block's centre; `scripts/dev/make_cabin_mold.py` writes the three molds): seats with cushion bolsters, raked back, side wings and a headrest, a console with shifter and cup holder, a dashboard with an instrument binnacle, a radio stack, vents and a glovebox, a tilted steering wheel (a ring of slats) or a yoke, A-, B- and C-pillars, **two windows on each side** with frames and a pillar between them, a rear window, a mirror, visors, a dome light, door pulls and armrests. Size: small 1.8 x 2.5 x 1.25 m, medium 2.1 x 3.0 x 1.45 m, large 2.6 x 3.9 x 1.8 m. Light preset `cabin` (the lamp hangs at 60 percent of the roof height).
