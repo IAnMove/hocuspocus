@@ -1115,6 +1115,13 @@
       ]
     },
     {
+      "prefix": "app/services/character_animation_remake.py",
+      "paths": [
+        "tests/test_character_animation_job.py",
+        "tests/test_walk_gait_metrics.py"
+      ]
+    },
+    {
       "prefix": "app/services/walk_guide_video.py",
       "paths": [
         "tests/test_walk_guides.py",

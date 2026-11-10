@@ -19,12 +19,19 @@ export type AnimationJob = {
   result?: {
     animation: string; reviewState: string; sheet: string; count: number; frames: string[]; scaleBy: string; autoApproved?: boolean; checks?: AnimationCheck[]
     verdict?: { ok: boolean; failed: string[] }; gait?: { checked: number; missed: string[] }; warnings?: AnimationWarning[]
+    autoRemake?: AnimationRemake
   }
+  /** The poses of a walk the job drew again after the first pass, with every drawing it tried (services/character_animation_remake.py). */
+  autoRemake?: AnimationRemake
   /** «Modo un solo disparo»: autoApprove was asked for and counts (false, with the note, when the mode is review), whether the job approved it
    * and the automatic checks it ran on the sheet (the failed ones are why it stayed pending). */
   autoApprove?: boolean; autoApproveNote?: string; autoApproved?: boolean; checks?: AnimationCheck[]; reviewNote?: string
 }
 export type AnimationCheck = { id: string; ok: boolean; value: number | string; limit: number | string; detail: string }
+export type AnimationRemake = {
+  rounds: number; max: number; failing: string[]; error?: string
+  poses: { id: string; attempts: { round: number; seed: number; raw: string; keyed: string; score: number; kept: boolean }[] }[]
+}
 export type AnimationWarning = { code: string; message: string; hint?: string }
 export type AnimationReview = { kitId: string; animation: string; reviewState: 'approved' | 'rejected'; reviewedBy: 'agent'; reviewedAt: string; reviewNote: string; revision: number }
 /** An animation of the author's own: a name, a framing (a bust, or the whole figure from one of the five directions) and the words of each pose (up to twelve). */

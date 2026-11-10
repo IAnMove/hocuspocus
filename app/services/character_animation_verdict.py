@@ -8,7 +8,8 @@ result carries them, and approval is still decided exactly as before (only ``aut
 * ``verdict``  ``{"ok", "failed": [check ids]}``, the one line of it.
 * ``gait``     ``{"checked", "missed": [pose ids]}`` for a walk drawn pose by pose, where each pose has a guide to be measured against.
 * ``warnings`` ``[{"code", "message", "hint"}]`` when a check failed or a pose missed its gait, or the checks could not be read. The hint
-  names a remedy that exists already: make only the failing poses again (``pose``), or, for a catalog walk, ``method`` ``puppet``.
+  names a remedy that exists already: make only the failing poses again (``pose``), or, for a catalog walk, ``method`` ``puppet``. A walk
+  that was remade automatically says so (``autoRemake`` of the job) before the remedy: the job never switches method on its own.
 """
 from __future__ import annotations
 
@@ -35,11 +36,20 @@ def gait_of_takes(takes: list[dict[str, Any]]) -> dict[str, Any] | None:
     return {"checked": len(measured), "missed": [take["id"] for take in measured if not take["gait"].get("ok")]}
 
 
+def _remade(job: dict[str, Any]) -> str:
+    """What the job already did about the poses that failed (``services/character_animation_remake.py``), as a sentence, or nothing."""
+    found = job.get("autoRemake") or {}
+    if not found.get("poses"):
+        return ""
+    ids = ", ".join(item["id"] for item in found["poses"])
+    return f"The job already remade {len(found['poses'])} pose{'s' if len(found['poses']) > 1 else ''} ({ids}) in {found['rounds']} round{'s' if found['rounds'] > 1 else ''} and kept the best drawing of each. "
+
+
 def _remedy(definition: dict[str, Any], job: dict[str, Any]) -> str:
     """The way out that exists: puppet only for a catalog walk (``accept_puppet`` refuses any other) that was not made that way."""
     puppet = not definition.get("custom") and definition.get("guide") == "walk" and job.get("method") != "puppet"
-    again = ' or make the whole walk again with method "puppet"' if puppet else ""
-    return f"Look at the sheet, then make only the poses that are off again (pose: the pose id; the others stay){again}."
+    again = ' or make the whole walk again with method "puppet" (one drawing cut by the walk mould, not redrawn pose by pose)' if puppet else ""
+    return f"{_remade(job)}Look at the sheet, then make only the poses that are off again (pose: the pose id; the others stay){again}."
 
 
 def _failed_text(checks: list[dict[str, Any]]) -> str:

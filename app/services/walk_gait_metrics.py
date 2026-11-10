@@ -158,8 +158,9 @@ def _hypotheses(count: int, period: int) -> list[tuple[int, bool, bool]]:
 def order_fit(measured: np.ndarray, expected: np.ndarray, names: Sequence[str], period: int | None = None) -> dict[str, Any]:
     """How well a sheet's readings follow the guide's. ``near`` is the best correlation (1 is the same walk) of the shifts the identity allows,
     ``far`` the best of every other shift and of time run backwards, and ``gap`` is far - near. ``shift`` and ``backwards`` name the best of
-    all. ``cells`` are the indexes whose readings, in standard deviations of the sheet's own, are further than ``CELL_ERROR`` from the
-    guide's at the best near shift. ``period`` is how many cells make the guide's silhouette repeat (6 in profile, else the whole cycle)."""
+    all. ``errors`` is, per cell, how far its readings are from the guide's at the best near shift (standard deviations of the sheet's own),
+    ``cells`` the indexes above ``CELL_ERROR`` and ``worst`` all indexes from the worst. ``period`` is how many cells make the guide's
+    silhouette repeat (6 in profile, else the whole cycle)."""
     columns = [READINGS.index(name) for name in names]
     count = len(measured)
     scores = {}
@@ -169,12 +170,14 @@ def order_fit(measured: np.ndarray, expected: np.ndarray, names: Sequence[str], 
     near = max((key for key in scores if key[2]), key=scores.get)
     best = max(scores, key=lambda key: (scores[key], key == near))
     far = max((score for key, score in scores.items() if not key[2]), default=-1.0)
+    errors = cell_errors(measured, expected, columns, near[0])
     return {"near": scores[near], "far": far, "gap": far - scores[near], "shift": _signed(best[0], count), "backwards": best[1],
-            "cells": off_cells(measured, expected, columns, near[0])}
+            "errors": [round(float(value), 4) for value in errors], "cells": [int(i) for i in np.nonzero(errors > CELL_ERROR)[0]],
+            "worst": [int(i) for i in np.argsort(-errors, kind="stable")]}
 
 
-def off_cells(measured: np.ndarray, expected: np.ndarray, columns: Sequence[int], shift: int = 0) -> list[int]:
-    """The cells whose readings, in standard deviations of the sheet's own, are further from the guide's (at ``shift``) than ``CELL_ERROR``."""
+def cell_errors(measured: np.ndarray, expected: np.ndarray, columns: Sequence[int], shift: int = 0) -> np.ndarray:
+    """Per cell, the mean over the chosen readings of how far (standard deviations of the sheet's own) it is from the guide's at ``shift``."""
     count = len(measured)
     rolled = expected[[(shift + k) % count for k in range(count)]]
     errors, used = np.zeros(count), 0
@@ -183,7 +186,7 @@ def off_cells(measured: np.ndarray, expected: np.ndarray, columns: Sequence[int]
         if mine is not None and theirs is not None:
             errors += np.abs(mine - theirs)
             used += 1
-    return [int(index) for index in np.nonzero(errors / max(1, used) > CELL_ERROR)[0]] if used else []
+    return errors / max(1, used)
 
 
 def _canvas(mask: np.ndarray, mirror: bool = False) -> np.ndarray:
@@ -260,7 +263,8 @@ def fit_check(name: str, kind: str, direction: str, reading: dict[str, Any], wha
     ok = (least is None or reading["near"] >= least) and reading["gap"] <= gap
     shown: Any = "report" if not limit else least if least is not None else gap
     detail = f"{what} ({_numbers(reading)})" if ok else f"{what} fails: {_numbers(reading)}"
-    return check(name, ok, round(reading["near"], 3), shown, detail, [] if ok else reading["cells"])
+    blamed = reading["cells"] or reading["worst"][:2]  # a fit that fails with no cell far off still blames the two furthest
+    return check(name, ok, round(reading["near"], 3), shown, detail, [] if ok else blamed)
 
 
 def seam_check(ratio: float | None) -> dict[str, Any]:
@@ -294,6 +298,27 @@ def mask_checks(masks: Sequence[np.ndarray | None], direction: str | None) -> li
     if direction in SIDED:
         found.append(facing_check(flipped_cells(masks)))
     return found
+
+
+def blamed_cells(masks: Sequence[np.ndarray | None], direction: str | None) -> list[int]:
+    """The cells the failing checks blame (a union, sorted): the poses a remake would redraw."""
+    return sorted({index for item in mask_checks(masks, direction) if not item["ok"] for index in item["cells"]})
+
+
+def cell_scores(masks: Sequence[np.ndarray | None], direction: str | None) -> list[float]:
+    """One number per cell, lower is closer to the guide's walk: its readings' distance from the guide's (order and alternation, in
+    standard deviations of the sheet's own) and, in a view with a side, how much nearer the other cells it is mirrored. Used to keep the
+    best of several drawings of one pose in the context of the others. Zeros when the guide does not know the direction."""
+    if direction not in TURN or not masks:
+        return [0.0] * len(masks)
+    measured, expected = series_of(masks), guide_series(direction, len(masks))
+    totals = np.zeros(len(masks))
+    for table, period in ((ORDER_READINGS, 6 if direction == "side" else None), (ALTERNATION_READINGS, None)):
+        if direction in table:
+            totals += np.array(order_fit(measured, expected, table[direction], period)["errors"])
+    if direction in SIDED:
+        totals += np.array([max(0.0, 1.0 - ratio) * 4 for ratio in facing_ratios(masks)] or [0.0] * len(masks))
+    return [round(float(value), 4) for value in totals]
 
 
 def gait_checks(figures: Sequence[Image.Image | None], direction: str | None, floor: int = 8) -> list[dict[str, Any]]:

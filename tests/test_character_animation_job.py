@@ -47,15 +47,20 @@ def _spoil(path: Path, how: str) -> None:
     image.save(path)
 
 
-def _guided(stem: str) -> float | None:
-    """How wide the legs of the walk pose a file of the hero is should be, None for a picture that is not a pose of a walk."""
+def _guided_pose(stem: str) -> tuple[float, str] | None:
+    """How wide the legs of the walk pose a file of the hero is should be, and the pose's id; None for a picture that is not a pose of a walk."""
     for item in sorted(catalog()["animations"], key=lambda entry: -len(entry["id"])):
         head = f"hero-{item['id']}-"
         if item.get("guide") and stem.startswith(head):
             ids = [pose["id"] for pose in item["poses"]]
             pose = next((name for name in sorted(ids, key=len, reverse=True) if stem[len(head):].startswith(f"{name}-")), None)
-            return expected_spread(contract_of(item["id"], item)["dir"], phase_of(ids.index(pose), len(ids))) if pose else None
+            return (expected_spread(contract_of(item["id"], item)["dir"], phase_of(ids.index(pose), len(ids))), pose) if pose else None
     return None
+
+
+def _guided(stem: str) -> float | None:
+    found = _guided_pose(stem)
+    return found[0] if found else None
 
 
 def _legs(path: Path, spread: float) -> None:
@@ -78,6 +83,9 @@ class FakeServer:
         self.root, self.calls, self.refuse, self.during = root, [], set(), None
         self.spoil = {}  # n-th key (1-based) -> "small" (a pose drawn at half the size) | "box" (a key that left a whole rectangle)
         self.follow_guides, self.wrong_legs = True, set()
+        # pose id -> how many of its first drawings come out with the legs together; a number of images after which the model fails
+        self.bad_draws: dict[str, int] = {}
+        self.fail_after: int | None = None
         self.last_output = ""
 
     def _clip(self, name: str) -> None:
@@ -88,10 +96,12 @@ class FakeServer:
             check=True, capture_output=True)
 
     def draw_legs(self, name: str) -> None:
-        spread = _guided(Path(name).stem.removesuffix("-key"))
-        if spread is None:
+        found = _guided_pose(Path(name).stem.removesuffix("-key"))
+        if found is None:
             return
-        if len(self.of("studio.key")) in self.wrong_legs or not self.follow_guides:
+        spread, pose = found
+        drawn = sum(1 for item in self.of("studio.key") if f"-{pose}-" in str(item.get("source")))  # drawings of this pose so far, this one included
+        if len(self.of("studio.key")) in self.wrong_legs or not self.follow_guides or drawn <= self.bad_draws.get(pose, 0):
             spread = 0.08 if spread > 0.3 else 0.6
         _legs(self.root / name, spread)
 
@@ -102,6 +112,8 @@ class FakeServer:
         self.calls.append((tool, arguments))
         if tool == "generation.image":
             name = arguments["input"]["output_name"]
+            if self.fail_after is not None and len(self.of("generation.image")) > self.fail_after:
+                return {"_is_error": True, "error": {"code": "insufficient_vram", "message": "insufficient VRAM"}}
             if any(f"-{pose}-" in name for pose in self.refuse):
                 return {"_is_error": True, "error": {"code": "insufficient_vram", "message": "insufficient VRAM"}}
             _picture(self.root / f"{name}.png", keyed=False)
@@ -141,7 +153,7 @@ def world(tmp_path):
                                                 "activeId": "hero"}, base_revision=0)
     server = FakeServer(tmp_path)
     jobs = CharacterAnimationJobs(AnimationJobDeps(call=server.call, workspace_dir=lambda workspace: str(tmp_path),
-                                                   uploads_root=lambda: str(tmp_path / "uploads"), inline=True,
+                                                   uploads_root=lambda: str(tmp_path / "uploads"), inline=True, remake_rounds=0,
                                                    model_defaults=lambda model: {"num_inference_steps": 8, "guidance_scale": 1} if "turbo" in model else {}))
     return tmp_path, server, jobs
 
@@ -747,7 +759,7 @@ def directions(tmp_path):
                                                 "activeId": "hero"}, base_revision=0)
     server = VariedServer(tmp_path)
     jobs = CharacterAnimationJobs(AnimationJobDeps(call=server.call, workspace_dir=lambda workspace: str(tmp_path), uploads_root=lambda: str(tmp_path / "uploads"),
-                                                   inline=True, model_defaults=lambda model: {"num_inference_steps": 8, "guidance_scale": 1}))
+                                                   inline=True, remake_rounds=0, model_defaults=lambda model: {"num_inference_steps": 8, "guidance_scale": 1}))
     return tmp_path, server, jobs, CharacterAnimationSets(jobs)
 
 
@@ -1271,3 +1283,107 @@ def test_a_set_in_review_mode_reports_the_checks_that_failed_of_each_sheet(direc
     monkeypatch.setattr(character_animation_job, "sheet_checks", lambda *args, **kwargs: broken)
     again = sets.start(WS, "hero", "idle-directions")
     assert {tuple(sheet["failed"]) for sheet in again["sheets"] if sheet["status"] == "completed"} == {("scale_spread",)}
+
+
+# ----- the poses of a walk that fail are drawn again before the sheet is joined (services/character_animation_remake.py) -----
+
+def _remaking(world, monkeypatch, rounds=None, blamed=lambda masks, direction: []):
+    """The job with the catalog's rounds. The stub figures are not walkers, so the sheet checks' blame is a stub too: nothing (the poses that
+    miss their guide are remade all the same) unless a test says who."""
+    from services import character_animation_remake as remake
+
+    root, server, jobs = world
+    jobs.deps.remake_rounds = rounds  # None: the catalog's default (two rounds)
+    monkeypatch.setattr(remake, "blamed_cells", blamed)
+    return root, server, jobs
+
+
+def test_a_pose_that_still_misses_its_guide_after_the_first_pass_is_drawn_again_and_the_best_drawing_stays(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch)
+    server.bad_draws = {"lift-a": 3}  # the three drawings of the first pass come out with the legs together
+    job = jobs.start(WS, "hero", "walk-12")
+    assert job["status"] == "completed" and job["result"]["gait"] == {"checked": 12, "missed": []}
+    again = job["autoRemake"]
+    assert again["rounds"] == 1 and again["max"] == 2 and again["failing"] == [] and [item["id"] for item in again["poses"]] == ["lift-a"]
+    attempts = again["poses"][0]["attempts"]
+    assert [item["round"] for item in attempts] == [0, 0, 0, 1] and [item["kept"] for item in attempts] == [False, False, False, True]
+    assert len({item["keyed"] for item in attempts}) == 4, "every drawing has a picture of its own: none overwrites another"
+    assert len(server.of("generation.image")) == 11 + 3 + 1, "eleven poses once, the missed one three times, then one new drawing that fits"
+    take = next(take for take in job["takes"] if take["id"] == "lift-a")
+    assert take["keyed"] == attempts[-1]["keyed"] and take["gait"]["ok"] and take["tries"] == 4
+    saved = next(frame for frame in _kit(root)["animations"]["walk-12"]["frames"] if frame["id"] == "lift-a")
+    assert saved["source"] == take["keyed"] and saved["gait"]["ok"], "the sheet is joined from the kept drawing"
+    assert job["result"]["autoRemake"] == again and not any(item["code"] == "gait_missed" for item in job["result"].get("warnings", []))
+
+
+def test_a_sheet_whose_poses_all_fit_is_not_drawn_again_and_the_remake_can_be_turned_off(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch)
+    job = jobs.start(WS, "hero", "walk-12")
+    assert job["status"] == "completed" and "autoRemake" not in job and len(server.of("generation.image")) == 12
+    server.calls, server.bad_draws = [], {"lift-a": 3, "reach-b": 3}
+    jobs.deps.remake_rounds = 0
+    off = jobs.start(WS, "hero", "walk-12")
+    assert "autoRemake" not in off and len(server.of("generation.image")) == 12 + 4 and off["result"]["gait"]["missed"] == ["lift-a", "reach-b"]
+
+
+def test_the_rounds_are_bounded_the_worst_poses_go_first_and_the_job_offers_the_puppet_without_switching(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch)
+    server.follow_guides = False  # every drawing of every pose has the wrong legs
+    job = jobs.start(WS, "hero", "walk-12")
+    again = job["autoRemake"]
+    assert job["status"] == "completed" and "method" not in job, "the method is never switched by the job"
+    assert again["rounds"] == 2 and len(again["failing"]) == 12
+    assert len(server.of("generation.image")) == 12 * 3 + 2 * (4 * 2), "three drawings a pose, then two rounds of four poses with two new drawings each"
+    assert all(len(item["attempts"]) >= 5 and sum(attempt["kept"] for attempt in item["attempts"]) == 1 for item in again["poses"])
+    warnings = {item["code"]: item for item in job["result"]["warnings"]}
+    assert 'method "puppet"' in warnings["gait_missed"]["hint"] and "already remade" in warnings["gait_missed"]["hint"]
+    assert job["result"]["reviewState"] == "pending" and _kit(root)["animations"]["walk-12"]["reviewState"] == "pending"
+
+
+def test_a_pose_a_failing_check_blames_is_drawn_again_even_when_its_legs_fit(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch, blamed=lambda masks, direction: [4])  # the order check names the fifth pose, whatever is drawn
+    job = jobs.start(WS, "hero", "walk-12")
+    record = next(item for item in job["autoRemake"]["poses"] if item["id"] == "up-a")
+    assert job["autoRemake"]["rounds"] == 2 and len(record["attempts"]) == 3 and sum(item["kept"] for item in record["attempts"]) == 1
+    assert len(server.of("generation.image")) == 12 + 2 and job["autoRemake"]["failing"] == ["up-a"]
+    assert job["takes"][4]["keyed"] in {item["keyed"] for item in record["attempts"]}
+
+
+def test_a_single_pose_the_person_asks_for_again_is_not_followed_by_more_remakes(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch)
+    assert jobs.start(WS, "hero", "walk-12")["status"] == "completed"
+    server.calls, server.bad_draws = [], {"lift-a": 3, "reach-b": 3}
+    again = jobs.start(WS, "hero", "walk-12", pose="lift-a")
+    assert again["status"] == "completed" and "autoRemake" not in again and len(server.of("generation.image")) == 3
+
+
+def test_a_cancel_during_a_remake_cancels_the_job_and_a_failure_in_it_keeps_the_sheet_that_was_drawn(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch)
+    server.bad_draws = {"lift-a": 3}
+
+    def cancel_in_the_remake():
+        if len(server.of("generation.image")) == 15:
+            running = next(job for job in jobs.jobs(WS, "hero") if job["status"] == "running")
+            jobs.cancel(WS, running["jobId"])
+
+    server.during = cancel_in_the_remake
+    cancelled = jobs.start(WS, "hero", "walk-12")
+    assert cancelled["status"] == "cancelled" and not cancelled.get("error") and "animations" not in _kit(root)
+    server.during, server.calls = None, []
+    server.fail_after = 0  # the poses the cancelled job made are kept, so the first drawing of this job is the remake's: the model fails on it
+    failed = jobs.start(WS, "hero", "walk-12")
+    assert failed["status"] == "completed" and failed["autoRemake"]["error"] and failed["autoRemake"]["poses"] == []
+    assert next(take for take in failed["takes"] if take["id"] == "lift-a")["status"] == "ready"
+    assert failed["result"]["gait"]["missed"] == ["lift-a"] and _kit(root)["animations"]["walk-12"]["reviewState"] == "pending"
+
+
+def test_the_remake_settings_come_from_the_catalog_and_only_a_catalog_walk_with_the_gait_check_is_remade():
+    from services import character_animation_remake as remake
+    from services.character_animations import animation_def
+
+    assert remake.settings() == {"rounds": 2, "poses": 4, "tries": 2} and remake.settings(0)["rounds"] == 0 and remake.settings(5)["rounds"] == 5
+    job = {"definition": animation_def("walk-12"), "takes": []}
+    assert remake.applies(job) and not remake.applies({**job, "method": "puppet"}) and not remake.applies({**job, "method": "video"})
+    assert not remake.applies({**job, "remake": "lift-a"}), "one pose made again on request"
+    assert not remake.applies({"definition": animation_def("walk"), "takes": []}), "the four-pose walk asks for no gait check"
+    assert not remake.applies({"definition": animation_def("wave"), "takes": []})

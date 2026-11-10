@@ -117,3 +117,30 @@ def test_the_readings_of_a_figure_are_in_units_of_its_height():
     assert found["front"] == pytest.approx((49 - 29.5) / 100) and found["back"] == pytest.approx((29.5 - 10) / 100)
     assert found["drop"] == pytest.approx((100 - 96) / 100), "the picture's left half reaches lower by this much"
     assert metrics.mask_of(None) is None and metrics.mask_of(np.zeros((4, 4), np.uint8)) is None
+
+
+def _masks(figures):
+    return [metrics.mask_of(figure) for figure in figures]
+
+
+def test_the_cells_a_failing_check_blames_are_the_ones_a_remake_redraws():
+    assert metrics.blamed_cells(_masks(_cycle("side")), "side") == [] and metrics.blamed_cells(_masks(_cycle("front")), "front") == []
+    late = metrics.blamed_cells(_masks(_cycle("side", shift=3)), "side")
+    assert late and all(0 <= index < 12 for index in late)
+    swapped = metrics.blamed_cells(_masks(_cycle("front", shift=6)), "front")
+    assert swapped, "a fit that fails always blames at least the two cells furthest off, even when none is far"
+    figures = _cycle("side")
+    figures[7] = figures[7].transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    assert 7 in metrics.blamed_cells(_masks(figures), "side")
+    assert metrics.blamed_cells(_masks(_cycle("side")), "up") == []
+
+
+def test_a_cells_score_is_lower_the_nearer_it_is_to_the_guide_and_a_turned_cell_scores_worse():
+    clean = metrics.cell_scores(_masks(_cycle("side")), "side")
+    late = metrics.cell_scores(_masks(_cycle("side", shift=3)), "side")
+    assert len(clean) == 12 and sum(late) > sum(clean)
+    figures = _cycle("side")
+    figures[2] = figures[2].transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+    turned = metrics.cell_scores(_masks(figures), "side")
+    assert turned[2] > clean[2] + 0.5, "the mirrored cell is nearer the others turned around"
+    assert metrics.cell_scores(_masks(_cycle("side")), None) == [0.0] * 12 and metrics.cell_scores([], "side") == []

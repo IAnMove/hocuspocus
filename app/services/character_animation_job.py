@@ -42,6 +42,7 @@ from services.character_animation_checks import failed, sheet_checks, summary
 from services.character_animation_cycle_checks import sibling_sheets
 from services.character_animation_directions import contract_of
 from services.character_animation_guides import gait_of, guide_for, guided_prompt, tries
+from services import character_animation_remake as remake
 from services.character_animation_review import AnimationReviewError, review_kit_animation
 from services.character_animation_verdict import CHECKS_UNAVAILABLE, report_of
 from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
@@ -87,6 +88,8 @@ class AnimationJobDeps:
     services: Callable[[], Mapping[str, Any]] | None = None
     # None asks the disk whether LTX-2.3 distilled and the union-control LoRA are installed. A test can answer instead.
     walk_video_ready: Callable[[], bool] | None = None
+    # How many rounds of remaking the poses that fail a catalog walk gets (None: ``guide.remake.rounds`` of the catalog, 0 turns it off).
+    remake_rounds: int | None = None
 
 
 def _now() -> float:
@@ -419,7 +422,10 @@ class CharacterAnimationJobs:
         drawn(name)
         return name, tools.key(f"{job['jobId']}-{pose['id']}-key{again}", name, built["screen"])
 
-    def _take(self, store: JobStore, job: dict[str, Any], take: dict[str, Any], tools: LocalTools, pose: dict[str, Any]) -> None:
+    def _take(self, store: JobStore, job: dict[str, Any], take: dict[str, Any], tools: LocalTools, pose: dict[str, Any], *,
+              attempts: int | None = None, offset: int = 0, round_no: int = 0) -> None:
+        """Draw one pose: up to ``guide.tries`` drawings (``attempts`` when a remake asks for fewer) and keep the closest to the guide. Every
+        drawing is recorded in the take's ``attempts``; ``offset`` keeps the files of a remake apart from the first pass's."""
         definition, workspace = job["definition"], job["workspace"]
         root = self.deps.workspace_dir(workspace)
         built = pose_prompt(definition["id"], pose["id"], job["description"], job.get("style"),
@@ -434,13 +440,14 @@ class CharacterAnimationJobs:
             self._update(store, job)
 
         best: dict[str, Any] | None = None
-        for attempt in range(tries(guide)):
-            seed = take["seed"] if attempt == 0 else random.randrange(2_000_000_000)
-            name, keyed = self._draw(job, tools, pose, built, guide, seed, attempt, keying)
+        for index in range(attempts or tries(guide)):
+            seed = take["seed"] if index == 0 else random.randrange(2_000_000_000)
+            name, keyed = self._draw(job, tools, pose, built, guide, seed, offset + index, keying)
             drawn = {"raw": file_url(name, workspace), "keyed": keyed, "seed": seed}
             if guide:  # a walk pose is measured against its guide and drawn again when its legs are far off
                 drawn["gait"] = gait_of(guide, resolve_character_kit_image(keyed, uploads_root=self.deps.uploads_root(), workspace_root=root))
-                take["tries"] = attempt + 1
+                take.setdefault("attempts", []).append({"round": round_no, **drawn})
+                take["tries"] = len(take["attempts"])
             if best is None or abs(drawn["gait"]["measured"] - guide["expected"]) < abs(best["gait"]["measured"] - guide["expected"]):
                 best = drawn
             if not guide or drawn["gait"]["ok"]:
@@ -448,6 +455,25 @@ class CharacterAnimationJobs:
             self._update(store, job)
         take.update(status="ready", **(best or {}))
         self._update(store, job)
+
+    def _remake_poses(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
+        """After the first pass of a catalog walk: redraw the poses that fail, a few rounds, and keep the best drawing of each
+        (``services/character_animation_remake.py``)."""
+        poses = {item["id"]: item for item in job["definition"]["poses"]}
+        root, uploads = self.deps.workspace_dir(job["workspace"]), self.deps.uploads_root()
+
+        def redraw(take: dict[str, Any], attempts: int, offset: int, round_no: int) -> None:
+            take["seed"] = random.randrange(2_000_000_000)
+            self._take(store, job, take, tools, poses[take["id"]], attempts=attempts, offset=offset, round_no=round_no)
+
+        def stop() -> None:
+            if self._cancelled(store, job["jobId"]):
+                raise ToolError("cancelled", "the job was cancelled")
+
+        found = remake.run(job, resolve=lambda source: resolve_character_kit_image(source, uploads_root=uploads, workspace_root=root), redraw=redraw,
+                           stop=stop, update=lambda: self._update(store, job), rounds=self.deps.remake_rounds)
+        if found:
+            self._update(store, job, autoRemake=found)
 
     def _run(self, workspace: str, job_id: str) -> None:
         store = self._store(workspace)
@@ -473,6 +499,8 @@ class CharacterAnimationJobs:
                             except ToolError as error:
                                 take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
                                 raise
+                    if remake.applies(job):
+                        self._remake_poses(store, job, tools)
                 self._update(store, job, stage="sheet")
                 self._finish(store, job)
         except ToolError as error:
@@ -555,6 +583,7 @@ class CharacterAnimationJobs:
         result = {"animation": definition["id"], "reviewState": approval.get("reviewState", "pending"), "sheet": sheet["source"], "count": sheet["count"],
                   "frames": [take["keyed"] for take in job["takes"]], "scaleBy": sheet["scaleBy"], **clip_fields(job),
                   **report_of(checks, definition, job), **({"autoApproved": approval["autoApproved"]} if approval else {}),
+                  **({"autoRemake": job["autoRemake"]} if job.get("autoRemake") else {}),
                   **({"provenance": job["puppet"]} if job.get("puppet") else {})}
         self._update(store, job, status="completed", finishedAt=_now(), generationJob=None, result=result,
                      **{key: approval[key] for key in ("autoApproved", "checks", "reviewNote") if key in approval})
