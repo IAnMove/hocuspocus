@@ -17,8 +17,8 @@ BED = {"id": "bed", "kind": "bed", "box": [0, 0, -1.3, 1.7, 0.55, 2.2], "surface
 
 
 def test_a_sleeper_sunk_into_the_bed_and_hanging_off_its_head_is_told_where_to_go():
-    betty = item("subject_1", [-0.83, 0.41, -2.96], [0.83, 0.86, -1.29], [0, 0.58, -1.3])
-    result = scene_placement(room([BED]), [betty])
+    lying = item("subject_1", [-0.83, 0.41, -2.96], [0.83, 0.86, -1.29], [0, 0.58, -1.3])
+    result = scene_placement(room([BED]), [lying])
     codes = {i["code"]: i for i in result["issues"]}
     assert set(codes) >= {"sinks_into_support", "overhangs_support"}
     assert codes["sinks_into_support"]["fix"]["position"][1] == 0.72           # up by 0.14: the lowest point meets the top of the bed
@@ -30,14 +30,14 @@ def test_a_sleeper_sunk_into_the_bed_and_hanging_off_its_head_is_told_where_to_g
 
 def test_a_body_that_rests_on_the_couch_inside_its_footprint_is_clean():
     couch = item("x_divan", [0.15, 0.0, -0.28], [1.05, 0.4, 1.68], [0.6, 0, 0.7], clip=None, role=None)
-    barney = item("subject_1", [0.2, 0.4, -0.2], [1.0, 0.75, 1.6], [0.6, 0.53, 0.7])
-    assert scene_placement(room([]), [couch, barney])["issues"] == []
+    sitter = item("subject_1", [0.2, 0.4, -0.2], [1.0, 0.75, 1.6], [0.6, 0.53, 0.7])
+    assert scene_placement(room([]), [couch, sitter])["issues"] == []
 
 
 def test_the_patient_who_hangs_past_the_end_of_the_couch_is_found_by_its_prop_support():
     couch = item("x_divan", [0.15, 0.0, -0.28], [1.05, 0.4, 1.68], [0.6, 0, 0.7], clip=None, role=None)
-    barney = item("subject_1", [-0.33, 0.34, -1.11], [1.53, 0.73, 0.71], [0.6, 0.47, 0.7])
-    codes = [i["code"] for i in scene_placement(room([]), [couch, barney])["issues"]]
+    sitter = item("subject_1", [-0.33, 0.34, -1.11], [1.53, 0.73, 0.71], [0.6, 0.47, 0.7])
+    codes = [i["code"] for i in scene_placement(room([]), [couch, sitter])["issues"]]
     assert "overhangs_support" in codes
 
 
@@ -80,9 +80,9 @@ def test_a_mover_is_not_this_checks_business_and_a_broken_scene_reports_nothing(
 def test_a_humanoid_bind_pose_is_not_a_t_a_sleeper_is_judged_by_her_idle_body():
     """boundsM is the bind pose: arms out, 1.67 m wide. The idle body is a shoulder width wide, so the bed's width is not overhung."""
     bed = {"id": "bed", "kind": "bed", "box": [0, 0, -1.3, 1.7, 0.55, 2.2], "surfaces": ["bed_front", "bed_top"]}
-    betty = item("subject_1", [-0.833, 0.55, -2.2], [0.833, 0.9, -0.4], [0, 0.6, -0.9], clip={"index": 0, "name": "Idle"}, rotationX=-1.5, rotationY=0.0)
-    betty["boundsM"]["size"] = [1.666, 1.65, 0.337]
-    codes = [i["code"] for i in scene_placement(room([bed]), [betty])["issues"]]
+    lying = item("subject_1", [-0.833, 0.55, -2.2], [0.833, 0.9, -0.4], [0, 0.6, -0.9], clip={"index": 0, "name": "Idle"}, rotationX=-1.5, rotationY=0.0)
+    lying["boundsM"]["size"] = [1.666, 1.65, 0.337]
+    codes = [i["code"] for i in scene_placement(room([bed]), [lying])["issues"]]
     assert "overhangs_support" not in codes and "outside_room" not in codes
 
 

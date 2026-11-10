@@ -1,6 +1,6 @@
 # Video 3D templates for agents
 
-The editor's shot library is the only library. MCP, Ask the Wizard, the production planner and a Series `kind: "3d"` shot search the same short cards: the 805 cards of `app/shared/world3d_templates.json` plus the 28 `stage-*` cards that `app/services/world3d_stage_cards.py` builds from the room molds, 833 in all. A card has the exact id, both titles, format, duration, playback speed, roles, one line and the derived traits below. The full scene document is loaded only for the id that was chosen.
+The editor's shot library is the only library. MCP, Ask the Wizard, the production planner and a Series `kind: "3d"` shot search the same short cards: the 805 cards of `app/shared/world3d_templates.json` plus the 29 `stage-*` cards that `app/services/world3d_stage_cards.py` builds from the room molds, 834 in all. A card has the exact id, both titles, format, duration, playback speed, roles, one line and the derived traits below. The full scene document is loaded only for the id that was chosen.
 
 Regenerate the cards from the UI with `node --import ./node_modules/tsx/dist/loader.mjs scripts/export-world3d-catalog.mjs` inside `ui`. `--check` fails when the JSON drifts from the editor. The contract behind every field, filter and warning is [TEMPLATE_LIBRARY_MODEL.md](TEMPLATE_LIBRARY_MODEL.md).
 
@@ -52,7 +52,7 @@ Real replies (`search_report` in `app/services/world3d_template_catalog.py`, the
 | `plano general bosque` | `atmos-clearing-wide` 26, `atmos-meadow-wide` 20, `atmos-snow-wide` 19, `atmos-temple-wide` 19… |
 | `órbita` | `pixel-orbit` 94 (its exact Spanish title), `dance-orbit` 40, `vehicle-roof-orbit` 40 |
 | `girar alrededor` | `cine-orbit-360`, `face-reaction-arc`, `reaction-orbit-face`, all 25: a tie |
-| `{"kind": "stage"}` (list, no query) | 28 cards in id order, `stage-aula` first |
+| `{"kind": "stage"}` (list, no query) | 29 cards in id order, `stage-aula` first |
 | `{"kind": "transition"}` | 15 cards: `anime-eyecatch`, `anime-impact-frame`, `anime-snap-zoom`, the eight `transition-*`, and the four `comic-panel-*` |
 | `{"place": "cocina"}` | 1 card; `{"travel": true}` 65 cards |
 
