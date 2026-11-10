@@ -216,7 +216,6 @@ def _face_fields(raw: dict, look: str, style: str, gender: str, hair_color: str,
             "lashColor": _color(raw.get("lash_color"), "lash_color", darker(hair_color, 0.75)),
             "faceShape": _choice(raw.get("face_shape", "sharp" if gender == "man" else "soft"), ("soft", "sharp"), "invalid_face_shape", "face_shape"),
             "blush": raw.get("blush", gender in ("girl", "woman")) is True,
-            **({"detail": 2} if look == "anime" and style == "anime" else {}),   # the drawn anime face: larger eyes, a bolder mouth (the real style and the cute face keep theirs)
             **{k: v for k, v in face_extra.items() if k not in ("style", "skin")}}
 
 
@@ -229,6 +228,8 @@ def _face_block(raw: dict, chosen: dict):
     face_image = raw.get("face_image")
     _require_face_image(source, face_image)
     face = _face_fields(raw, chosen["look"], style, chosen["gender"], chosen["hair_color"], chosen["skin"], face_extra)
+    if source == "program" and chosen["look"] == "anime" and style == "anime":
+        face = {"detail": 2, **face}   # the face drawn for an anime body: larger eyes, a bolder mouth. The painted (qwen) kit, the real style and the cute face keep theirs
     return face, source, style, face_image
 
 
