@@ -31,6 +31,7 @@ export interface RealRecipe {
   kit_id: string | null
   madeAt?: string
   missing?: boolean
+  warnings?: RealNote[]
 }
 
 export interface RealJobResult {
@@ -110,9 +111,9 @@ export function getRealCharacter(workspace: string, name: string): Promise<RealR
   return post('/get', { version: 1, input: { workspace, name } }, 'Could not read the character')
 }
 
-export async function listRealCharacters(workspace: string): Promise<RealCharacterRow[]> {
-  const result = await post<{ characters: RealCharacterRow[] }>('/list', { version: 1, input: { workspace } }, 'Could not list the characters')
-  return result.characters
+/** The saved characters (the newest recipe of each name) and the newest jobs, also those an agent or the Wizard started. */
+export function listRealCharacters(workspace: string): Promise<{ characters: RealCharacterRow[]; jobs: RealJob[] }> {
+  return post('/list', { version: 1, input: { workspace } }, 'Could not list the characters')
 }
 
 export function fetchRealPresets(): Promise<RealPresets> {

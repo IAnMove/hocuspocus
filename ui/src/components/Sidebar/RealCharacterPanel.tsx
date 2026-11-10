@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   cancelRealCharacter, fetchRealPresets, getRealCharacter, listRealCharacters, makeRealCharacter, realCharacterJob,
-  REAL_ACTIVE, REAL_STEPS, type RealCharacterRow, type RealGender, type RealJob, type RealPreset, type RealPresets,
+  REAL_ACTIVE, REAL_STEPS, type RealCharacterRow, type RealGender, type RealJob, type RealNote, type RealPreset, type RealPresets,
 } from '../../api/realCharacter'
 import { controlReason } from '../../i18n/controlLabel'
 import { useUiTranslation } from '../../i18n'
@@ -45,9 +45,16 @@ export function RealCharacterPanel() {
   const [presets, setPresets] = useState<RealPresets | null>(null)
   const [saved, setSaved] = useState<RealCharacterRow[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [notes, setNotes] = useState<RealNote[]>([])
+  // A job started elsewhere (the Wizard, an agent, before a reload) is picked up here while it runs.
+  const [adopt, setAdopt] = useState<RealJob | null>(null)
 
   const reload = useCallback(() => {
-    if (workspace) void listRealCharacters(workspace).then(setSaved).catch(() => setSaved([]))
+    if (!workspace) return
+    void listRealCharacters(workspace).then(listed => {
+      setSaved(listed.characters)
+      setAdopt(listed.jobs.find(active) ?? null)
+    }).catch(() => setSaved([]))
   }, [workspace])
   const finished = useCallback((job: RealJob) => {
     reload()
@@ -58,7 +65,9 @@ export function RealCharacterPanel() {
   const [job, setJob] = useRealJob(workspace, finished)
 
   useEffect(() => { void fetchRealPresets().then(setPresets).catch(() => setPresets(null)) }, [])
+  useEffect(() => { setJob(null); setNotes([]) }, [workspace, setJob])
   useEffect(() => { reload() }, [reload])
+  useEffect(() => { if (adopt) setJob(current => current && active(current) ? current : adopt) }, [adopt, setJob])
 
   const run = async (work: () => Promise<void>) => {
     setError(null)
@@ -68,6 +77,7 @@ export function RealCharacterPanel() {
     const chosen = seed.trim() ? Number(seed) : undefined
     const started = await makeRealCharacter({ workspace, name: name.trim() || t('makers.real.defaultName'), gender, outfitPrompt: outfit, facePrompt: face,
       ...(chosen !== undefined && Number.isInteger(chosen) ? { seed: chosen } : {}) })
+    setNotes([])
     setJob(started)
     if (!active(started)) finished(started)
   })
@@ -78,6 +88,8 @@ export function RealCharacterPanel() {
     setOutfit(recipe.input.outfit_prompt ?? '')
     setFace(recipe.input.face_prompt ?? '')
     setSeed(recipe.input.seed !== undefined ? String(recipe.input.seed) : '')
+    setNotes(recipe.warnings ?? [])
+    setJob(null)
   })
   const stop = () => run(async () => { if (job) setJob(await cancelRealCharacter(workspace, job.jobId)) })
 
@@ -121,6 +133,7 @@ export function RealCharacterPanel() {
       {active(job) && <button type="button" onClick={() => void stop()} className="text-[10px] underline text-text-secondary self-start">{t('makers.real.cancel')}</button>}
       {error && <p className="text-[10px] text-red-300">{error}</p>}
       {job && <RealJobView job={job} />}
+      {!job && notes.length > 0 && <NoteList notes={notes} />}
       <h4 className="text-[10px] font-semibold uppercase text-text-muted">{t('makers.real.saved')}</h4>
       {saved.length === 0 && <p className="text-[10px] text-text-muted">{t('makers.real.none')}</p>}
       <ul className="flex flex-col gap-1">
@@ -154,13 +167,19 @@ function RealJobView({ job }: { job: RealJob }) {
         <div className="flex flex-col gap-1" data-testid="real-result">
           {result.preview && <img src={result.preview} alt={t('makers.real.facePicture')} className="w-24 rounded border border-border" />}
           <p className="text-[10px] text-text-secondary">{t('makers.real.made', { file: result.rigged_file, kit: result.kit_id ?? '—' })}</p>
-          {result.warnings.length > 0 && (
-            <ul className="text-[10px] text-amber-300" aria-label={t('makers.real.warnings')}>
-              {result.warnings.map((item, index) => <li key={`${item.code}-${index}`}>{item.code}: {item.message}</li>)}
-            </ul>
-          )}
+          {result.warnings.length > 0 && <NoteList notes={result.warnings} />}
         </div>
       )}
     </>
+  )
+}
+
+/** What went wrong quietly in a make (the server's notes: a code and a sentence). */
+function NoteList({ notes }: { notes: RealNote[] }) {
+  const { t } = useUiTranslation('studio')
+  return (
+    <ul className="text-[10px] text-amber-300" aria-label={t('makers.real.warnings')}>
+      {notes.map((item, index) => <li key={`${item.code}-${index}`}>{item.code}: {item.message}</li>)}
+    </ul>
   )
 }

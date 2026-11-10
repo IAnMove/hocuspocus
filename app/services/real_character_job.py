@@ -140,6 +140,10 @@ class RealCharacterJobs:
         """A job that says it is active with no thread here was cut by a restart: it is interrupted, what it made is kept."""
         if job.get("status") not in ACTIVE or self._alive(job.get("jobId", "")):
             return job
+        if job.get("jobId") in self._threads:   # the worker may have saved its end since this copy was read
+            stored = self._store(workspace).load(job["jobId"]) or job
+            if stored.get("status") not in ACTIVE:
+                return stored
         job.update(status="interrupted", error=INTERRUPTED, finishedAt=_now(), updatedAt=_now(), generationJob=None)
         for step in job.get("steps") or []:
             if step["status"] == "running":
@@ -343,8 +347,8 @@ class RealCharacterJobs:
         head_key, kit_id = work["keys"]["head"], f"real-{job['slug']}"
         kit = (read_character_kit_library(str(work["root"])).get("kits") or {}).get(kit_id)
         stored = ((work["prior"] or {}).get("talk_kit")) or {}
-        if kit and _kit_head_key(kit) == head_key and stored.get("headKey") == head_key:
-            work["kit"] = stored
+        if kit and _kit_head_key(kit) == head_key and _rigged(kit):   # rigged here, or by the person in the Face Rig: kept as it is
+            work["kit"] = stored if stored.get("headKey") == head_key else {"kit_id": kit_id, "headKey": head_key, "face": _kit_face(kit)}
             step.update(status="reused", key=head_key, kit_id=kit_id)
         else:
             try:
@@ -377,12 +381,15 @@ class RealCharacterJobs:
 
     def _finish(self, store: JobStore, job: dict, work: dict) -> None:
         recipe = self._recipe(job, work)
-        write_recipe(work["root"], {**recipe, "made": work["made"]})
         made = {key: value for key, value in work["made"].items() if key not in ("kit_id", "poses", "preview", "face")}
         kit = work["kit"] or {}
         warnings = list(made.get("warnings") or []) + kit_notes(kit)
         if work["kit_error"]:
-            warnings.append(note("talk_kit_failed", f"The photo face kit could not be made: {work['kit_error']} The character is ready; make it again to retry the kit."))
+            warnings.append(note("talk_kit_failed", f"The photo face kit could not be rigged: {work['kit_error']} The character is ready, and the kit "
+                                                    f"real-{job['slug']} is saved with the face but no mouths: place a mouth line in Characters › Face Rig "
+                                                    "and rig it there, or make the character again to retry."))
+        recipe["warnings"] = warnings
+        write_recipe(work["root"], {**recipe, "made": work["made"]})
         face = kit.get("face") or made.get("face_pose_file")
         result = {**made, "kit_id": recipe["kit_id"], "poses": ["base", "neutral"] if recipe["kit_id"] else [], "preview": file_url(face, job["workspace"]) if face else None, "face": None,
                   "talk_kit": kit or None, "recipe": recipe, "warnings": warnings,
@@ -404,9 +411,25 @@ class RealCharacterJobs:
                 "keys": {**work["keys"], "kit": (kit or {}).get("headKey")}, "kit_id": (kit or {}).get("kit_id"), "talk_kit": kit}
 
 
+def _kit_made(kit: dict) -> dict:
+    return next((entry for entry in kit.get("provenance") or [] if entry.get("method") == KIT_METHOD), {})
+
+
 def _kit_head_key(kit: dict) -> str | None:
-    made = next((entry for entry in kit.get("provenance") or [] if entry.get("method") == KIT_METHOD), None)
-    return made.get("headKey") if made else None
+    return _kit_made(kit).get("headKey")
+
+
+def _kit_face(kit: dict) -> str | None:
+    return _kit_made(kit).get("image")
+
+
+def _rigged(kit: dict) -> bool:
+    return any(entry.get("method") == "flat-rig" for entry in kit.get("provenance") or [])
+
+
+def job_summary(job: dict) -> dict:
+    """A job as a list shows it: enough for the panel to pick up one an agent or the Wizard started."""
+    return {key: job.get(key) for key in ("jobId", "name", "slug", "status", "stage", "steps", "error", "createdAt", "updatedAt")}
 
 
 def _save_kit(root: str, kit_id: str, character: dict) -> int:

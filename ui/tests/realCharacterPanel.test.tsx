@@ -38,8 +38,9 @@ test('Studio 3D › Realista (PS2) reopens a saved character, changes its clothe
     const body = JSON.parse(String(init?.body ?? '{}'))
     posts.push({ url, body })
     if (url.endsWith('/presets')) return reply(presets)
-    if (url.endsWith('/list')) return reply({ characters: [marta] })
-    if (url.endsWith('/get')) return reply({ name: 'Marta', slug: 'marta', kit_id: 'real-marta', input: { gender: 'woman', outfit_prompt: 'A green jacket.', face_prompt: 'Red hair.', seed: 11 } })
+    if (url.endsWith('/list')) return reply({ characters: [marta], jobs: [{ ...done, jobId: 'real-1', result: undefined }] })
+    if (url.endsWith('/get')) return reply({ name: 'Marta', slug: 'marta', kit_id: 'real-marta', input: { gender: 'woman', outfit_prompt: 'A green jacket.', face_prompt: 'Red hair.', seed: 11 },
+      warnings: [{ code: 'mouth_small_opening', message: 'The face kit\'s base pose: mouth small opening.' }] })
     if (url.endsWith('/api/v1/model3d/real')) return reply(done)
     return json({ detail: { code: 'not_found', message: 'nothing' } }, 404)
   }) as typeof fetch
@@ -52,6 +53,7 @@ test('Studio 3D › Realista (PS2) reopens a saved character, changes its clothe
     await waitFor(() => assert.equal(textareas()[1].value, 'Red hair.'))
     assert.equal(textareas()[0].value, 'A green jacket.')
     assert.equal((screen.getByDisplayValue('11') as HTMLInputElement).value, '11', 'the stored seed comes back so the face is not repainted')
+    assert.match(screen.getByRole('list', { name: /Avisos|Warnings/ }).textContent!, /mouth_small_opening/, 'a reopened character shows the warnings of its make')
     const faceOptions = [...(document.querySelectorAll('select')[2] as HTMLSelectElement).options].map(option => option.value)
     assert.deepEqual(faceOptions, ['', 'red-bun'], 'the quick faces follow the gender')
     fireEvent.change(document.querySelectorAll('select')[1], { target: { value: 'suit' } })
@@ -67,6 +69,32 @@ test('Studio 3D › Realista (PS2) reopens a saved character, changes its clothe
     assert.match(screen.getByTestId('real-result').textContent!, /blob-Marta-2-rigged\.glb/)
     assert.equal(refreshed.length, 1, 'the 3D gallery is refreshed when the character is ready')
     assert.ok(posts.filter(item => item.url.endsWith('/list')).length >= 2, 'the saved list is read again after the make')
+  } finally {
+    globalThis.fetch = original
+    cleanup()
+  }
+})
+
+test('a job the Wizard or an agent started shows up in the panel while it runs, and a new workspace forgets it', async () => {
+  const { render, screen, cleanup, waitFor, act } = await import('@testing-library/react')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const { RealCharacterPanel } = await import('../src/components/Sidebar/RealCharacterPanel.tsx')
+  const running = { jobId: 'real-9', name: 'Luis', status: 'running', stage: 'head', steps: [{ id: 'guides', status: 'done' }, { id: 'body', status: 'done' }, { id: 'head', status: 'running' }] }
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.endsWith('/presets')) return reply(presets)
+    if (url.endsWith('/list')) return reply({ characters: [], jobs: [running] })
+    return reply(running)
+  }) as typeof fetch
+  useStore.setState({ activeWorkspace: 'w', setMediaFilter: () => undefined, maybeRefreshGallery: async () => undefined } as never)
+  try {
+    render(<RealCharacterPanel />)
+    await waitFor(() => assert.match(screen.getByTestId('real-step-head').textContent!, /en marcha|running/))
+    assert.ok((screen.getByRole('button', { name: /…/ }) as HTMLButtonElement).disabled, 'one make at a time: the button waits for the running job')
+    globalThis.fetch = (async (input: RequestInfo | URL) => String(input).endsWith('/list') ? reply({ characters: [], jobs: [] }) : reply(presets)) as typeof fetch
+    await act(async () => { useStore.setState({ activeWorkspace: 'other' } as never) })
+    await waitFor(() => assert.equal(screen.queryByTestId('real-step-head'), null))
   } finally {
     globalThis.fetch = original
     cleanup()

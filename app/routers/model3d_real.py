@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from services import workspace_busy
 from services.blob_builder import BlobTraitsError
 from services.mcp_intent import check_intent_id
-from services.real_character_job import RealCharacterJobs, RealJobDeps, RealJobError
+from services.real_character_job import RealCharacterJobs, RealJobDeps, RealJobError, job_summary
 from services.real_character_recipe import GENDERS, PROMPT_LIMIT, SEED_MAX, characters, latest, presets
 
 MAKE, STATUS, CANCEL, GET, LIST, PRESETS = (f"model3d.real.{verb}" for verb in ("make", "status", "cancel", "get", "list", "presets"))
@@ -83,12 +83,13 @@ def command_catalog() -> list[dict]:
          "inputSchema": _envelope(_small(["workspace", "job_id"], workspace=_WORKSPACE, job_id=_JOB))},
         {"name": GET, "version": 1, "domain": "model3d", "mutation": False,
          "description": "The stored recipe of one realistic character (by name): input (the fields to pass to model3d.real.make again, "
-                        "changing one), the resolved traits, both prompts, seed, model, the pictures with their keys, the files, kit_id; "
-                        "missing true when its rigged GLB was deleted.",
+                        "changing one), the resolved traits, both prompts, seed, model, the pictures with their keys, the files, kit_id, "
+                        "the warnings of its make; missing true when its rigged GLB was deleted.",
          "inputSchema": _envelope(_small(["workspace", "name"], workspace=_WORKSPACE, name=_NAME))},
         {"name": LIST, "version": 1, "domain": "model3d", "mutation": False,
          "description": "The realistic characters of a workspace (the newest recipe of each name): name, gender, prompts, seed, kit_id, "
-                        "rigged_file, the face and body picture URLs, madeAt, missing.",
+                        "rigged_file, the face and body picture URLs, madeAt, missing; and jobs, the newest model3d.real.make jobs "
+                        "(jobId, name, status, stage, steps).",
          "inputSchema": _envelope(_small(["workspace"], workspace=_WORKSPACE))},
         {"name": PRESETS, "version": 1, "domain": "model3d", "mutation": False,
          "description": "Quick picks for model3d.real.make: outfits and faces, each {id, gender any|man|woman, label {es, en}, prompt}. Read only.",
@@ -154,7 +155,8 @@ def command_handlers(workspace_dir, local_mcp=None, *, jobs: RealCharacterJobs |
 
     def listing(arguments):
         payload = _input(arguments, {"workspace"})
-        return _reply(LIST, {"characters": characters(Path(workspace_dir(payload["workspace"])))})
+        running = [job_summary(job) for job in jobs.jobs(payload["workspace"])[:8]]
+        return _reply(LIST, {"characters": characters(Path(workspace_dir(payload["workspace"]))), "jobs": running})
 
     def library(arguments):
         if not isinstance(arguments, dict) or arguments.get("version") != 1 or set(arguments) - {"version"}:

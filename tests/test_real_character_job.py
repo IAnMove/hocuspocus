@@ -236,9 +236,31 @@ def test_a_face_kit_that_cannot_be_rigged_still_completes_the_character_and_is_t
     job = _first(world)
     assert job["status"] == "completed" and _steps(job)["kit"] == "failed"
     assert job["result"]["kit_id"] is None and [item["code"] for item in job["result"]["warnings"]][-1] == "talk_kit_failed"
+    assert "Face Rig" in job["result"]["warnings"][-1]["message"] and "real-marta" in job["result"]["warnings"][-1]["message"]
+    assert "real-marta" in read_character_kit_library(str(world["root"]))["kits"], "the kit is saved with its face, to be rigged in the app"
     world["rig"].fail = False
     again = _make(world)
     assert _steps(again)["kit"] == "done" and again["result"]["kit_id"] == "real-marta" and len(world["make"].calls) == 1
+
+
+def test_a_kit_the_person_rigged_in_the_app_is_kept_by_the_next_make(world):
+    world["rig"].fail = True
+    _first(world)
+    world["rig"].fail = False
+    revision = read_character_kit_library(str(world["root"]))["revision"]
+    world["rig"](str(world["root"]), WS, "real-marta", base_revision=revision, style={"mouthStyle": "warp", "hints": "by hand"})   # the Face Rig
+    fixed = _kit(world)
+    changed = _make(world, outfit_prompt="A charcoal business suit.")
+    assert _steps(changed)["kit"] == "reused" and changed["result"]["kit_id"] == "real-marta" and _kit(world) == fixed
+    assert len(world["rig"].calls) == 2, "the make did not rig the kit the person fixed again"
+
+
+def test_a_finished_job_is_never_read_as_interrupted(world):
+    done = _first(world)
+    stored = JobStore(str(world["root"]), JOBS_DIR).load(done["jobId"])
+    stale = {**stored, "status": "running"}   # a copy read just before the worker saved its end
+    world["jobs"]._threads[done["jobId"]] = type("Ended", (), {"ident": 1, "is_alive": lambda self: False})()
+    assert world["jobs"]._reconcile(WS, stale)["status"] == "completed"
 
 
 def test_talk_kit_false_makes_no_kit(world):
@@ -340,8 +362,10 @@ def test_the_routes_and_the_mcp_tools_are_one_handler_each(world):
     assert followed["result"]["jobId"] == made["result"]["jobId"]
     got = client.post("/api/v1/model3d/real/get", json={"version": 1, "input": {"workspace": WS, "name": "marta"}}).json()["result"]
     assert got["input"]["outfit_prompt"] == OUTFIT and got["missing"] is False and "made" not in got
-    listed = client.post("/api/v1/model3d/real/list", json={"version": 1, "input": {"workspace": WS}}).json()["result"]["characters"]
-    assert [row["name"] for row in listed] == ["Marta"]
+    assert [item["code"] for item in got["warnings"]] == ["relief_skipped", "mouth_small_opening"], "a reopened character shows what its make said"
+    listed = client.post("/api/v1/model3d/real/list", json={"version": 1, "input": {"workspace": WS}}).json()["result"]
+    assert [row["name"] for row in listed["characters"]] == ["Marta"]
+    assert [(job["jobId"], job["status"]) for job in listed["jobs"]] == [(made["result"]["jobId"], "completed")] and "result" not in listed["jobs"][0]
     assert client.post("/api/v1/model3d/real/presets").json()["result"]["outfits"]
     refused = client.post("/api/v1/model3d/real", json={**body, "intent_id": "ui-2", "input": {**body["input"], "name": "Ana", "gender": "girl"}})
     assert refused.status_code == 422 and refused.json()["detail"]["code"] == "invalid_gender"

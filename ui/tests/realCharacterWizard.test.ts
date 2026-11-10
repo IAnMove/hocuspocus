@@ -12,6 +12,13 @@ test('"hazme un hombre realista con traje" is the server job the Studio 3D panel
   assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /only outfit_prompt to change the clothes/)
   const properties = (HOCUSPOCUS_AGENT_RESPONSE_SCHEMA as { properties: { actions: { items: { properties: Record<string, unknown> } } } }).properties.actions.items.properties
   for (const key of ['name', 'gender', 'outfit_prompt', 'face_prompt', 'seed', 'talk_kit', 'confirm']) assert.ok(properties[key], key)
+  // The merged schema keeps the first capability's spec of a shared key: it must still admit what this capability sends.
+  const spec = (key: string) => properties[key] as { enum?: string[]; type?: string; minimum?: number; maximum?: number }
+  for (const value of ['man', 'woman']) assert.ok(spec('gender').enum!.includes(value), value)
+  assert.deepEqual(spec('bottom').enum, ['trousers', 'skirt', 'shorts'])
+  assert.deepEqual(spec('body').enum, ['slim', 'average', 'tall'])
+  assert.equal(spec('height_m').type, 'number', 'height is a picture size in pixels elsewhere: metres have a key of their own')
+  assert.ok(spec('height_m').minimum! <= 1.2 && spec('height_m').maximum! >= 2.2)
   const capability = getCapability('make_real_character')!
   assert.equal(capability.risk, 'compute')
   assert.equal(capability.confirmation, 'required')
@@ -20,7 +27,7 @@ test('"hazme un hombre realista con traje" is the server job the Studio 3D panel
   // The model fills the fields it does not use with empty values: they are left out, so a remake keeps the stored recipe.
   assert.deepEqual(capability.resolve({ type: 'make_real_character', name: 'Marta', gender: 'girl', skin: 'pink', height: '', body: '', outfit_prompt: ' A grey suit. ', face_prompt: '', seed: 3.5, confirm: true }),
     { type: 'make_real_character', name: 'Marta', confirm: true, outfitPrompt: 'A grey suit.' })
-  assert.deepEqual(capability.resolve({ type: 'make_real_character', name: 'Marta', gender: 'woman', skin: '#e3b58f', height: 1.7, bottom: 'skirt', face_prompt: 'Red hair.', seed: 7, talk_kit: false, confirm: true }),
+  assert.deepEqual(capability.resolve({ type: 'make_real_character', name: 'Marta', gender: 'woman', skin: '#e3b58f', height_m: 1.7, bottom: 'skirt', face_prompt: 'Red hair.', seed: 7, talk_kit: false, confirm: true }),
     { type: 'make_real_character', name: 'Marta', confirm: true, gender: 'woman', skin: '#E3B58F', height: 1.7, bottom: 'skirt', facePrompt: 'Red hair.', seed: 7, talkKit: false })
   const parsed = parseAgentTurn(JSON.stringify({ reply: 'Empiezo.', actions: [{ type: 'make_real_character', name: 'Marta', outfit_prompt: 'A suit.', confirm: true }] }))
   assert.equal(parsed.actions[0]?.type, 'make_real_character')

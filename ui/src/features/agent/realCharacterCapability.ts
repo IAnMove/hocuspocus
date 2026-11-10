@@ -47,7 +47,7 @@ export function resolveRealCharacter(raw: Record<string, unknown>): AgentMakeRea
   return {
     type: 'make_real_character', name, confirm: true,
     ...optional('gender', choice<RealGender>(raw.gender, GENDERS)), ...optional('skin', skin),
-    ...optional('height', numberIn(raw.height, 1.2, 2.2)), ...optional('body', choice(raw.body, BODIES)), ...optional('bottom', choice(raw.bottom, BOTTOMS)),
+    ...optional('height', numberIn(raw.height_m, 1.2, 2.2)), ...optional('body', choice(raw.body, BODIES)), ...optional('bottom', choice(raw.bottom, BOTTOMS)),
     ...optional('outfitPrompt', text(raw.outfit_prompt, 1200)), ...optional('facePrompt', text(raw.face_prompt, 1200)),
     ...optional('seed', numberIn(raw.seed, 0, 2_147_483_647, true)), ...(raw.talk_kit === false ? { talkKit: false } : {}),
   }
@@ -71,14 +71,14 @@ export function registerRealCharacterCapability(register: typeof defineCapabilit
   register<AgentMakeRealCharacterAction>({
     name: 'make_real_character',
     title: 'Make a realistic 3D person (PS2 style)',
-    description: 'One realistic PS2-era 3D person made on the server as one job, model3d.real.make: Qwen paints the body from outfit_prompt (the clothes, in English) and the head from face_prompt (the face and hair, in English), the character is rigged on CPU and a photo face kit talks (only the mouth moves). gender man|woman; skin #rrggbb, height, body, bottom (trousers|skirt|shorts) and seed are optional. A name already made keeps every field you leave out: to change only the clothes send name and outfit_prompt (only the body is repainted); to change the face send name and face_prompt (the head and the face kit are redone). It takes minutes of GPU; the person follows it, sees the warnings and remakes it in Studio 3D › Realista (PS2).',
+    description: 'One realistic PS2-era 3D person made on the server as one job, model3d.real.make: Qwen paints the body from outfit_prompt (the clothes, in English) and the head from face_prompt (the face and hair, in English), the character is rigged on CPU and a photo face kit talks (only the mouth moves). gender man|woman; skin #rrggbb, height_m (metres), body, bottom (trousers|skirt|shorts) and seed are optional. A name already made keeps every field you leave out: to change only the clothes send name and outfit_prompt (only the body is repainted); to change the face send name and face_prompt (the head and the face kit are redone). It takes minutes of GPU; the person follows it, sees the warnings and remakes it in Studio 3D › Realista (PS2).',
     useWhen: 'The user asks for a realistic 3D person or character, a PS2 or video-game style realistic character, or to change the clothes or the face of one ("hazme un hombre realista con traje", "cámbiale la ropa a Marta").',
-    parameters: ['name', 'gender', 'skin', 'height', 'body', 'bottom', 'outfit_prompt', 'face_prompt', 'seed', 'talk_kit', 'confirm'],
+    parameters: ['name', 'gender', 'skin', 'height_m', 'body', 'bottom', 'outfit_prompt', 'face_prompt', 'seed', 'talk_kit', 'confirm'],
     inputSchema: {
       type: 'object', additionalProperties: false,
       properties: {
         type: { const: 'make_real_character' }, name: { type: 'string', maxLength: 64 }, gender: { enum: GENDERS },
-        skin: { type: 'string', description: '#rrggbb' }, height: { type: 'number', minimum: 1.2, maximum: 2.2 }, body: { enum: BODIES }, bottom: { enum: BOTTOMS },
+        skin: { type: 'string', description: '#rrggbb' }, height_m: { type: 'number', minimum: 1.2, maximum: 2.2, description: 'metres' }, body: { enum: BODIES }, bottom: { enum: BOTTOMS },
         outfit_prompt: { type: 'string', maxLength: 1200, description: 'the clothes and shoes, in English' },
         face_prompt: { type: 'string', maxLength: 1200, description: 'the face and hair (age, eyes, beard), in English' },
         seed: { type: 'integer', minimum: 0 }, talk_kit: { type: 'boolean' }, confirm: { const: true },

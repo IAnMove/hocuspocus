@@ -34,7 +34,7 @@ STYLES: dict[str, dict] = {
     },
     "real": {
         "label": "Realistic PS2-era (textured)", "status": "experimental", "operation": "model3d.real.make",
-        "make": {"style": "real", "gender": "man|woman", "bottom": "trousers|skirt|shorts", "outfit_prompt": "<the clothes, English>", "face_prompt": "<the face and hair, English>"},
+        "make": {"gender": "man|woman", "bottom": "trousers|skirt|shorts", "outfit_prompt": "<the clothes, English>", "face_prompt": "<the face and hair, English>"},
         "mould": "lofted body with real proportions, man/boy skull, real nose, a texture atlas (body front|back, head front|side|back)",
         "dress": "two pictures painted by Qwen over the guides (guide_body_file, guide_head_file); the viewer drapes them per pixel",
         "face": "the head picture (a photo-like portrait); it talks through a photo face kit with warped mouths (model3d.real.make makes it and returns its kit_id; by hand: face_pose_file, characters.rig.flat mouthStyle warp)", "look": "toon steps 4, outline 0, classic; look.exposure about 1.5",
