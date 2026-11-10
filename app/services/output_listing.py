@@ -409,6 +409,14 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
     return listed_result(files, total)
 
 
+def _revalidated(response, sha256):
+    """An output is rewritten under the same name (a repainted texture, a re-rendered clip). Without a cache rule the browser may reuse its heuristic copy
+    and the renderer keeps painting the old picture; ``no-cache`` makes it ask again (a 304 on the ETag when nothing changed). A hash-pinned URL never changes."""
+    if not sha256:
+        response.headers.setdefault("Cache-Control", "no-cache")
+    return response
+
+
 def serve_file(filename: str, workspace: str | None = None, sha256: str | None = None):
     """Serve an output file from the explicit or active workspace.
 
@@ -421,7 +429,7 @@ def serve_file(filename: str, workspace: str | None = None, sha256: str | None =
     from services.win_safe_files import share_delete_file_response
     filepath = _resolve_output_file(filename, workspace)
     if filepath:
-        return share_delete_file_response(filepath, expected_sha256=sha256)
+        return _revalidated(share_delete_file_response(filepath, expected_sha256=sha256), sha256)
     # Uploads folder — the gallery's virtual "Uploads" view lists these
     #    files with the same /api/v1/file/ URLs every other gallery flow
     #    builds (thumbnails, playback, send-to-input). Upload names are
@@ -429,5 +437,5 @@ def serve_file(filename: str, workspace: str | None = None, sha256: str | None =
     #    an output name can never be shadowed by an upload.
     filepath = _safe_join(os.path.join(os.getcwd(), "uploads"), filename) if workspace in {None, "", "__uploads__"} else None
     if filepath and os.path.isfile(filepath):
-        return share_delete_file_response(filepath, expected_sha256=sha256)
+        return _revalidated(share_delete_file_response(filepath, expected_sha256=sha256), sha256)
     raise HTTPException(status_code=404, detail="File not found")
