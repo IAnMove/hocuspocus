@@ -56,13 +56,13 @@ class Cabin:
         self.block(f"seat_{name}", "seat", seat, x, 0.0, -0.22, 0.5, SEAT_TOP, 0.56)
         for side in (-1, 1):
             self.block(f"seat_{name}_bolster_{'l' if side < 0 else 'r'}", "seat", seat, x + side * 0.235, SEAT_TOP, -0.24, 0.07, 0.08, 0.5, (0.0, 0.0, side * 0.12))
-        self.raked(f"seatback_{name}", "seat", seat, x, 0.02, 0.6, 0.4, 0.1)
+        self.raked(f"seatback_{name}", "seat", seat, x, 0.02, 0.52, 0.4, 0.1)
         for side in (-1, 1):
             self.raked(f"seatback_{name}_wing_{'l' if side < 0 else 'r'}", "seat", seat, x + side * 0.235, 0.05, 0.58, 0.075, 0.17, 0.035)
         for side in (-1, 1):
-            self.raked(f"headrest_{name}_post_{'l' if side < 0 else 'r'}", "trim", ("trim_front", "trim_top"), x + side * 0.07, 0.62, 0.72, 0.025, 0.025)
-        self.raked(f"headrest_{name}", "seat", seat, x, 0.7, 0.92, 0.25, 0.11, 0.012)
-        self.raked(f"seatback_{name}_shoulder", "seat", seat, x, 0.6, 0.67, 0.34, 0.1)
+            self.raked(f"headrest_{name}_post_{'l' if side < 0 else 'r'}", "trim", ("trim_front", "trim_top"), x + side * 0.07, 0.56, 0.62, 0.025, 0.025)
+        self.raked(f"headrest_{name}", "seat", seat, x, 0.6, 0.76, 0.22, 0.1, 0.012)      # behind the neck, below the head: a seated 1.8 m person keeps the whole head in view
+        self.raked(f"seatback_{name}_shoulder", "seat", seat, x, 0.5, 0.58, 0.34, 0.1)
 
     def window_frame_side(self, sign: int, label: str, zc: float, width: float) -> None:
         x, wall = sign * (W / 2 - 0.02), ("trim_front", "trim_top")
