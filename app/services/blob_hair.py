@@ -19,6 +19,7 @@ from services.procedural_3d.compose import linear_color
 HELMET = 1.10
 _SAMPLES = 7
 FRINGE_LEVELS = (1.0, 0.95, 0.975)   # the anime fringe's three lengths: a clean edge, not a stagger
+FRINGE_V = 0.56                      # the share of the strand map a fringe lock reads: every strand is still opaque there, so the edge is cut clean, not frayed
 FRINGE_REACH = 0.855                 # its share of the old length: the lowest tip ends at 6 degrees over the equator, above the brows (4 under it)
 
 
@@ -125,16 +126,17 @@ def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:
         _emit(mesh, grid, colors, centers, closed, None)
 
 
-def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: float = 0.15, flat: float = 0.3, ring: int = 8) -> None:
+def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: float = 0.15, flat: float = 0.3, ring: int = 8, vmax: float = 1.0) -> None:
     """A lock: a curved card from the root through the pull to the tip, ``r0`` and ``r1`` the half width in head-width units
     (narrow at the very root, so it vanishes under the hair above). A thick lock (``flat`` 0.5 or more: a tail, a ponytail)
-    is two cards crossed, so it has volume from every side."""
+    is two cards crossed, so it has volume from every side. ``vmax`` is how much of the strand map a lock reads, root to tip: 1 reaches the
+    frayed tips, less ends the lock in the opaque part, a clean cut."""
     points = bezier(root, pull, tip, _SAMPLES)
     widths = [1.35 * head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) * min(1.0, 0.4 + 3.0 * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
     widths[-1] = max(widths[-1], head.rx * 0.012)
-    _card(mesh, head, color, points, widths, 0.0)
+    _card(mesh, head, color, points, widths, 0.0, vmax=vmax)
     if flat >= 0.5:
-        _card(mesh, head, color, points, widths, math.pi / 2)
+        _card(mesh, head, color, points, widths, math.pi / 2, vmax=vmax)
 
 
 def _card_faces(mesh: Mesh, grid, rows: int, cols: int) -> None:
@@ -147,7 +149,7 @@ def _card_faces(mesh: Mesh, grid, rows: int, cols: int) -> None:
                 mesh.triangle([v[0] for v in back], [_mul(v[1], -1.0) for v in back], [v[2] for v in back], [v[3] for v in back])
 
 
-def _card(mesh: Mesh, head: _Head, color: str, points: list, widths: list, turn: float, cols: int = 3) -> None:
+def _card(mesh: Mesh, head: _Head, color: str, points: list, widths: list, turn: float, cols: int = 3, vmax: float = 1.0) -> None:
     """A strip along ``points`` with ``cols`` segments across, bowed outward a little, with strand UVs (``u`` across, ``v``
     from the root 0 to the tip 1), roots a shade darker, both faces. ``turn`` rotates it round the path."""
     base = linear_color(color)
@@ -167,7 +169,7 @@ def _card(mesh: Mesh, head: _Head, color: str, points: list, widths: list, turn:
             t = j / cols
             s = 2 * t - 1
             position = _add(_add(point, _mul(side, widths[i] * s)), _mul(deep, widths[i] * 0.3 * (1 - s * s)))
-            row.append((position, _unit(_add(deep, _mul(side, s * 0.45))), tuple(c * shade for c in base), (t, i / (rows - 1))))
+            row.append((position, _unit(_add(deep, _mul(side, s * 0.45))), tuple(c * shade for c in base), (t, vmax * i / (rows - 1))))
         grid.append(row)
     _card_faces(mesh, grid, rows, cols)
 
@@ -195,7 +197,7 @@ def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 11, length: float 
         root = head.at(yaw, 46, 1.05)
         pull = head.off(head.at(yaw * 1.05, 32, 1.11), dy=0.02)
         tip = head.off(head.at(yaw * 1.2, 56 - reach * 95, 1.06), dx=u * 0.08)
-        _clump(mesh, head, color, root, pull, tip, 0.36, 0.04 if real else 0.13, flat=0.18)
+        _clump(mesh, head, color, root, pull, tip, 0.36, 0.04 if real else 0.13, flat=0.18, vmax=1.0 if real else FRINGE_V)
 
 
 def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
