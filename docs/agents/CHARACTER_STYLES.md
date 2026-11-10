@@ -6,7 +6,7 @@ One page for any model (or person) who is going to improve a style. A **style** 
 |---|---|---|---|
 | `blob`, `chibi` | `model3d.blob.make` | stable | round-headed primitives; cute, cheap, no texture |
 | `anime` | `model3d.anime.make` | experimental | cel-shaded 3D with a drawn, talking face; reads "cartoon 3D" more than anime |
-| `real` | `model3d.anime.make` `style: "real"` | experimental | PS2/PS3-era realistic person: a mould plus a texture atlas painted by Qwen and draped per pixel; no expressions yet |
+| `real` | `model3d.anime.make` `style: "real"` | experimental | PS2/PS3-era realistic person: a mould plus a texture atlas painted by Qwen and draped per pixel; a photo face kit with warped mouths talks (only the mouth moves) |
 | `voxel`, `roblox` | (same) `style: "voxel"` or `"roblox"` | experimental | our own boxes on the one rig, a 64x64 picture made from colours (or yours), a decal face with lipsync |
 | `ps1`, `clay`, `toon-realistic` | (same) | planned | see the backlog |
 

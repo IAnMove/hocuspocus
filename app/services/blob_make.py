@@ -18,6 +18,7 @@ from services.blob_builder import PRESETS, BlobTraitsError, _copy, blob_pieces
 from services.humanoid_rig.errors import NotHumanoid
 from services.humanoid_rig.names import CLIP_IDS
 from services.humanoid_rig.rig import rig_humanoid
+from services.make_gates import humanoid_report
 from services.procedural_3d.compose import compose_glb
 
 MAKE = "model3d.blob.make"
@@ -159,7 +160,7 @@ def _result(workspace: str, name: str, plain_name: str, rigged_name: str, body: 
     return {
         "file": plain_name, "url": url(plain_name),
         "rigged_file": rigged_name, "rigged_url": url(rigged_name),
-        "clips": _public_clips(body["sidecar"]),
+        "clips": _public_clips(body["sidecar"]), "humanoid": humanoid_report(body["sidecar"]),
         "faceAnchor": body["faceAnchor"], "traits": body["traits"],
         "name": name, "workspace": workspace,
     }
