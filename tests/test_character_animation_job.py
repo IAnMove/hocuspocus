@@ -1062,15 +1062,16 @@ def test_method_video_samples_one_clip_into_the_same_sheet_and_keeps_the_guide(d
     assert gait["ok"], job.get("checks")
 
 
-def _patch_puppet(monkeypatch, *, installed: bool):
-    """The fake picture is one blob. The real cutter would refuse it, and the pose model must not run."""
+def _patch_puppet(monkeypatch, *, installed: bool, mirror: bool = False, find=None, direction: str = "side"):
+    """The fake picture is one blob. The real cutter would refuse it, and the pose model must not run. ``mirror``: the reference looked left;
+    ``find`` replaces the pose model's joints (it may raise ``WalkPuppetError`` for a joint it missed)."""
     seen = {"decompose": 0, "layers": None}
 
-    def fake_build(rgba, direction, frames, layers, joints):
+    def fake_build(rgba, direction_asked, frames, layers, joints):
         seen["layers"] = layers
-        assert joints == {"nose": (1, 2)} and frames == 12 and direction == "side"
+        assert joints == {"nose": (1, 2)} and frames == 12 and direction_asked == direction
         picture = np.zeros((rgba.shape[0] * 2, rgba.shape[1] * 2, 4), np.uint8)
-        return [picture.copy() for _ in range(frames)], {"start": 0.25}
+        return [picture.copy() for _ in range(frames)], {"start": 0.25, "mirror": mirror}
 
     def decompose(image, label):
         seen["decompose"] += 1
@@ -1078,7 +1079,7 @@ def _patch_puppet(monkeypatch, *, installed: bool):
         return {"images": {}}
 
     monkeypatch.setattr("services.walk_puppet_method.build", fake_build)
-    monkeypatch.setattr("services.walk_puppet_method.find_joints", lambda _rgba: {"nose": (1, 2)})
+    monkeypatch.setattr("services.walk_puppet_method.find_joints", find or (lambda _rgba: {"nose": (1, 2)}))
     monkeypatch.setattr("services.walk_puppet_method.installed", lambda: installed)
     monkeypatch.setattr("services.walk_puppet_method.decompose_image", decompose)
     return seen
@@ -1406,3 +1407,64 @@ def test_a_walk_drawn_pose_by_pose_is_joined_with_every_pose_scaled_by_its_torso
     assert "normalised" not in jobs.start(WS, "hero", "wave")["result"], "a gesture keeps its own scale"
     monkeypatch.setattr("services.face_landmarks.detect", lambda page: None)
     assert "normalised" not in jobs.start(WS, "hero", "walk-12")["result"], "without the pose model the sheet keeps its shared scale, as before"
+
+
+# ----- the reference of a puppet is checked before it is cut, and a drawing that cannot be cut falls back to the poses -----
+
+def test_a_reference_whose_legs_miss_its_guide_is_drawn_again_with_a_new_seed_before_anything_is_cut(directions, monkeypatch):
+    seen = _patch_puppet(monkeypatch, installed=True)
+    root, server, jobs, _sets = directions
+    server.bad_draws = {"contact-a": 1}  # the first reference drawing has the legs together
+    job = jobs.start(WS, "hero", "walk-12", method="puppet")
+    assert job["status"] == "completed", job.get("error")
+    attempts = job["puppetAttempts"]
+    assert [item["ok"] for item in attempts] == [False, True] and [item["joints"] for item in attempts] == [True, True]
+    assert attempts[0]["gait"]["ok"] is False and attempts[1]["gait"]["ok"] is True and attempts[0]["source"] != attempts[1]["source"]
+    images = server.of("generation.image")
+    assert len(images) == 2 and images[0]["params"]["seed"] != images[1]["params"]["seed"], "the second drawing has a seed of its own"
+    assert "warnings" not in job["result"] and seen["decompose"] == 1
+
+
+def test_a_reference_that_never_fits_its_guide_stays_with_a_warning_after_the_tries(directions, monkeypatch):
+    from services.walk_puppet_reference import tries
+
+    _patch_puppet(monkeypatch, installed=False)
+    root, server, jobs, _sets = directions
+    server.follow_guides = False
+    job = jobs.start(WS, "hero", "walk-12", method="puppet")
+    assert job["status"] == "completed" and len(server.of("generation.image")) == tries() == 3 and len(job["puppetAttempts"]) == 3
+    codes = [warning["code"] for warning in job["result"]["warnings"]]
+    assert codes[:2] == ["puppet_no_layers", "puppet_reference_off"] and job["method"] == "puppet", "the method recorded the two, then the sheet's own checks speak"
+
+
+def test_a_drawing_the_pose_model_cannot_find_its_joints_on_is_drawn_again_then_the_walk_is_made_pose_by_pose(directions, monkeypatch):
+    from services.walk_puppet import WalkPuppetError
+
+    def lost(_rgba):
+        raise WalkPuppetError("the pose model did not find l_ankle, r_knee on the drawing")
+
+    seen = _patch_puppet(monkeypatch, installed=True, find=lost)
+    root, server, jobs, _sets = directions
+    job = jobs.start(WS, "hero", "walk-12", method="puppet")
+    assert job["status"] == "completed", job.get("error")
+    assert "method" not in job and job["fallback"]["from"] == "puppet" and "l_ankle" in job["fallback"]["reason"]
+    assert len(server.of("generation.image")) == 3 + 12, "three tries at a reference, then the twelve poses"
+    assert seen["decompose"] == 0, "the See-through layers are not made for a drawing that cannot be cut"
+    codes = [warning["code"] for warning in job["result"]["warnings"]]
+    assert "puppet_fell_back" in codes and "provenance" not in job["result"], "no puppet record on a walk that was not cut"
+    fell = next(warning for warning in job["result"]["warnings"] if warning["code"] == "puppet_fell_back")
+    assert "pose by pose" in fell["message"] and "l_ankle" in fell["message"]
+    assert all(take["status"] == "ready" for take in job["takes"]) and "puppet" not in _kit(root)["animations"]["walk-12"].get("provenance", {}).get("method", "")
+    assert "provenance" not in _kit(root)["animations"]["walk-12"]
+
+
+def test_a_sheet_cut_from_a_drawing_that_looks_left_says_it_looks_left(directions, monkeypatch):
+    _patch_puppet(monkeypatch, installed=True, mirror=True)
+    root, server, jobs, _sets = directions
+    job = jobs.start(WS, "hero", "walk-12", method="puppet")
+    made = _kit(root)["animations"]["walk-12"]
+    assert job["status"] == "completed" and made["facing"] == "left" and made["dir"] == "side" and made["provenance"]["facing"] == "left"
+    assert job["result"]["provenance"]["facing"] == "left"
+    _patch_puppet(monkeypatch, installed=True, mirror=False)
+    jobs.start(WS, "hero", "walk-12", method="puppet")
+    assert _kit(root)["animations"]["walk-12"]["facing"] == "right"

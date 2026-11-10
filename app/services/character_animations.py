@@ -271,9 +271,12 @@ def _puppet_provenance(raw: Any, label: str) -> dict[str, Any] | None:
         raise CharacterAnimationError(f"{label} provenance start is the cycle phase")
     if not isinstance(raw.get("layers"), bool):
         raise CharacterAnimationError(f"{label} provenance layers is true or false")
-    return {"method": "puppet", "reference": {"animation": _text(reference.get("animation"), f"{label} reference", 64, required=True),
-                                               "pose": _text(reference.get("pose"), f"{label} reference pose", 120, required=True)},
-            "start": float(start), "layers": raw["layers"]}
+    found = {"method": "puppet", "reference": {"animation": _text(reference.get("animation"), f"{label} reference", 64, required=True),
+                                                "pose": _text(reference.get("pose"), f"{label} reference pose", 120, required=True)},
+             "start": float(start), "layers": raw["layers"]}
+    if raw.get("facing") in ("left", "right", "front"):  # the way the reference drawing looked: the sheet looks the same way
+        found["facing"] = raw["facing"]
+    return found
 
 
 def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:

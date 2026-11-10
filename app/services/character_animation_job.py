@@ -489,19 +489,8 @@ class CharacterAnimationJobs:
                 self._update(store, job, status="running")
                 if job.get("method") == "video":
                     self._video_cycle(store, job, tools)
-                elif job.get("method") == "puppet":
-                    self._puppet_cycle(store, job, tools)
-                else:
-                    poses = {item["id"]: item for item in job["definition"]["poses"]}
-                    for take in job["takes"]:
-                        if take["status"] not in ("reused", "ready"):
-                            try:
-                                self._take(store, job, take, tools, poses[take["id"]])
-                            except ToolError as error:
-                                take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
-                                raise
-                    if remake.applies(job):
-                        self._remake_poses(store, job, tools)
+                elif job.get("method") != "puppet" or self._puppet_cycle(store, job, tools):
+                    self._pose_cycle(store, job, tools)
                 self._update(store, job, stage="sheet")
                 self._finish(store, job)
         except ToolError as error:
@@ -514,8 +503,8 @@ class CharacterAnimationJobs:
         finally:
             self._tools.pop(job_id, None)
 
-    def _puppet_reference_picture(self, job: dict[str, Any], tools: LocalTools, animation_id: str, pose_id: str) -> str:
-        """Draw the reference pose on a copy of the job. The kit does not gain a second animation."""
+    def _puppet_reference_picture(self, job: dict[str, Any], tools: LocalTools, animation_id: str, pose_id: str, seed: int, attempt: int = 0) -> str:
+        """Draw the reference pose on a copy of the job. The kit does not gain a second animation. Another try (``attempt``) has files of its own."""
         try:
             definition = animation_def(animation_id)
         except CharacterAnimationError as error:
@@ -528,26 +517,46 @@ class CharacterAnimationJobs:
         guide = guide_for(definition, pose["id"], workspace_root=root,
                           name=f"{job['kitId']}-{definition['id']}-{pose['id']}-guide-{job['jobId'][-6:]}.png")
         copy = {**job, "definition": definition, "jobId": f"{job['jobId']}ref"}
-        _name, keyed = self._draw(copy, tools, pose, built, guide, job["takes"][0]["seed"], 0, lambda _drawn: None)
+        _name, keyed = self._draw(copy, tools, pose, built, guide, seed, attempt, lambda _drawn: None)
         if copy.get("refsDropped"):
             job["refsDropped"] = True
         return keyed
 
-    def _puppet_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
-        """One drawing, then one keyed frame per pose. A missing limb fails the job and leaves no sheet."""
+    def _puppet_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> bool:
+        """One drawing, then one keyed frame per pose. Returns True when the drawing could not be cut (no joints, no limbs apart): the job then
+        goes on pose by pose with the same takes and a warning, because a walk the person can look at is worth more than a failed job. A tool
+        error still fails the job."""
         try:
-            try:
-                fill_puppet_takes(job, tools, workspace_root=self.deps.workspace_dir(job["workspace"]),
-                                  uploads_root=self.deps.uploads_root(), kit=self._kit(job["workspace"], job["kitId"]),
-                                  draw=lambda animation, pose: self._puppet_reference_picture(job, tools, animation, pose),
-                                  update=lambda **changes: self._update(store, job, **changes))
-            except WalkPuppetError as error:
-                raise ToolError("puppet_failed", str(error)) from error
+            fill_puppet_takes(job, tools, workspace_root=self.deps.workspace_dir(job["workspace"]),
+                              uploads_root=self.deps.uploads_root(), kit=self._kit(job["workspace"], job["kitId"]),
+                              draw=lambda animation, pose, seed, attempt: self._puppet_reference_picture(job, tools, animation, pose, seed, attempt),
+                              update=lambda **changes: self._update(store, job, **changes))
+            return False
+        except WalkPuppetError as error:
+            reason = str(error)[:300]
         except ToolError as error:
             for take in job["takes"]:
                 if take["status"] not in ("ready", "reused"):
                     take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
             raise
+        for take in job["takes"]:
+            take.update(status="waiting")
+        job.pop("method", None)
+        self._update(store, job, fallback={"from": "puppet", "to": "poses", "reason": reason}, warnings=[*job.get("warnings", []), "puppet_fell_back"])
+        return True
+
+    def _pose_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
+        """Every pose in turn (the first pass), then the remake of the ones that fail."""
+        poses = {item["id"]: item for item in job["definition"]["poses"]}
+        for take in job["takes"]:
+            if take["status"] not in ("reused", "ready"):
+                try:
+                    self._take(store, job, take, tools, poses[take["id"]])
+                except ToolError as error:
+                    take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
+                    raise
+        if remake.applies(job):
+            self._remake_poses(store, job, tools)
 
     def _video_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
         """One guided clip, then one keyed frame per pose. A tool error fails the job the same way a pose does."""
@@ -570,7 +579,8 @@ class CharacterAnimationJobs:
             "sheet": {key: sheet[key] for key in ("source", "width", "height", "count", "columns", "rows", "cell")},
             # What the author wrote for a pose stays with it, so that pose can be made again alone.
             "frames": _saved_frames(job, definition),
-            "fps": definition["fps"], "loop": definition["loop"], "facing": definition["facing"], "view": definition["view"],
+            "fps": definition["fps"], "loop": definition["loop"], "facing": (job.get("puppet") or {}).get("facing", definition["facing"]),
+            "view": definition["view"],
             "scaleBy": definition["scaleBy"], "model": job["model"], "reviewState": "pending", "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             **contract_of(definition["id"], definition), **clip_fields(job),
             **({"title": definition["title"]["es"]} if definition.get("custom") else {}), **({"prompt": job["prompt"]} if job.get("prompt") else {}),

@@ -28,6 +28,8 @@
     "bust": "Close-up portrait: only the head, neck and shoulders of the character, the picture cropped at the chest so no waist, hands, legs or feet are in it, facing the viewer, centred, the face large and filling the upper half of the picture."
   },
   "guide": {
+    "puppet": {"tries": 3},
+    "puppet_note": "The reference drawing of a puppet walk (services/walk_puppet_reference.py) must give the pose model its joints and, when its pose has a guide, have the legs of that guide; it is drawn again with a new seed up to `tries` times, and a drawing that cannot be cut makes the job draw the walk pose by pose.",
     "remake": {"rounds": 2, "poses": 4, "tries": 2},
     "remake_note": "After the first pass of a walk drawn pose by pose, the poses that miss their guide or that a failing sheet check blames (services/character_animation_remake.py) are drawn again: at most `rounds` rounds, `poses` poses a round (the worst first) and `tries` new seeds a pose; the best drawing of each stays. rounds 0 turns it off.",
     "note": "A walk (an entry with \"guide\": \"walk\") is drawn pose by pose over the walk of services/walk_guides.py seen from the camera of its direction: the guide is picture 2. A pose whose legs are tolerance (share of the figure's height) wider or narrower than the guide's is drawn again with another seed, tries times in all.",

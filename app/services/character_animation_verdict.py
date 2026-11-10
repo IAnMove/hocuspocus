@@ -9,7 +9,8 @@ result carries them, and approval is still decided exactly as before (only ``aut
 * ``gait``     ``{"checked", "missed": [pose ids]}`` for a walk drawn pose by pose, where each pose has a guide to be measured against.
 * ``warnings`` ``[{"code", "message", "hint"}]`` when a check failed or a pose missed its gait, or the checks could not be read. The hint
   names a remedy that exists already: make only the failing poses again (``pose``), or, for a catalog walk, ``method`` ``puppet``. A walk
-  that was remade automatically says so (``autoRemake`` of the job) before the remedy: the job never switches method on its own.
+  that was remade automatically says so (``autoRemake`` of the job) before the remedy: the job never switches method on its own, except that a
+  puppet whose drawing cannot be cut goes on pose by pose (``fallback``, warning ``puppet_fell_back``), and then offers no puppet again.
 """
 from __future__ import annotations
 
@@ -19,8 +20,10 @@ from services.character_animation_checks import failed
 
 # What each warning code means to a person or an agent reading the job.
 PUPPET_NO_LAYERS = "The puppet was cut without See-through layers: the drawing needs the legs apart and no skirt."
+PUPPET_REFERENCE_OFF = "The puppet was cut from a drawing whose legs are far from the guide's for its pose, after every try: look at the sheet before approving it."
+PUPPET_FELL_BACK = "The puppet could not be cut from its drawing, so the walk was made pose by pose instead"
 CHECKS_UNAVAILABLE = "The automatic checks could not read the sheet, so nobody has judged it yet."
-_NOTES = {"puppet_no_layers": PUPPET_NO_LAYERS}
+_NOTES = {"puppet_no_layers": PUPPET_NO_LAYERS, "puppet_reference_off": PUPPET_REFERENCE_OFF}
 
 
 def verdict_of(checks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -47,7 +50,7 @@ def _remade(job: dict[str, Any]) -> str:
 
 def _remedy(definition: dict[str, Any], job: dict[str, Any]) -> str:
     """The way out that exists: puppet only for a catalog walk (``accept_puppet`` refuses any other) that was not made that way."""
-    puppet = not definition.get("custom") and definition.get("guide") == "walk" and job.get("method") != "puppet"
+    puppet = not definition.get("custom") and definition.get("guide") == "walk" and job.get("method") != "puppet" and not job.get("fallback")
     again = ' or make the whole walk again with method "puppet" (one drawing cut by the walk mould, not redrawn pose by pose)' if puppet else ""
     return f"{_remade(job)}Look at the sheet, then make only the poses that are off again (pose: the pose id; the others stay){again}."
 
@@ -62,10 +65,17 @@ def _warning(code: str, message: str, hint: str | None = None) -> dict[str, str]
     return {"code": code, "message": message, **({"hint": hint} if hint else {})}
 
 
+def _note(code: str, job: dict[str, Any]) -> str:
+    """The sentence of a warning code the method recorded; a fall back says why the puppet could not be cut."""
+    if code == "puppet_fell_back":
+        return f"{PUPPET_FELL_BACK} ({(job.get('fallback') or {}).get('reason') or 'the drawing had no joints or limbs to cut'})."
+    return _NOTES.get(code, code)
+
+
 def warnings_of(checks: list[dict[str, Any]] | None, gait: dict[str, Any] | None, definition: dict[str, Any], job: dict[str, Any]) -> list[dict[str, str]]:
     """The warnings a finished job lists: the ones its method recorded (``job["warnings"]``, codes) first, then what the checks and the
     gait say. ``checks`` is None when they could not be read."""
-    found = [_warning(code, _NOTES.get(code, code)) for code in job.get("warnings") or [] if isinstance(code, str)]
+    found = [_warning(code, _note(code, job)) for code in job.get("warnings") or [] if isinstance(code, str)]
     if checks is None:
         why = f" ({job['checksError']})" if job.get("checksError") else ""
         found.append(_warning("checks_unavailable", CHECKS_UNAVAILABLE[:-1] + why + "."))

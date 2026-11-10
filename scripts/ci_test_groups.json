@@ -1129,6 +1129,13 @@
       ]
     },
     {
+      "prefix": "app/services/walk_puppet_reference.py",
+      "paths": [
+        "tests/test_walk_puppet.py",
+        "tests/test_character_animation_job.py"
+      ]
+    },
+    {
       "prefix": "app/services/walk_guide_video.py",
       "paths": [
         "tests/test_walk_guides.py",

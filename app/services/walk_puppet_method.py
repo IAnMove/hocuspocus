@@ -2,8 +2,9 @@
 
 ``method`` ``puppet`` on the animation job (services/character_animation_job.py) is the only caller. The default
 method stays pose by pose. The front walk uses the rest pose of ``idle``. Every other direction uses ``contact-a``
-of that direction's twelve-pose walk. A reference the kit does not have yet is drawn by the same job and is not
-saved as a second animation.
+of that direction's twelve-pose walk. A reference the kit does not have yet (or has, but the pose model or the guide
+rejects) is drawn by the same job and is not saved as a second animation. A drawing
+that cannot be cut makes the job draw the walk pose by pose instead, with a warning.
 
 See-through layers, when they are installed, separate the clothes. Without them the cut follows the bones and the
 job warns ``puppet_no_layers``. The drawing then needs the legs apart and no skirt. The gait check still runs.
@@ -25,6 +26,7 @@ from services.character_kit_face_cleanup import resolve_character_kit_image
 from services.local_generation import file_url
 from services.see_through_layers import decompose_image, installed, save_layers
 from services.walk_puppet import LAYER_NAMES, build, find_joints, load_layers
+from services.walk_puppet_reference import pick as pick_reference
 
 # The catalog has no pose id ``idle-rest``. Front is the rest pose of ``idle``; the other directions are contact-a.
 REFERENCE = {"front": ("idle", "rest"), "side": ("walk-12", "contact-a"), "front34": ("walk-front34", "contact-a"),
@@ -153,28 +155,35 @@ def _key_all(job: dict[str, Any], tools: Any, names: list[str], screen: str, upd
 
 
 def fill_puppet_takes(job: dict[str, Any], tools: Any, *, workspace_root: str, uploads_root: str, kit: dict[str, Any],
-                      draw: Callable[[str, str], str], installed_fn: Callable[[], bool] | None = None,
+                      draw: Callable[[str, str, int, int], str], installed_fn: Callable[[], bool] | None = None,
                       update: Callable[..., None]) -> None:
     """Cut the reference drawing into one keyed frame per pose. The caller joins the sheet.
 
-    ``draw(animation, pose)`` returns a keyed picture when the kit does not have that pose yet. It must not save a
-    second animation. ``installed_fn`` defaults to See-through's own probe.
+    The reference is looked at before anything is cut (``services/walk_puppet_reference.py``): the pose model must find its joints, and
+    a pose of a walk must have the legs of its guide. ``draw(animation, pose, seed, attempt)`` returns a keyed picture when the kit does not
+    have that pose yet or the one it has fails. It must not save a second animation. A drawing that cannot be cut raises
+    ``WalkPuppetError``, which the job answers by making the walk pose by pose. ``installed_fn`` defaults to See-through's own probe.
     """
     animation, pose = reference_of(job["definition"], job.get("puppetReference"))
-    source = frame_source(kit, animation, pose) or draw(animation, pose)
-    rgba = _rgba_of(source, uploads_root, workspace_root)
+    picked = pick_reference(animation=animation, pose=pose, source=frame_source(kit, animation, pose), draw=draw, find=find_joints,
+                            load=lambda source: _rgba_of(source, uploads_root, workspace_root), seed=int(job["takes"][0]["seed"]))
+    rgba = picked["rgba"]
+    warnings = [] if picked["ok"] else ["puppet_reference_off"]
     layers, used = garment_layers(rgba, workspace_root, job["kitId"], job["workspace"],
                                   installed_fn=installed if installed_fn is None else installed_fn, decompose=decompose_image)
     if not used:
-        job["warnings"] = ["puppet_no_layers"]
+        warnings.insert(0, "puppet_no_layers")
+    if warnings:
+        job["warnings"] = warnings
     direction = contract_of(job["definition"]["id"], job["definition"]).get("dir") or "side"
-    frames, info = build(rgba, direction, len(job["definition"]["poses"]), layers, find_joints(rgba))
+    frames, info = build(rgba, direction, len(job["definition"]["poses"]), layers, picked["joints"])
     names, screen = _names(job), _screen(job)
     _store_frames(frames, rgba.shape[:2], workspace_root, names, screen)
     _key_all(job, tools, names, screen, update)
-    record = {"method": "puppet", "reference": {"animation": animation, "pose": pose}, "start": float(info["start"]), "layers": used}
+    record = {"method": "puppet", "reference": {"animation": animation, "pose": pose}, "start": float(info["start"]), "layers": used,
+              "facing": "left" if info.get("mirror") else job["definition"]["facing"]}
     job["puppet"] = record
-    update(puppet=record, **({"warnings": job["warnings"]} if job.get("warnings") else {}))
+    update(puppet=record, puppetAttempts=picked["attempts"], **({"warnings": job["warnings"]} if job.get("warnings") else {}))
 
 
 __all__ = ["REFERENCE", "PuppetMethodError", "accept_puppet", "fill_puppet_takes", "frame_source", "reference_of"]
