@@ -134,8 +134,8 @@ def _unknown_problem(field: str, name: str, keys: list[str], cards: dict[str, di
     mean = f" Did you mean {' or '.join(quoted([item]) for item in close)}?" if close else ""
     role = "the template" if field == "template" else "the world (the template whose place the shot plays in)"
     return {"code": "unknown_template", "field": field, "template": name, "shots": keys, "suggestions": close,
-            "message": sentence(f"{shot_names(keys)} names {role} \"{name}\", which is not a Video 3D card.{mean} The 3D export "
-                                "would fail after the GPU work."),
+            "message": sentence(f"{shot_names(keys)} {_verb(keys, 'names')} {role} \"{name}\", which is not a Video 3D card.{mean} "
+                                "The 3D export would fail after the GPU work."),
             "hint": "search the shipped cards (world3d.templates.suggest, world3d.templates.catalog) and copy an id"}
 
 
@@ -177,9 +177,9 @@ def _role_problem(template: str, role: str, keys: list[str], have: list[str]) ->
     quoted, shot_names, sentence = _words()
     has = f"only has the roles {quoted(have)}" if have else "has no role to cast"
     return {"code": "cast_role_not_on_card", "template": template, "role": role, "roles": have, "shots": keys,
-            "message": sentence(f"{shot_names(keys)} casts \"{role}\", but the template \"{template}\" {has}. The 3D export would "
-                                "fail after the GPU work: cast a role the card has, give an extra object an id of its own with "
-                                "add: true, or pick a card that has the role."),
+            "message": sentence(f"{shot_names(keys)} {_verb(keys, 'casts')} \"{role}\", but the template \"{template}\" {has}. The "
+                                "3D export would fail after the GPU work: cast a role the card has, give an extra object an id of its "
+                                "own with add: true, or pick a card that has the role."),
             "hint": "world3d.templates.suggest finds a card by how many speakers it holds (speakers: 2 for subject_2)"}
 
 
@@ -203,6 +203,11 @@ def _format_hint(wanted: str, drawn: str, explicit: bool) -> str:
     how = "the export adapts its camera" if explicit else "its clip is cropped to fill the frame"
     return (f"{where} {wanted} frame and the card is drawn {drawn}: {how}, but a {wanted} card frames better "
             f"(world3d.templates.suggest with format: {wanted})")
+
+
+def _verb(keys: list[str], singular: str) -> str:
+    """``names`` for one shot, ``name`` for several."""
+    return singular if len(keys) == 1 else singular.removesuffix("s")
 
 
 def _words():

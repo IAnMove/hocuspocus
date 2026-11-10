@@ -244,6 +244,8 @@ def test_an_unknown_template_is_refused_before_any_gpu_work_with_the_closest_ids
     typo = found[("template", "speech-portriat")]
     assert typo["shots"] == ["a", "b", "fill[0]"] and typo["suggestions"][0] == "speech-portrait"
     assert 'Did you mean "speech-portrait"' in typo["message"] and "after the GPU work" in typo["message"] and typo["hint"]
+    assert typo["message"].startswith('Shots "a", "b" and "fill[0]" name the template'), "the verb agrees with the shots"
+    assert found[("world", "stage-sala")]["message"].startswith('Shot "g" names the world'), "one shot, one verb"
     assert found[("template", "stage-salas")]["suggestions"][0] == "stage-sala"
     assert found[("template", "qqq-zzz")]["suggestions"] == [] and "Did you mean" not in found[("template", "qqq-zzz")]["message"]
     assert "stage-sala" not in found[("world", "stage-sala")]["suggestions"], "a stage is a template, never a world"
@@ -265,6 +267,7 @@ def test_a_cast_role_the_card_does_not_have_is_refused_and_names_the_roles_it_ha
     assert [(item["template"], item["role"], item["shots"], item["roles"]) for item in found] == [
         ("speech-portrait", "subject_2", ["a", "b"], ["subject_1"])]
     assert 'only has the roles "subject_1"' in found[0]["message"] and '"subject_2"' in found[0]["message"]
+    assert found[0]["message"].startswith('Shots "a" and "b" cast "subject_2"'), "the verb agrees with the shots"
     assert "add: true" in found[0]["message"]
 
 
