@@ -352,6 +352,10 @@ With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GL
 
 `model3d.blob.make` builds one round-headed person and rigs it in the same call (Wizard `blob_make`, the Studio 3D panel, or `POST /api/v1/model3d/blob`). Pass a `preset` (`sailor`, `cashier`, `boss`, `kid`, `big`, `lanky`, `blob_chef`, `blob_pirate`, `blob_scout`, `anime_girl`, `anime_boy`, `anime_senpai`, `chibi_kid`, `chibi_mage`, `chibi_knight`) and optional `traits`. `family` is `blob`, `anime` or `chibi`. Hair: `none`, `short`, `bangs`, `spiky`, `long`, `ponytail`, `twin_tails`, `bun`. The default clips are `idle`, `walk`, `talk`, `nod`, `wave`, `shrug`, `point` and `run`. `model3d.blob.presets` lists the limits. A moustache, glasses and the 2D face are not this body. Put the rigged file on `subject_1` (not `add: true`) and play `Wave`.
 
+## A realistic person (PS2 style)
+
+`model3d.real.make` makes one realistic 3D person as a server job (Wizard `make_real_character`, Studio 3D › Realista (PS2), or `POST /api/v1/model3d/real`): `name`, `gender` (`man`|`woman`), `outfit_prompt` (the clothes) and `face_prompt` (the face and hair), both in English; `seed`, `skin`, `height`, `body`, `bottom` optional. It takes minutes: follow it with `model3d.real.status`. The result is the rigged GLB, `faceAnchor`, the photo face kit `kit_id` and `warnings` (read them). To dress the same person again, call it with the same `name` and only the new `outfit_prompt`: the face and its kit are kept. `model3d.real.get` and `model3d.real.list` read the stored recipes; `model3d.real.presets` has ready outfits and faces. In a scene: `world3d.scene.face {kit_id, shape: "mesh", center, radii}` without `skin`, then `world3d.scene.talk` with `blink: false`.
+
 ## 3D sets: molds, skins and props
 
 1. Read `scene3d.sets.catalog` to choose a mold, size, camera, character marks and prop anchors.
