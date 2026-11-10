@@ -4,8 +4,10 @@ import presets from '../../../../app/shared/set_lights.json' with { type: 'json'
 import type { WorldSfx } from '../sceneFx/world'
 import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
 
-/** `image` stretches one painting over a face; `texture` repeats a tile every `tile_m` metres. `sideColor` colours the ends of a block whose front carries an image (else the mold's own colour). */
-export type RoomMaterial = { color?: string; image?: { asset: string }; texture?: { asset: string }; video?: { asset: string }; tile_m?: number; sideColor?: string }
+/** `image` stretches one painting over a face; `texture` repeats a tile every `tile_m` metres. `sideColor` colours the ends of a block whose front carries an image (else the mold's own colour).
+ *  `pattern` (leather, fabric, plastic, quilt, carpet, metal, wood, plaster, tile; see roomPatterns.ts) is a tile the room paints itself, tinted by `color`.
+ *  `view` (road_night, road_day, road_dawn, space; see roomViews.ts) is an animated window picture at `speed_mps` (default 15) that needs no clip. */
+export type RoomMaterial = { color?: string; image?: { asset: string }; texture?: { asset: string }; video?: { asset: string }; tile_m?: number; sideColor?: string; pattern?: string; seed?: number; view?: string; speed_mps?: number }
 export type RoomOpening = { wall: string; kind: string; x: number; width: number; height: number; sill?: number; surface?: string }
 export type RoomKind = 'interior' | 'exterior'
 export type RoomMold = {
@@ -25,7 +27,8 @@ export type RoomSet = { mold: RoomMold; skin?: Record<string, RoomMaterial>; cam
 /** A view sits this far behind its wall and overlaps the hole by this margin, so oblique cameras never see past its edge. */
 export const OPENING_DEPTH = 0.015, OPENING_MARGIN = 0.08
 const FALLBACK: RoomMaterial = { color: '#d8d2c4' }
-export type RoomPanel = { id: string; surface: string; position: Vec3; rotation: Vec3; size: [number, number]; uv: [number, number, number, number]; fullSize: [number, number]; material: RoomMaterial }
+/** `wall` names the wall an opening panel sits in: a `view` paints that whole wall, and each window shows its own part of it. */
+export type RoomPanel = { id: string; surface: string; position: Vec3; rotation: Vec3; size: [number, number]; uv: [number, number, number, number]; fullSize: [number, number]; material: RoomMaterial; wall?: string }
 type RoomLight = { color: string; intensity: number; direction: Vec3 }
 /** Shared with the Python library through app/shared/set_lights.json (see services/set_molds.py). */
 const LIGHTS: Record<string, RoomLight> = Object.fromEntries(Object.entries({ ...presets.interior, ...presets.exterior })
@@ -134,7 +137,13 @@ export function roomPanels(room: RoomSet): RoomPanel[] {
       const [left, right] = strip(xs[i-1], xs[i])
       add(`wall_${wall}`, at(x, y), [0, yaw, 0], [xs[i]-xs[i-1], ys[j]-ys[j-1]], [left, ys[j-1]/h, right, ys[j]/h], [span, h])
     }
-    for (const o of rects) add(o.surface ?? (o.kind === 'window' ? 'window_view' : 'door'), at(o.x*span, o.low+o.height/2, OPENING_DEPTH), [0, yaw, 0], [o.width+2*OPENING_MARGIN, o.height+2*OPENING_MARGIN])
+    for (const o of rects) {
+      const surface = o.surface ?? (o.kind === 'window' ? 'window_view' : 'door'), size: [number, number] = [o.width+2*OPENING_MARGIN, o.height+2*OPENING_MARGIN]
+      if (!skin[surface]?.view) { add(surface, at(o.x*span, o.low+o.height/2, OPENING_DEPTH), [0, yaw, 0], size); continue }
+      const [left, right] = strip(o.a-OPENING_MARGIN, o.b+OPENING_MARGIN)
+      add(surface, at(o.x*span, o.low+o.height/2, OPENING_DEPTH), [0, yaw, 0], size, [left, (o.low-OPENING_MARGIN)/h, right, (o.high+OPENING_MARGIN)/h], [span, h])
+      panels[panels.length - 1].wall = wall
+    }
   }
   const replaced = new Set(Array.isArray(room.libraryBlocks) ? room.libraryBlocks : [])
   for (const block of mold.blocks) {

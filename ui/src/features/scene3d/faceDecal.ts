@@ -262,6 +262,14 @@ export function findFaceMaterial(root: Object3D): MeshStandardMaterial | undefin
   return found
 }
 
+/** A face patch nobody painted (a figure with no kit, no face pack) is a white mask hanging off the skin of the head, a bird's beak in profile: hide it, the skull under it carries the skin. */
+export function setBlankFaceHidden(root: Object3D, hidden: boolean): boolean {
+  const face = findFaceMaterial(root)
+  if (!face || (hidden && face.map)) return false
+  face.visible = !hidden
+  return hidden
+}
+
 export function findBone(root: Object3D, wanted: string): Bone | undefined {
   const bones: Bone[] = []
   root.traverse(object => { if ((object as Bone).isBone) bones.push(object as Bone) })
