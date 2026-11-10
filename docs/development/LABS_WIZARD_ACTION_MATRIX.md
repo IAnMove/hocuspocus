@@ -1169,6 +1169,7 @@ These IDs are in `AGENT_ACTION_TYPES`. They are listed so L0 can prove every Wiz
 | `other.blob_make` | `blob_make` | `executeBlobMake` | `ui/src/features/agent/blobBodyAdapter.ts` | `blobBody.make` |
 | `other.make_character_face` | `make_character_face` | `executeMakeCharacterFace` | `ui/src/features/agent/characterFaceCapabilities.ts` | `characterFaces.make` |
 | `other.anime_make` | `anime_make` | `executeAnimeMake` | `ui/src/features/agent/animeCharacterAdapter.ts` | `animeCharacter.make` |
+| `other.make_real_character` | `make_real_character` | `executeMakeRealCharacter` | `ui/src/features/agent/realCharacterCapability.ts` | `realCharacter.make` |
 | `other.prepare_image` | `prepare_image` | `prepareImage` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareImage` |
 | `other.prepare_audio` | `prepare_audio` | `prepareAudio` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareAudio` |
 | `other.download_model` | `download_model` | `downloadModel` | `ui/src/features/agent/studioCapabilities.ts` | `studio.downloadModel` |
