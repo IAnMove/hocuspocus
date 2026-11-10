@@ -19,6 +19,7 @@ import { titleTemplateDocument, TITLE_TEMPLATES, TITLE_CATEGORIES } from './titl
 import { dialogueTemplateDocument, DIALOGUE_TEMPLATES, DIALOGUE_CATEGORIES } from './dialogueTemplates'
 import { reactionTemplateDocument, REACTION_TEMPLATES, REACTION_CATEGORIES } from './reactionTemplates'
 import { groupTemplateDocument, GROUP_TEMPLATES, GROUP_CATEGORIES } from './groupTemplates'
+import { verticalTemplateDocument, VERTICAL_TEMPLATES, VERTICAL_CATEGORIES } from './verticalTemplates'
 import { createDefaultScene3DDocument, parseScene3DDocument } from './document.ts'
 import topdownCliffScene from './topdownCliffScene.json' with { type: 'json' }
 import topdownDragonPortalsScene from './topdownDragonPortalsScene.json' with { type: 'json' }
@@ -104,6 +105,7 @@ export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCateg
   ...DIALOGUE_CATEGORIES,
   ...REACTION_CATEGORIES,
   ...GROUP_CATEGORIES,
+  ...VERTICAL_CATEGORIES,
 }
 
 const CAMERA_PROFILES: Partial<Record<Scene3DTemplateId, Partial<Scene3DCamera>>> = {
@@ -214,6 +216,7 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   ...DIALOGUE_TEMPLATES,
   ...REACTION_TEMPLATES,
   ...GROUP_TEMPLATES,
+  ...VERTICAL_TEMPLATES,
 ]
 
 const LAYOUTS: Partial<Record<Scene3DTemplateId, Partial<Record<Scene3DSlotId, Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale'>>>>> = {
@@ -412,7 +415,7 @@ const FAMILY_BUILDERS: ReadonlyArray<(id: string) => Scene3DDocument | null | un
   atmosTemplateDocument, techniqueDocument,
   motionLabTemplateDocument,
   transitionTemplateDocument, comicTemplateDocument, speedTemplateDocument, titleTemplateDocument,
-  dialogueTemplateDocument, reactionTemplateDocument, groupTemplateDocument,
+  dialogueTemplateDocument, reactionTemplateDocument, groupTemplateDocument, verticalTemplateDocument,
 ]
 
 export function applyScene3DTemplate(id: Scene3DTemplateId): Scene3DDocument {

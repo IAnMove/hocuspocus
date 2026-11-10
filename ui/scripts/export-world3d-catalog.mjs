@@ -16,6 +16,7 @@ import { titleCard } from '../src/features/scene3d/titleTemplates.ts'
 import { dialogueCard } from '../src/features/scene3d/dialogueTemplates.ts'
 import { reactionCard } from '../src/features/scene3d/reactionTemplates.ts'
 import { groupCard } from '../src/features/scene3d/groupTemplates.ts'
+import { verticalCard } from '../src/features/scene3d/verticalTemplates.ts'
 
 const outPath = fileURLToPath(new URL('../../app/shared/world3d_templates.json', import.meta.url))
 const en = JSON.parse(readFileSync(new URL('../src/i18n/locales/en/scene3dEditor.json', import.meta.url), 'utf8'))
@@ -42,7 +43,7 @@ function line(text, fallback) {
 function notes(id, locale) {
   const copy = actionCard(id, locale) ?? campaignCard(id, locale) ?? animeCard(id, locale)
     ?? transitionCard(id, locale) ?? comicCard(id, locale) ?? speedCard(id, locale) ?? titleCard(id, locale)
-    ?? dialogueCard(id, locale) ?? reactionCard(id, locale) ?? groupCard(id, locale)
+    ?? dialogueCard(id, locale) ?? reactionCard(id, locale) ?? groupCard(id, locale) ?? verticalCard(id, locale)
   return copy?.requirements?.length ? copy.requirements.join('; ') : ''
 }
 

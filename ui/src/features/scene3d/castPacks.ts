@@ -1,7 +1,8 @@
 import { createDefaultScene3DDocument } from './document.ts'
-import { adaptAuthoredCameraToFrame } from './frameFormat.ts'
+import { adaptAuthoredCameraToFrame, fromPortraitCamera, SCENE3D_FRAME_FORMATS } from './frameFormat.ts'
 import { parseScreenBackdrop } from './screenBackdrop.ts'
 import { parseSceneFx } from '../sceneFx/types.ts'
+import { parseWorldSfx } from '../sceneFx/world.ts'
 import type {
   Scene3DCamera,
   Scene3DCameraFamily,
@@ -35,9 +36,15 @@ export type CastPackSpec = {
   /** A flat colour behind the set; only the plain-colour cards paint one. */
   backdrop?: { color: string; sfx: Array<Record<string, unknown>> }
   sfx?: Array<Record<string, unknown>>
+  /** 3D effects in the world, such as the dust a locked camera keeps alive. */
+  worldSfx?: Array<Record<string, unknown>>
+  /** `portrait`: the card is drawn for 9:16 (720×1280) and its camera is authored for it, never adapted. */
+  frame?: 'portrait'
   copy: { en: CastPackCardCopy; es: CastPackCardCopy }
 }
-export type CastPackRow<Id extends Scene3DTemplateId> = { id: Id; camera: Scene3DCameraFamily; duration: number; slots: Scene3DSlotId[] }
+export type CastPackRow<Id extends Scene3DTemplateId> = {
+  id: Id; camera: Scene3DCameraFamily; duration: number; slots: Scene3DSlotId[]; frameFormat?: 'portrait'
+}
 
 /** Impact frames are counted at the document's default rate. */
 export const CAST_PACK_FPS = createDefaultScene3DDocument().fps
@@ -80,7 +87,11 @@ export function castPackRoles(slots: Scene3DSlot[]): Scene3DSlotId[] {
 }
 
 export function castPackRows<Id extends Scene3DTemplateId>(ids: readonly Id[], specs: Record<Id, CastPackSpec>): CastPackRow<Id>[] {
-  return ids.map(id => ({ id, camera: specs[id].camera.family, duration: specs[id].duration, slots: castPackRoles(specs[id].slots) }))
+  return ids.map(id => ({
+    id, camera: specs[id].camera.family, duration: specs[id].duration, slots: castPackRoles(specs[id].slots),
+    // A portrait card keeps its frame when the editor switches to it from a landscape scene.
+    ...(specs[id].frame === 'portrait' ? { frameFormat: 'portrait' as const } : {}),
+  }))
 }
 
 export function castPackCategories<Id extends Scene3DTemplateId>(ids: readonly Id[], specs: Record<Id, CastPackSpec>): Record<Id, 'cinema' | 'music'> {
@@ -97,20 +108,34 @@ function bindSlot(slot: Scene3DSlot, roles: CastPackApplyOptions['roles'], alias
   return next
 }
 
+/** The frame a card is built in: its own unless the caller asks for the other orientation. */
+function castPackFrame(spec: CastPackSpec, options: CastPackApplyOptions): 'portrait' | 'landscape' {
+  if (options.orientation) return options.orientation === 'vertical' ? 'portrait' : 'landscape'
+  return spec.frame ?? 'landscape'
+}
+
+/** A portrait card's camera is already drawn for 9:16; built landscape it is adapted back with the inverse scales. */
+function castPackCamera(spec: CastPackSpec, width: number, height: number) {
+  const camera = structuredClone(spec.camera)
+  if (spec.frame === 'portrait') return height > width ? camera : fromPortraitCamera(camera)
+  return adaptAuthoredCameraToFrame(camera, width, height)
+}
+
 export function buildCastPackDocument(spec: CastPackSpec, id: Scene3DTemplateId, options: CastPackApplyOptions): Scene3DDocument {
   const doc = createDefaultScene3DDocument()
-  const vertical = options.orientation === 'vertical'
+  const size = SCENE3D_FRAME_FORMATS[castPackFrame(spec, options)]
   doc.templateId = id
   doc.duration = spec.duration
-  doc.width = vertical ? 720 : 1280
-  doc.height = vertical ? 1280 : 720
+  doc.width = size.width
+  doc.height = size.height
   doc.dressing = spec.dressing
   if (spec.environment) doc.environment = structuredClone(spec.environment)
   if (spec.look) doc.look = { ...spec.look }
   doc.light = { ...spec.light, direction: [...spec.light.direction] as Vec3 }
-  doc.camera = adaptAuthoredCameraToFrame(structuredClone(spec.camera), doc.width, doc.height)
+  doc.camera = castPackCamera(spec, doc.width, doc.height)
   doc.slots = spec.slots.map(slot => bindSlot(slot, options.roles, spec.aliases))
   if (spec.backdrop) doc.screenBackdrop = parseScreenBackdrop(spec.backdrop)
   doc.sfx = parseSceneFx(spec.sfx ?? [])
+  if (spec.worldSfx) doc.worldSfx = parseWorldSfx(spec.worldSfx)
   return doc
 }

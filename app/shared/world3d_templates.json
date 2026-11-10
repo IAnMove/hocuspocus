@@ -49244,6 +49244,202 @@
       "travel": false,
       "reference": null,
       "source": "builtin"
+    },
+    {
+      "id": "vertical-dialogue-stack",
+      "titleEs": "Plano de dos vertical, cerca y lejos",
+      "titleEn": "Portrait two-shot, near and far",
+      "category": "cinema",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "portrait",
+      "width": 720,
+      "height": 1280,
+      "duration": 6,
+      "playbackSpeed": 1,
+      "dressing": "citadel",
+      "setting": "studio",
+      "lineEs": "Plano de dos vertical 9:16 en profundidad: subject_1 cerca a la izquierda de perfil y subject_2 detrás a la derecha de cara a cámara, una cara sobre la otra, hablando. Empuje lento; el tercio inferior queda libre para subtítulos.",
+      "lineEn": "A 9:16 portrait two-shot in depth: subject_1 near on the left in profile, subject_2 behind on the right facing the camera, one face above the other. A slow push; the lower third stays free for captions.",
+      "notesEs": "GLB o recorte de imagen, interlocutor cercano (subject_1); GLB o recorte de imagen, interlocutor lejano (subject_2); Imagen de fondo opcional (plano de entorno)",
+      "notesEn": "GLB or image cutout, near speaker (subject_1); GLB or image cutout, far speaker (subject_2); Optional background image (environment plate)",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "subject_2",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "subject_1",
+          "role": "subject_1",
+          "media": "model3d"
+        },
+        {
+          "id": "subject_2",
+          "role": "subject_2",
+          "media": "model3d"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [],
+      "tags": [],
+      "shot": "medium",
+      "distance": 3.3,
+      "moves": [
+        "push"
+      ],
+      "moving": [
+        "camera"
+      ],
+      "still": false,
+      "subjects": 2,
+      "props": 0,
+      "screens": 0,
+      "authoredFor": "model",
+      "floor": "tiles",
+      "uses": [
+        "dialogue",
+        "talk"
+      ],
+      "kind": "scene",
+      "place": "citadel",
+      "travel": false,
+      "reference": null,
+      "source": "builtin"
+    },
+    {
+      "id": "vertical-dialogue-ots-a",
+      "titleEs": "Por encima del hombro vertical A",
+      "titleEn": "Portrait over the shoulder A",
+      "category": "cinema",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "portrait",
+      "width": 720,
+      "height": 1280,
+      "duration": 6,
+      "playbackSpeed": 1,
+      "dressing": "citadel",
+      "setting": "studio",
+      "lineEs": "Por encima del hombro en vertical 9:16: el hombro de subject_1 ocupa el borde izquierdo y la cara de subject_2 queda alta a la derecha, hablando, plano medio corto con empuje lento. Monta B para el contraplano; las miradas casan.",
+      "lineEn": "A 9:16 portrait over-the-shoulder: subject_1’s shoulder fills the left edge and subject_2’s face sits high on the right, medium-close with a slow push. Cut with B for the reverse; the eyelines match.",
+      "notesEs": "GLB o recorte de imagen, interlocutor izquierdo, de espaldas (subject_1); GLB o recorte de imagen, interlocutor derecho, encuadrado (subject_2); Imagen de fondo opcional (plano de entorno)",
+      "notesEn": "GLB or image cutout, left speaker, seen from behind (subject_1); GLB or image cutout, right speaker, framed (subject_2); Optional background image (environment plate)",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "subject_2",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "subject_1",
+          "role": "subject_1",
+          "media": "model3d"
+        },
+        {
+          "id": "subject_2",
+          "role": "subject_2",
+          "media": "model3d"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [],
+      "tags": [],
+      "shot": "close",
+      "distance": 2,
+      "moves": [
+        "push",
+        "slide"
+      ],
+      "moving": [
+        "camera"
+      ],
+      "still": false,
+      "subjects": 2,
+      "props": 0,
+      "screens": 0,
+      "authoredFor": "model",
+      "floor": "tiles",
+      "uses": [
+        "dialogue",
+        "talk"
+      ],
+      "kind": "scene",
+      "place": "citadel",
+      "travel": false,
+      "reference": null,
+      "source": "builtin"
+    },
+    {
+      "id": "vertical-talk-bust",
+      "titleEs": "Busto vertical a cámara",
+      "titleEn": "Portrait bust to camera",
+      "category": "cinema",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "portrait",
+      "width": 720,
+      "height": 1280,
+      "duration": 6,
+      "playbackSpeed": 1,
+      "dressing": "citadel",
+      "setting": "studio",
+      "lineEs": "Una figura habla directamente a cámara en un busto vertical 9:16: los ojos en el tercio superior, algo de aire sobre la cabeza y el pecho en el tercio inferior para los subtítulos, con un empuje lento.",
+      "lineEn": "One figure talks straight to the lens in a 9:16 portrait bust: the eyes on the upper third, a little air over the head and the chest in the lower third for captions, with a slow push.",
+      "notesEs": "GLB o recorte de imagen, hablante (subject_1); Imagen de fondo opcional (plano de entorno)",
+      "notesEn": "GLB or image cutout, speaker (subject_1); Optional background image (environment plate)",
+      "preview": null,
+      "roles": [
+        "subject_1",
+        "background"
+      ],
+      "required": [
+        {
+          "id": "subject_1",
+          "role": "subject_1",
+          "media": "model3d"
+        },
+        {
+          "id": "background",
+          "role": "background",
+          "media": "image"
+        }
+      ],
+      "dependencies": [],
+      "tags": [],
+      "shot": "close",
+      "distance": 1.4,
+      "moves": [
+        "push"
+      ],
+      "moving": [
+        "camera"
+      ],
+      "still": false,
+      "subjects": 1,
+      "props": 0,
+      "screens": 0,
+      "authoredFor": "model",
+      "floor": "tiles",
+      "uses": [
+        "talk",
+        "reaction"
+      ],
+      "kind": "scene",
+      "place": "citadel",
+      "travel": false,
+      "reference": null,
+      "source": "builtin"
     }
   ]
 }

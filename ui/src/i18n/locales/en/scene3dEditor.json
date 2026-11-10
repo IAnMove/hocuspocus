@@ -3676,6 +3676,18 @@
     "group-circle": {
       "title": "Circle of five",
       "description": "Five figures in a circle facing the centre; the camera orbits slowly above them. Three of them are the prop slots person_3 to person_5."
+    },
+    "vertical-dialogue-stack": {
+      "title": "Portrait two-shot, near and far",
+      "description": "A 9:16 portrait two-shot in depth: subject_1 near on the left in profile, subject_2 behind on the right facing the camera, one face above the other. A slow push; the lower third stays free for captions."
+    },
+    "vertical-dialogue-ots-a": {
+      "title": "Portrait over the shoulder A",
+      "description": "A 9:16 portrait over-the-shoulder: subject_1’s shoulder fills the left edge and subject_2’s face sits high on the right, medium-close with a slow push. Cut with B for the reverse; the eyelines match."
+    },
+    "vertical-talk-bust": {
+      "title": "Portrait bust to camera",
+      "description": "One figure talks straight to the lens in a 9:16 portrait bust: the eyes on the upper third, a little air over the head and the chest in the lower third for captions, with a slow push."
     }
   },
   "atmos": {

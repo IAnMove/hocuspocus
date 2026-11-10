@@ -8,6 +8,7 @@ import { animeCard } from './animeTemplates'
 import { dialogueCard } from './dialogueTemplates'
 import { reactionCard } from './reactionTemplates'
 import { groupCard } from './groupTemplates'
+import { verticalCard } from './verticalTemplates'
 import { SCENE3D_TEMPLATES, type Scene3DTemplate, type Scene3DTemplateId } from './templates'
 import { filterScene3DTemplates, kindsIn, settingsIn, type TemplateSetting } from './templateFilters'
 import type { TemplateKind } from './templateTraits.ts'
@@ -223,7 +224,7 @@ function ShotPreview({ picked, current, locale }: { picked?: Pick; current?: Sce
   </div>
   const item = SCENE3D_TEMPLATES.find(template => template.id === picked.id)
   const card = campaignCard(picked.id, locale) ?? actionCard(picked.id, locale) ?? animeCard(picked.id, locale)
-    ?? dialogueCard(picked.id, locale) ?? reactionCard(picked.id, locale) ?? groupCard(picked.id, locale)
+    ?? dialogueCard(picked.id, locale) ?? reactionCard(picked.id, locale) ?? groupCard(picked.id, locale) ?? verticalCard(picked.id, locale)
   return <div className="space-y-3" data-testid="world3d-shot-preview">
     <Scene3DTemplateThumb id={picked.id} portrait={item?.frameFormat === 'portrait'} fill />
     <h3 className="text-base font-semibold text-text-primary">{t(`template.${picked.id}.title`)}</h3>

@@ -3676,6 +3676,18 @@
     "group-circle": {
       "title": "Círculo de cinco",
       "description": "Cinco figuras en círculo mirando al centro; la cámara orbita despacio por encima. Tres de ellas son los huecos prop person_3 a person_5."
+    },
+    "vertical-dialogue-stack": {
+      "title": "Plano de dos vertical, cerca y lejos",
+      "description": "Plano de dos vertical 9:16 en profundidad: subject_1 cerca a la izquierda de perfil y subject_2 detrás a la derecha de cara a cámara, una cara sobre la otra, hablando. Empuje lento; el tercio inferior queda libre para subtítulos."
+    },
+    "vertical-dialogue-ots-a": {
+      "title": "Por encima del hombro vertical A",
+      "description": "Por encima del hombro en vertical 9:16: el hombro de subject_1 ocupa el borde izquierdo y la cara de subject_2 queda alta a la derecha, hablando, plano medio corto con empuje lento. Monta B para el contraplano; las miradas casan."
+    },
+    "vertical-talk-bust": {
+      "title": "Busto vertical a cámara",
+      "description": "Una figura habla directamente a cámara en un busto vertical 9:16: los ojos en el tercio superior, algo de aire sobre la cabeza y el pecho en el tercio inferior para los subtítulos, con un empuje lento."
     }
   },
   "atmos": {
