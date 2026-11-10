@@ -464,9 +464,13 @@ GLB animation name, or null), `motion`, `position`, `scale`, `rotationX`, `rotat
 turn, bob or slide without a skeleton. `rotationX`, `rotationY`, `rotationZ` and `motion.turnTo` are radians (6.283 is one full turn). Omitted `rotationX` and `rotationZ` leave the stored tilt. `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
 
-**Template + cast + painted set.** Prefer this over writing a `document`: ask
-`world3d.templates.suggest` for the shot as the brief phrases it (line, speakers,
-place, mood, beat), or pick a template whose roles fit (`world3d.templates.list`
+**Template + cast + painted set.** Prefer this over writing a `document`: call
+`world3d.templates.plan` once with every 3D shot of the plan (`shots: [{key, text,
+speakers, place}]`, `format: "portrait"` for a vertical video): it chooses a card
+for each with variety and returns the `scene3d` keys to copy (`template`,
+`roomCamera`, `world`, and `width`/`height` for a portrait frame). Then ask
+`world3d.templates.suggest` only to replace one shot (line, speakers, place, mood,
+beat), or pick a template whose roles fit (`world3d.templates.list`
 with `roles: ["subject_1", "background"]`, a `setting` such as `sea` or `city`,
 or the filters `kind`, `place` and `travel`) and assign only what changes. Every
 card says what the built shot does: `shot` (close, medium, wide, far, plate),

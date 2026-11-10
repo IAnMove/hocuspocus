@@ -73,6 +73,26 @@ The shot as a writer phrases it: `{line?, speakers? (0–4), place?, mood?, beat
 
 The Series profile and the Wizard reach `suggest` too; a Series `scene3d.template` takes any id it returns, `stage-*` included.
 
+`suggest` and `catalog` take `compact: true` (the title in `language`, `en` by default): every card is `{id, title, shot, moves, format, why}`, about 200 bytes instead of 1.2 KB. The default reply is unchanged.
+
+### `world3d.templates.plan`
+
+The cards of a whole list of shots in one call: `{shots: [{key, text?, speakers?, subjects?, place?, shot?, moving?}], format?, avoid?, per_shot? (1–3, default 3), seed?, language?}`. **Call it once for the video; use `suggest` only to replace one shot.** `speakers` works as in `suggest`; `subjects` (0–2) is how many subject slots the cast needs and is never dropped, so a card without the role (`cast_role_not_on_card`) cannot come back; `shot` is the size you would like; `moving` asks a card that moves (`true`) or a fixed one (`false`). Shipped cards only: the production compiler does not read a personal template.
+
+Every shot is ranked with the same search as `catalog` (`search_pool`), asked several ways, strictest first: the line with the filters its speakers imply, the place words on their own (a long line no longer loses the place to the half-of-the-words rule), then the asked `use` dropped and, in a portrait frame, landscape cards. A place word is a word of a place group of the vocabulary (`cocina` and `kitchen` are one place; times of day, looks and verbs are not) and weighs more than the free words of the line. The list is then chosen in order:
+
+- the same template and camera never twice in a row; a template at most twice in the plan (four when its place comes up again); a template or camera seen in the last four shots, the same shot size or camera move as the shot before, cost points; `avoid` ids are never taken; a `still` card is the primary only when nothing else is left; the `seed` decides near-ties and a shot with no words is chosen by variety, never by catalogue order. The same input and seed give the same plan; another seed another valid one.
+- shots that name one place keep one family. A place with a `stage-<mold>` card: the same card with another `roomCamera` each time (`{"template": "stage-cocina", "roomCamera": "ots_a"}`; the `shot` of the entry is what that camera shows). A place with only scenes: the shots play their cards `world`-ed in the best scene of that place (`{"template": "dialogue-ots-a", "world": "atmos-desert-low"}`), so two travellers who talk in the desert get a dialogue card in the desert although no desert card has `dialogue`. A stage is never a `world`.
+- `format: "portrait"` takes the portrait cards. Only 105 cards are portrait and none carries `dialogue` (one has two subjects, one is a `talk`), so with `speakers` the plan falls back to landscape cards: the entry says `adapted: true` and a one-line `note`, and its `scene3d` has `width: 1080, height: 1920` so the export reframes the camera. Close and medium cards, and a stage seen from `ots_a`, `ots_b` or `close_*`, adapt best; wide and far ones lose the cast.
+
+Each entry is `{key, primary, alternates, warnings}`, the cards in the compact shape plus `scene3d`, the keys to copy into the shot: a production `scene3d` takes all of them; a Series `kind: "3d"` shot reads `template` and `roomCamera` (its frame and set come from the series). The reply ends with `summary: {templates_used, repeats, formats}`. `warnings` are `code: message` strings: `repeat` (nothing else fit), `no_card`, `still_card`, `place` (no card is at that place). The plan never writes.
+
+| input | reply |
+| --- | --- |
+| three shots «in the kitchen», `speakers` 2, 1, 2 | `stage-cocina` three times with `roomCamera` `two_shot` (wide), `close_1` (medium), `wide`: the same room, three framings |
+| two shots of travellers who talk in the desert, `speakers` 2 | `cine-walk-and-talk`, then `dialogue-ots-a`, both with `world: atmos-desert-low`, although no desert card has `dialogue` |
+| twelve shots with no words, `speakers` 2 | twelve different stages; seed 1 gives another twelve |
+
 ## What a card says
 
 Besides its id, titles, one line in each language, format, duration, roles, `required` holes, `dependencies` and `tags`, every shipped card carries traits that the exporter reads from the built document (`ui/src/features/scene3d/templateTraits.ts`) or that the stage builder measures from the mold. They are estimates of the authored scene, never hand-written claims, and the same numbers the editor's gallery search uses.
@@ -102,7 +122,7 @@ A shipped or stage card's `preview` is `/api/v1/world3d/templates/<id>/thumbnail
 
 ## Choosing a shot that will not look frozen
 
-- **Ask `suggest` first, then `list` with filters.** `suggest` turns the line, the speakers, the place and the mood into the filters and the words for you and says why each card fits. `list` with `{"use": "dialogue", "subjects": 2}` or `{"kind": "stage", "place": "bar"}` is the long list behind it.
+- **Plan first, then replace one shot.** `world3d.templates.plan` with every shot of the video chooses a card for each with variety and gives the `scene3d` keys to copy. Then `suggest` (the line, the speakers, the place and the mood turned into filters and words, with a reason for each card) or `list` with `{"use": "dialogue", "subjects": 2}` or `{"kind": "stage", "place": "bar"}` to replace one of them.
 - **Read `moving` before `uses`.** A `still` card plus a picture, or plus a GLB with no clip, exports a photograph held for the whole shot. Give it a clip (`cast[].clip`, `clips`), a `motion`, a `camera`, a `frame`, or play it in a `world` whose set moves; or take a card whose `moves` are not empty. Production dry runs warn `template_still` for exactly that case.
 - **Match the shot to the line.** `talk` and `dialogue` for speech (`dialogue-ots-a`/`-b`, `dialogue-table`, `face-to-face`, `cine-over-the-shoulder-frame`, any `stage-*`); `reaction` for a beat on one face (`reaction-push-face`, `reaction-look-up`, `face-reaction-arc`); `figure` and `establishing` to show a body or a place; `action`, `speed` and `impact` when something must travel, hit or explode (`speed-foot-chase`, `anime-sword-clash`); `transition` for a cut of 3 s or less (`transition-*`, `anime-eyecatch`).
 - **Count the people.** `subjects` is how many the template seats; a third person is `add: true` as a prop, or a `group-*` card whose extra places are prop slots (`person_3`…). Two subjects on a `far` card are tiny: five stages are `far` from `two_shot`, so pick `roomCamera: ots_a` or `close_1` for their lines.
@@ -344,4 +364,5 @@ A film in one shot: `put` a blank stage, `instantiate`, `patch` the models in wi
 - A crash after the scene file is written and before the intent file is stored can still leave a duplicate. A transport retry in the same process does not.
 - Two objects with the same role, such as the two props in `dark-still-salt-sea`, must be named by object id. The role resolves only when exactly one slot has it.
 - A two-character shot keeps `subject_2`. Supplying one subject does not remove the other hole.
+- Portrait is thin: 105 cards, none for `dialogue`, one for `talk`. A vertical dialogue plan is landscape cards reframed (`adapted`); it needs portrait versions of the dialogue geometries before it frames as well as the landscape ones.
 - `reference` is a still of the real technique from a film, never a frame of ours; `preview` is ours, and shows empty slots as placeholders, not your cast.
