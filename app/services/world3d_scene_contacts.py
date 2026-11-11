@@ -25,15 +25,15 @@ import logging
 
 import numpy as np
 
-from services.world3d_contact_poses import CORE, Person, Piece, measure_scene
-from services.world3d_rest_place import HIP_ABOVE_SEAT, _edge_distance
+from services.world3d_contact_poses import Person, Piece, measure_scene
+from services.world3d_rest_place import CLIP_NAME, HIP_ABOVE_SEAT, _edge_distance
 from services.world3d_seats import table_top
 
 LOG = logging.getLogger(__name__)
 MAX_PEOPLE = 8
-SEATED = 0.75                 # hips lower than this share of their standing height are seated
 TOLERANCE_M = 0.05            # hips this close to where the seat puts them are on it
 THROUGH_M = 0.03              # a limb this deep in furniture goes through it
+REACH = 0.6                   # arm lengths from the seated chest to the table's edge that the forearms still rest on
 MAX_WARNINGS = 12
 _KIND_HEIGHTS = (("chair", 0.9), ("silla", 0.9), ("table", 0.75), ("mesa", 0.75), ("desk", 0.75), ("escritorio", 0.75), ("bed", 0.55),
                  ("cama", 0.55), ("sofa", 0.85), ("stool", 0.46), ("taburete", 0.46), ("bench", 0.45), ("banco", 0.45))
@@ -45,8 +45,8 @@ def scene_contacts(document: dict, workspace: str | None, workspace_dir) -> dict
         return {"contacts": [], "warnings": []}
     try:
         seconds = float(document.get("duration") or 0) / 2
-        people, pieces = measure_scene(document, workspace, workspace_dir, seconds)
-        report = _Report(pieces)
+        people, pieces, drawn = measure_scene(document, workspace, workspace_dir, seconds)
+        report = _Report(pieces, drawn)
         for person in people[:MAX_PEOPLE]:
             report.check(person)
         report.tables(people[:MAX_PEOPLE])
@@ -57,8 +57,9 @@ def scene_contacts(document: dict, workspace: str | None, workspace_dir) -> dict
 
 
 class _Report:
-    def __init__(self, pieces: list[Piece]) -> None:
+    def __init__(self, pieces: list[Piece], drawn: dict) -> None:
         self.pieces = {piece.id: piece for piece in pieces}
+        self.drawn = drawn
         self.rows: list[dict] = []
         self.warnings: list[str] = []
         self.sized: set[str] = set()
@@ -71,13 +72,14 @@ class _Report:
                 row["fix"].append(fix)
 
     def check(self, person: Person) -> None:
-        seated = person.hips_height < SEATED * person.rest_hips_height
+        # A sitter resolved by rest is seated even when its thighs slope down to the floor (a seat too high for its legs).
+        seated = person.seated() or (isinstance(person.slot.get("rest"), dict) and (person.slot.get("clip") or {}).get("name") == CLIP_NAME)
         row = {"id": person.id, "pose": "seated" if seated else "standing", "hipsM": _rounded(person.joints["Hips"])}
         self.rows.append(row)
         rest = person.slot.get("rest") if isinstance(person.slot.get("rest"), dict) else {}
-        for name in (rest.get("on"), rest.get("at")):
-            if name in self.pieces:
-                self._size(row, self.pieces[name], person, "at" if name == rest.get("at") else "on")
+        for name, use in ((rest.get("on"), "on"), (rest.get("at"), "at")):
+            if name in self.drawn:
+                self._size(row, name, use)
         if seated:
             self._seat(row, person, rest)
         if person.slot.get("collide") is not False:
@@ -153,15 +155,18 @@ class _Report:
     # ---------------------------------------------------------------------------------------------------------- limbs
 
     def _through(self, row: dict, person: Person, seated: bool) -> None:
-        samples = person.samples() if seated else [(name.lower(), person.joints[name]) for name in CORE if name in person.joints]
-        if not samples:
-            return
-        points = np.array([point for _label, point in samples])
+        """Limbs (and, standing, the body) that run inside a piece of furniture or cross its faces."""
         found = []
         for piece in self.pieces.values():
-            depth, part = piece.depth(points)
-            for index in np.flatnonzero(depth >= THROUGH_M):
-                found.append((float(depth[index]), samples[index][0], piece, int(part[index]), points[index]))
+            for label, start, end in person.segments():
+                points = start + (end - start) * np.linspace(0.0, 1.0, 5)[:, None]
+                depth, parts = piece.depth(points)
+                crossed = piece.crossed(start, end)
+                deepest = int(np.argmax(depth))
+                if depth[deepest] >= THROUGH_M or len(crossed):
+                    part = int(parts[deepest]) if depth[deepest] > 0 else int(crossed[0])
+                    found.append((float(depth[deepest]), label, piece, part, points[deepest] if depth[deepest] > 0 else (start + end) / 2))
+        core = {"back", "neck"}
         seen = set()
         for depth, label, piece, part, point in sorted(found, key=lambda item: -item[0]):
             if (label, piece.id) in seen or len(seen) >= 4:
@@ -169,15 +174,17 @@ class _Report:
             seen.add((label, piece.id))
             row.setdefault("through", []).append({"limb": label, "object": piece.id, "part": piece.part_name(part), "depthM": round(depth, 3),
                                                   "at": _rounded(point)})
-            self._through_warning(row, person, seated, label, piece, part, depth)
+            standing_inside = not seated and label in core and depth >= THROUGH_M
+            self._through_warning(row, person, standing_inside, label, piece, part, depth)
 
-    def _through_warning(self, row: dict, person: Person, seated: bool, label: str, piece: Piece, part: int, depth: float) -> None:
-        if seated:
-            self.warn(row, f"limb_through_object: {person.id}'s {label} is {depth:.2f} m inside {piece.id} ({piece.part_name(part)}); move "
-                           f"{piece.id} or the seat at least {depth + 0.05:.2f} m apart (beside gap), or give {person.id} collide: false")
+    def _through_warning(self, row: dict, person: Person, inside_it: bool, label: str, piece: Piece, part: int, depth: float) -> None:
+        if inside_it:
+            self.warn(row, f"inside_object: {person.id} stands inside {piece.id} ({piece.part_name(part)}), its {label} {depth:.2f} m deep; move "
+                           f"{person.id} out of it, or seat it: {person.id}: rest {{pose: \"sit\", on: \"{piece.id}\"}}")
             return
-        self.warn(row, f"inside_object: {person.id} stands still inside {piece.id} ({piece.part_name(part)}), {label} {depth:.2f} m deep; move "
-                       f"{person.id} out of it, or seat it: {person.id}: rest {{pose: \"sit\", on: \"{piece.id}\"}}")
+        how = f"{depth:.2f} m inside" if depth >= THROUGH_M else "through"
+        self.warn(row, f"limb_through_object: {person.id}'s {label} goes {how} {piece.id} ({piece.part_name(part)}); move {person.id} or "
+                       f"{piece.id} apart (a seat: rest re-places the sitter; beside gap moves a chair), or give {person.id} collide: false")
 
     # ---------------------------------------------------------------------------------------------------------- tables
 
@@ -217,11 +224,12 @@ class _Report:
         edge = _edge_distance(corners, chest, person.forward)
         seat = (person.slot.get("rest") or {}).get("on")
         if edge is None:
-            self.warn(row, f"at_not_in_front: {piece.id} is not in front of {person.id}; turn the seat toward it: give {seat} beside "
-                           f"{{object: \"{piece.id}\", facing: \"object\"}}", {"object_id": seat, "beside": {"object": piece.id, "facing": "object"}})
+            turn = {"beside": {"object": piece.id, "facing": "object"}}
+            self.warn(row, f"at_not_in_front: {piece.id} is not in front of {person.id}; turn the seat toward it: give {seat} {_text(turn)}",
+                      {"object_id": seat, **turn})
             return
         row["at"]["edgeM"] = round(edge, 3)
-        reach, wanted = 0.45 * person.size["arm"], 0.2 * person.size["arm"]
+        reach, wanted = REACH * person.size["arm"], 0.3 * person.size["arm"]
         if edge <= reach:
             return
         near = self.pieces.get(seat)
@@ -229,19 +237,21 @@ class _Report:
         gap = beside.get("gap", 0.0) - (edge - wanted) if beside.get("object") == piece.id else None
         binding = {**beside, "gap": round(gap, 2)} if gap is not None else {"object": piece.id, "facing": "object", "gap": 0.0}
         self.warn(row, f"at_out_of_reach: {person.id}'s chest is {edge:.2f} m from {piece.id}'s edge and the forearms reach "
-                       f"{reach:.2f} m; give {seat} beside {_text(binding)}", {"object_id": seat, "beside": binding})
+                       f"{reach:.2f} m; give {seat} {_text({'beside': binding})}", {"object_id": seat, "beside": binding})
 
     # ------------------------------------------------------------------------------------------------------------ size
 
-    def _size(self, row: dict, piece: Piece, person: Person, use: str) -> None:
-        if piece.id in self.sized or abs(piece.drawn_height() - 1.7) > 0.01 or abs(float(piece.slot.get("scale") or 1) - 1) > 1e-6:
+    def _size(self, row: dict, name: str, use: str) -> None:
+        height, scale = self.drawn[name]
+        if name in self.sized or abs(height - 1.7) > 0.01 or abs(scale - 1) > 1e-6:
             return
-        self.sized.add(piece.id)
-        named = " ".join(str(piece.slot.get(key) or "") for key in ("id", "sourceUrl")).lower()
-        height = next((value for word, value in _KIND_HEIGHTS if word in named), 0.75 if use == "at" else 0.9)
-        self.warn(row, f"furniture_size_unusual: {piece.id} is drawn 1.70 m tall (every model is 1.7 m x scale until it is sized); a "
-                       f"{'table' if use == 'at' else 'seat'} like it is about {height:g} m: give {piece.id} height {height:g}, then read the "
-                       f"seat and table warnings again", {"object_id": piece.id, "height": height})
+        self.sized.add(name)
+        piece = self.pieces.get(name)
+        named = " ".join(str(piece.slot.get(key) or "") for key in ("id", "sourceUrl")).lower() if piece else name.lower()
+        wanted = next((value for word, value in _KIND_HEIGHTS if word in named), 0.75 if use == "at" else 0.9)
+        self.warn(row, f"furniture_size_unusual: {name} is drawn 1.70 m tall (every model is 1.7 m x scale until it is sized); a "
+                       f"{'table' if use == 'at' else 'seat'} like it is about {wanted:g} m: give {name} height {wanted:g}, then read the "
+                       f"seat and table warnings again", {"object_id": name, "height": wanted})
 
 
 def _span(person: Person) -> tuple[float, float, float]:
@@ -261,8 +271,20 @@ def _resize(piece: Piece, wanted: float, current: float, key: str) -> dict:
 
 
 def _text(binding: dict) -> str:
-    import json
-    return " ".join(f"{key} {json.dumps(value)}" for key, value in binding.items())
+    """A binding as the warnings write it: ``height 0.75``, ``beside {object: "table", gap: -0.1}``."""
+    return ", ".join(f"{key} {_js(value)}" for key, value in binding.items())
+
+
+def _js(value) -> str:
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{key}: {_js(item)}" for key, item in value.items()) + "}"
+    if isinstance(value, str):
+        return f'"{value}"'
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
 
 
 def _rounded(point) -> list:

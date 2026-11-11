@@ -53,7 +53,7 @@ def sit_clip(rig: Rig, seat, duration: float = 3.0, stand_up: bool = False, look
         if not isinstance(hands, (list, tuple)) or len(hands) != 2:
             raise InvalidInput("hands must be [left wrist, right wrist], two [x, y, z] points")
         for side, point in zip(("Left", "Right"), hands):
-            pose.reach_world(side, _point(point, "hands"), pole=(0.4, -1.0, -0.6))
+            pose.reach_world(side, _point(point, "hands"), pole=(1.0, -0.4, -0.3))      # elbows out, a little down: forearms on the top
     _aim_head(pose, rig, look, times, seconds)
     return _clip(pose, rig, times, seconds, name, warnings)
 

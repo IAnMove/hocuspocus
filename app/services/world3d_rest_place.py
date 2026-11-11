@@ -37,9 +37,9 @@ FOLDER = "world3d-rest"
 CLIP_NAME = "Rest Sit"
 CLIP_SECONDS = 2.0
 HOLD_AT = 1.9                 # seated from 1.0 s of the 2 s clip
-VERSION = "rest-sit-2"
+VERSION = "rest-sit-3"
 HIP_ABOVE_SEAT = 0.16         # leg lengths: sit_clip's hips joint over the seat surface
-HAND_LIFT_M = 0.035           # a wrist rests this far over the table top
+HAND_LIFT_M = 0.04           # a wrist rests this far over the table top, 0.12 m in from its edge
 BAKER = None                  # tests replace the worker call (routers.model3d_animate.execute_animate)
 
 
@@ -291,7 +291,7 @@ def _hands(rest: dict, slots: dict, joints: dict, seat_model: np.ndarray, size: 
         if edge is None:
             return None
         goal = world.copy()
-        goal[[0, 2]] += facing * (edge + 0.1)
+        goal[[0, 2]] += facing * (edge + 0.12)
         goal[1] = corners[:, 1].mean() + HAND_LIFT_M
         if np.linalg.norm(goal - world) > 0.95 * size["arm"] * factor:
             return None
