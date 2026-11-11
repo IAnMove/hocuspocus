@@ -183,7 +183,8 @@ class _Report:
 
     def _through_warning(self, row: dict, person: Person, seated: bool, hit: tuple) -> None:
         label, piece, part, depth, out = hit
-        text, fix = _standing_fix(person, piece) if not seated else _seated_fix(person, piece, depth, out)
+        seats = {name: item.slot for name, item in self.pieces.items()}
+        text, fix = _standing_fix(person, piece) if not seated else _seated_fix(person, piece, depth, out, seats)
         where = f"{piece.id} ({piece.part_name(part)})"
         if not seated and label in ("back", "neck") and depth >= THROUGH_M:
             self.warn(row, f"inside_object: {person.id} stands inside {where}, its {label} {depth:.2f} m deep; {text}", *([fix] if fix else []))
@@ -285,10 +286,15 @@ def _standing_fix(person: Person, piece: Piece) -> tuple[str, dict | None]:
     return f"move {person.id} {distance:.2f} m out of it: position {_js(moved)}", {"object_id": person.id, "position": moved}
 
 
-def _seated_fix(person: Person, piece: Piece, depth: float, out: np.ndarray) -> tuple[str, dict | None]:
+def _seated_fix(person: Person, piece: Piece, depth: float, out: np.ndarray, seats: dict) -> tuple[str, dict | None]:
     """A sitter's limb in a table or another piece: raise or lower its top when the way out is up or down, else move it away."""
     rest = person.slot.get("rest") if isinstance(person.slot.get("rest"), dict) else {}
-    if piece.id == rest.get("on") or not out.any():
+    if piece.id == rest.get("on"):
+        return f"move {person.id} or {piece.id} apart (rest re-places the sitter; a beside gap moves a chair)", None
+    gap = _gap_fix(rest, piece, depth, seats)
+    if gap is not None:
+        return gap
+    if not out.any():
         return f"move {person.id} or {piece.id} apart (rest re-places the sitter; a beside gap moves a chair)", None
     top = float(piece.frame.to_world([[0.0, piece.box["max"][1], 0.0]])[0][1]) - piece.floor_y()
     wanted = top + (depth + 0.05) * (-1 if out[1] > 0 else 1)
@@ -299,6 +305,15 @@ def _seated_fix(person: Person, piece: Piece, depth: float, out: np.ndarray) -> 
     step = -out * (depth + 0.05)
     moved = [round(float(position[axis] + step[axis]), 3) for axis in range(3)]
     return f"move {piece.id} {depth + 0.05:.2f} m away: position {_js(moved)}", {"object_id": piece.id, "position": moved}
+
+
+def _gap_fix(rest: dict, piece: Piece, depth: float, seats: dict) -> tuple[str, dict] | None:
+    """The sitter's seat stands beside this piece and follows it: open the gap between them instead."""
+    near = (seats.get(rest.get("on")) or {}).get("beside") or {}
+    if near.get("object") != piece.id:
+        return None
+    binding = {"beside": {**near, "gap": round(float(near.get("gap", 0.0)) + max(depth, 0.05) + 0.05, 2)}}
+    return f"move {rest['on']} back from {piece.id}: give {rest['on']} {_text(binding)}", {"object_id": rest["on"], **binding}
 
 
 def _span(person: Person) -> tuple[float, float, float]:
