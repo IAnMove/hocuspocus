@@ -13,7 +13,8 @@ from services.agent_activity import caller_scope
 from services.scene_documents import WORKSPACE_RE
 from services.world3d_template_catalog import World3DTemplateError, list_user_templates, user_template_row
 from services.world3d_template_commands import command_catalog, command_handlers
-from services.world3d_scenes import working_scenes
+from services.world3d_scene_arrange import arrange_document
+from services.world3d_scenes import World3DSceneError, working_scenes
 from services.world3d_thumbnails import RETRY_AFTER_SECONDS, ThumbnailNeedsExamples, ThumbnailUnavailable, World3DThumbnails
 
 
@@ -64,6 +65,17 @@ def create_world3d_templates_router(workspace_dir: Callable[[str], str],
         _check_workspace(workspace)
         scenes = working_scenes(workspace, workspace_dir, unpublished_only=not all)
         return {"version": 1, "workspace": workspace, "total": len(scenes), "scenes": scenes[:max(1, min(500, limit))]}
+
+    @router.post("/arrange")
+    def arrange(body: dict):
+        """The editor's Sit on and Real height controls: ``{workspace, document, bindings}`` through the same bindings as
+        ``world3d.scene.patch`` (height, furniture, beside, rest); returns the arranged document, warnings and layout."""
+        workspace = body.get("workspace") if isinstance(body.get("workspace"), str) else ""
+        _check_workspace(workspace)
+        try:
+            return {"version": 1, "workspace": workspace, **arrange_document(workspace, body.get("document"), body.get("bindings"), workspace_dir)}
+        except World3DSceneError as error:
+            raise HTTPException(error.status, detail={"code": error.code, "message": str(error)}) from error
 
     @router.get("/{template_id}/thumbnail")
     def template_thumbnail(template_id: str, request: Request):

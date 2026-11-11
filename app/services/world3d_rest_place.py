@@ -154,7 +154,7 @@ def _beside_turn(facing, out: np.ndarray, mover: Furniture, target: dict) -> flo
 def place_rest(slot: dict, slots: dict, document: dict, workspace: str, workspace_dir) -> list[str]:
     """Seat one character on ``rest.on``; the warnings say what could not be done."""
     rest, name = slot["rest"], slot.get("id")
-    base = slot.setdefault("restBase", {key: slot.get(key) for key in BASE_FIELDS})
+    base = slot.setdefault("restBase", _fresh_base(slot, workspace, workspace_dir))
     source_path, _reason = resolve_workspace_glb(base.get("sourceUrl"), workspace, workspace_dir)
     body = body_of(source_path) if source_path is not None else None
     if body is None:
@@ -176,6 +176,22 @@ def place_rest(slot: dict, slots: dict, document: dict, workspace: str, workspac
         return warnings + [f"rest_unresolved: {name} could not be given its seated clip ({error})"]
     _apply(slot, plan, index, workspace)
     return warnings
+
+
+def _fresh_base(slot: dict, workspace: str, workspace_dir) -> dict:
+    """What the object had before it sat. A slot already showing a seated file (copied, or opened from a scene that lost
+    its ``restBase``) goes back to the character file that seated file was made from (``.rest.json`` beside it)."""
+    base = {key: slot.get(key) for key in BASE_FIELDS}
+    path, _reason = resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir)
+    record = path.with_suffix(".rest.json") if path is not None and path.parent.name == FOLDER else None
+    if record is not None and record.is_file():
+        try:
+            original = json.loads(record.read_text(encoding="utf-8")).get("sourceUrl")
+        except (OSError, ValueError):
+            original = None
+        if isinstance(original, str) and original:
+            base.update(sourceUrl=original, sourceRef=None, clip=None, clips=None)
+    return base
 
 
 def _seat(rest: dict, furniture: Furniture):
@@ -336,7 +352,7 @@ def _bake(source: Path, plan: dict, workspace: str, workspace_dir) -> int:
     plan["relative"] = relative
     from services.world3d_body_pose import body_of as read_body
     if not target.is_file():
-        _write_derived(source, target, request)
+        _write_derived(source, target, {**request, "sourceUrl": plan["base"]["sourceUrl"]})
     body = read_body(target)
     if body is None or CLIP_NAME not in body.clips:
         raise RuntimeError("the seated clip is missing from the derived file")
@@ -359,6 +375,7 @@ def _write_derived(source: Path, target: Path, request: dict) -> None:
     sidecar = source.with_suffix(".humanoid.json")
     if sidecar.is_file():
         shutil.copyfile(sidecar, target.with_suffix(".humanoid.json"))
+    target.with_suffix(".rest.json").write_text(json.dumps({"sourceUrl": request["sourceUrl"]}), encoding="utf-8")
 
 
 def _apply(slot: dict, plan: dict, index: int, workspace: str) -> None:

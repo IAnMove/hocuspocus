@@ -355,3 +355,27 @@ def test_the_derived_clip_is_made_by_the_real_worker(stage, monkeypatch):
                            {"object_id": "pet", "add": True, "source_url": PET, "height": 1.75, "rest": {"pose": "sit", "on": "chair"}}])
     assert abs(contact(viewed, "pet")["seat"]["gapM"]) < 0.01 and not codes(viewed)
     assert np.isfinite(joints(stage, viewed, "pet").joints["Hips"]).all()
+
+
+def test_the_editor_arranges_its_own_document_with_the_same_bindings(stage):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.world3d_templates import create_world3d_templates_router
+    patched = patch(stage, table_and_two())
+    document = inspect_scene(WORKSPACE, SCENE, workspace_dir(stage))["document"]
+    editor = {**document, "slots": [{key: value for key, value in slot.items() if key not in ("rest", "restBase", "beside")}
+                                     for slot in document["slots"]]}
+    app = FastAPI()
+    app.include_router(create_world3d_templates_router(workspace_dir(stage), thumbnails=object()))
+    reply = TestClient(app).post("/api/v1/world3d/templates/arrange", json={"workspace": WORKSPACE, "document": editor, "bindings": [
+        {"object_id": "chair_a", "beside": {"object": "table", "side": "left"}},
+        {"object_id": "tall", "rest": {"pose": "sit", "on": "chair_a", "at": "table"}}]})
+    assert reply.status_code == 200, reply.text
+    arranged = reply.json()
+    assert slot_of(arranged, "tall")["position"] == slot_of(patched, "tall")["position"]
+    assert slot_of(arranged, "tall")["sourceUrl"] == slot_of(patched, "tall")["sourceUrl"], "the same derived file, made once"
+    assert contact(arranged, "tall")["pose"] == "seated"
+    assert inspect_scene(WORKSPACE, SCENE, workspace_dir(stage))["revision"] == patched["revision"], "the working scene is not touched"
+    refused = TestClient(app).post("/api/v1/world3d/templates/arrange", json={"workspace": WORKSPACE, "document": editor,
+                                                                              "bindings": [{"object_id": "tall", "rest": {"pose": "lie", "on": "x"}}]})
+    assert refused.status_code == 422 and refused.json()["detail"]["code"] == "invalid_rest"
