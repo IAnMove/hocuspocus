@@ -23,6 +23,8 @@ _LEGS = [_DEFORM.index(f"{side}{part}") for side in ("Left", "Right") for part i
 # Share of a skirt that follows the thighs at the knees and below; the rest stays with the hips, so a
 # high knee lift swings a robe about half as far as the thigh.
 _THIGHS = 0.55
+# Share at the hem of a skirt above bare legs (``layout_hints``): the hem moves with the legs it meets.
+_SKIRT_THIGHS = 0.95
 _CLOTH_SMOOTH = 8
 _SKIRT_SMOOTH = 4
 # The blur crosses the hip line of a robe over this share of the height.
@@ -75,12 +77,16 @@ def _skirt_weights(points: np.ndarray, skeleton: dict) -> np.ndarray:
     knees = (float(world["LeftLeg"][1]) + float(world["RightLeg"][1])) * 0.5
     centre = (left[0] + right[0]) * 0.5
     spread = max(abs(float(left[0] - right[0])) * 0.5, float(skeleton["height"]) * 0.02)
-    down = _smoothstep((top - points[:, 1]) / max(top - knees, 1e-6))
+    robe = skeleton.get("robe") or {}
+    # A skirt the legs show under follows the thighs nearly all the way at its hem, so it meets the bare leg there;
+    # a long robe hangs halfway between the hips and the thighs at the knees.
+    bottom, share = (float(robe["hem"]), _SKIRT_THIGHS) if robe.get("skirt") else (knees, _THIGHS)
+    down = _smoothstep((top - points[:, 1]) / max(top - bottom, 1e-6))
     side = _smoothstep(((points[:, 0] - centre) * float(skeleton.get("facing", 1)) / spread + 1.0) * 0.5)
     weights = np.zeros((len(points), len(_DEFORM)))
-    weights[:, _DEFORM.index("Hips")] = 1.0 - _THIGHS * down
-    weights[:, _DEFORM.index("LeftUpLeg")] = _THIGHS * down * side
-    weights[:, _DEFORM.index("RightUpLeg")] = _THIGHS * down * (1.0 - side)
+    weights[:, _DEFORM.index("Hips")] = 1.0 - share * down
+    weights[:, _DEFORM.index("LeftUpLeg")] = share * down * side
+    weights[:, _DEFORM.index("RightUpLeg")] = share * down * (1.0 - side)
     return weights
 
 
