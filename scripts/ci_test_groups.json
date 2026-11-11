@@ -349,7 +349,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 5320,
+      "weight": 5326,
       "paths": [
         "tests/characterization/test_models_and_config.py",
         "tests/characterization/test_model3d_rig.py",
@@ -679,7 +679,8 @@
         "tests/test_model3d_make_gates.py",
         "tests/test_world3d_scene_rest.py",
         "tests/test_world3d_seats.py",
-        "tests/test_world3d_bed_sides.py"
+        "tests/test_world3d_bed_sides.py",
+        "tests/test_world3d_scene_still.py"
       ]
     }
   ],

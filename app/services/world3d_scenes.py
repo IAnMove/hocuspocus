@@ -402,7 +402,7 @@ def preview_scene(workspace: str, scene_id: str, workspace_dir, *, times=None, e
     frames = rendered.get("frames") or []
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
-        "times": [frame.get("time") for frame in frames], "frames": frames,
+        "times": [frame.get("time") for frame in frames], "frames": [{key: value for key, value in frame.items() if key != "png"} for frame in frames],
         "pending": rendered.get("pending") or _pending(record["document"]),
         "loadErrors": rendered.get("loadErrors") or [],
         "images": [{"mimeType": "image/png", "data": frame.get("png")} for frame in frames if frame.get("png")],

@@ -15,7 +15,7 @@ warning ends with the fix in numbers and field names to paste into ``world3d.sce
 - ``at_height_unusual``, ``at_out_of_reach``, ``at_not_in_front``: the table of ``rest.at`` is not between the seated hips
   and chest, too far for the forearms, or not in front;
 - ``furniture_size_unusual``: a seat or a table someone uses is still drawn 1.7 m tall (every model is 1.7 m x scale
-  until it is sized).
+  until it is sized); a GLB named like furniture is said so before anyone uses it (``world3d_furniture_sizes``).
 
 ``collide: false`` exempts a person from the limb and inside checks.
 """
@@ -29,6 +29,7 @@ import logging
 import numpy as np
 
 from services.world3d_contact_poses import Person, Piece, measure_scene
+from services.world3d_furniture_sizes import size_hints
 from services.world3d_scene_bounds import resolve_workspace_glb
 from services.world3d_rest_hands import edge_distance as _edge_distance
 from services.world3d_rest_place import CLIP_NAME, HIP_ABOVE_SEAT
@@ -92,7 +93,9 @@ def _judged(document: dict, workspace: str, workspace_dir) -> dict:
     report.tables(people[:MAX_PEOPLE])
     for row in report.rows:
         row.pop("seatTooHigh", None)
-    return {"contacts": report.rows, "warnings": report.warnings[:MAX_WARNINGS]}
+    rests = [person.slot.get("rest") for person in people[:MAX_PEOPLE] if isinstance(person.slot.get("rest"), dict)]
+    used = {name for rest in rests for name in (rest.get("on"), rest.get("at")) if name}
+    return {"contacts": report.rows, "warnings": (report.warnings + size_hints(pieces, drawn, used | report.sized))[:MAX_WARNINGS]}
 
 
 class _Report:

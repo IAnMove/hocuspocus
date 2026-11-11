@@ -2,11 +2,14 @@
 
 - ``world3d.scene.patch`` takes ``width``, ``height`` (even pixels, ``FRAME_PIXELS``; 1080 x 1920 is a vertical 9:16,
   1920 x 1080 a 16:9) and ``fps`` (24, 30 or 60).
-- ``world3d.scene.instantiate`` with ``template_id: "blank"`` makes an empty stage (a fixed camera on the origin, one
-  sun, no objects) of ``width`` x ``height`` and ``duration``: a sitter, a table, a bed need no card.
+- ``world3d.scene.instantiate`` with ``template_id: "blank"`` makes an empty stage (a fixed camera at [0, 1.6, 6] on the
+  origin, a sun, a soft sky light, a pale floor and sky, no objects) of ``width`` x ``height`` and ``duration``: a sitter,
+  a table, a bed need no card.
 - ``world3d.scene.publish`` takes ``name``: the saved scene is ``<name>-<scene id>``.
 """
 from __future__ import annotations
+
+import copy
 
 from services.world3d_blank_scene import CAMERA_FAMILIES, blank_document
 
@@ -20,9 +23,21 @@ CAMERA_DOC = ("Camera fields to merge (family, fov, eye, look, framing, ...). fa
               "encounter, follow, pursuit, side and front frame and follow the subjects, the others are moving presets; a framing "
               "{targetSlot, anchor, from, to, lookFrom, lookTo} moves any family but fixed. shake: [{start, end, amplitude (m), "
               "frequency (Hz), seed?, decay? (1/s)}] in scene seconds; [] removes it.")
-BLANK_DOC = ("template_id \"blank\" makes an empty stage (a fixed camera on the origin, one sun, no objects) of width x height pixels "
-             "(1280 x 720 unless given) lasting duration seconds (5): add objects to it with world3d.scene.patch bindings "
-             "(add: true). No card is needed to seat people at a table or on a bed.")
+STILL_DOC = ("still: true paints real frames instead: the export's own renderer at each time (at most 3; "
+             "default the middle of the shot), 640 px on the long side, models, clips, faces and light as the MP4 will show them; "
+             "seconds to a minute per frame on CPU. Use it to check people seated at a table or on a bed, and what a camera sees.")
+BLANK_DOC = ("template_id \"blank\" makes an empty stage of width x height pixels (1280 x 720 unless given) lasting duration seconds "
+             "(5): a fixed camera at eye [0, 1.6, 6] looking at [0, 1, 0] (fov 45; set your own with camera), a sun and a soft sky "
+             "light, a pale grey floor disc 23 m across under a pale sky, no walls and no objects. Add objects with world3d.scene.patch "
+             "bindings (add: true). No card is needed to seat people at a table or on a bed.")
+# The blank stage's look: a light floor and sky and a soft fill, so a bare scene reads (the editor's defaults are a dark
+# studio). Document fields only: the renderer is unchanged.
+BLANK_LOOK = {
+    "environment": {"reflectiveFloor": False, "platform": False, "bloom": 0, "floorColor": "#b9b5ad"},
+    "screenBackdrop": {"color": "#cdd6de", "sfx": []},
+    "lighting": {"environment": {"source": "room", "intensity": 0.7, "rotation": 0, "background": "set", "blur": 0}},
+    "look": {"toneMapping": "aces", "exposure": -0.2},
+}
 
 
 def _refuse(code: str, message: str):
@@ -53,4 +68,6 @@ def blank_scene(data: dict) -> dict:
     if type(duration) not in (int, float) or not 0 < duration <= 600:
         raise _refuse("invalid_duration", "duration must be between 0 and 600 seconds")
     width, height = (_pixels(data.get(key, fallback), key) for key, fallback in (("width", 1280), ("height", 720)))
-    return blank_document(width=width, height=height, duration=duration)
+    document = {**blank_document(width=width, height=height, duration=duration), **copy.deepcopy(BLANK_LOOK)}
+    document["templateId"] = BLANK_ID          # the editor opens it on its plain stage; replies and names say "blank"
+    return document

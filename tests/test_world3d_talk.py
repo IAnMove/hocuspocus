@@ -25,7 +25,7 @@ def kit(**extra):
 
 
 LINES = [{"start": 1.0, "cues": [{"start": 0, "end": 0.2, "value": "D"}, {"start": 0.2, "end": 0.4, "value": "E"},
-                                 {"start": 0.4, "end": 0.6, "value": "X"}, {"start": 0.6, "end": 0.5, "value": "D"}],
+                                 {"start": 0.4, "end": 0.6, "value": "X"}, {"start": 0.6, "end": 0.6, "value": "D"}],
           "audio": "/api/v1/file/voices/lola-0.wav?workspace=studio"},
          {"start": 3.5, "cues": [{"start": 0, "end": 0.3, "value": "B"}]}]
 
@@ -116,3 +116,13 @@ def test_a_talk_with_no_cues_says_so(tmp_path):
                                                                     "object_id": "hero", "kit_id": "lola", "lines": [{"start": 0, "cues": []}]}}
     scene = execute_command("world3d.scene.talk", arguments, root)["result"]["scene"]
     assert scene["talk"]["cues"] == 0 and "talk_no_cues" in scene["warnings"]
+
+
+def test_a_cue_that_is_not_start_end_value_with_a_mouth_sound_is_refused():
+    for bad, words in (({"start": 0, "end": 0.2, "value": "Z"}, "'Z' is not a mouth sound"), ("D", "is not an object"),
+                       ({"start": 0.3, "end": 0.1, "value": "D"}, "ends (0.1 s) before it starts")):
+        with pytest.raises(TalkError) as refused:
+            talk_block(kit(), [{"start": 0, "cues": [bad]}])
+        assert refused.value.code == "invalid_cue" and words in str(refused.value) and "Rhubarb letter" in str(refused.value)
+    assert talk_block(kit(), [{"start": 0, "cues": [{"start": 0, "end": 0.2, "value": "rest"}]}])["cues"][0]["state"] == "closed", \
+        "a phonetic name is a sound too"

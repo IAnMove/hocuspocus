@@ -15,6 +15,7 @@ from services.humanoid_rig.animate import animate_humanoid
 from services.humanoid_rig.rig import rig_humanoid
 from services.procedural_3d.compose import compose_glb
 from services.world3d_contact_poses import measure_scene
+from services.world3d_blank_scene import editor_warnings
 from services.world3d_scene_bounds import MODEL_HEIGHT
 from services.world3d_scenes import World3DSceneError, inspect_scene, patch_scene
 from services.world3d_slot_fields import clip_cues
@@ -468,6 +469,12 @@ def test_an_agent_starts_from_an_empty_stage_sets_the_frame_and_names_the_scene(
         "workspace": WORKSPACE, "scene_id": scene["sceneId"], "base_revision": 1, "width": 1920, "height": 1080, "fps": 24}}, workspace_dir(tmp_path))
     document = changed["result"]["scene"]["document"]
     assert (document["width"], document["height"], document["fps"]) == (1920, 1080, 24)
+    assert scene["templateId"] == changed["result"]["scene"]["templateId"] == changed["result"]["scene"]["traits"]["templateId"] == "blank", \
+        "the reply says blank, also after a patch"
+    assert document["camera"]["eye"] == [0, 1.6, 6] and document["camera"]["look"] == [0, 1, 0]
+    assert document["environment"]["floorColor"] == "#b9b5ad" and document["screenBackdrop"]["color"] == "#cdd6de", "a light floor and sky"
+    assert document["lighting"]["environment"]["source"] == "room" and document["environment"]["bloom"] == 0
+    assert not editor_warnings(document), "the editor opens it"
     with pytest.raises(Exception):
         execute_command("world3d.scene.patch", {"version": 1, "intent_id": "frame-2", "input": {
             "workspace": WORKSPACE, "scene_id": scene["sceneId"], "base_revision": 2, "width": 1081}}, workspace_dir(tmp_path))
@@ -475,6 +482,11 @@ def test_an_agent_starts_from_an_empty_stage_sets_the_frame_and_names_the_scene(
     patch_schema = json.dumps(tools["world3d.scene.patch"]["inputSchema"])
     assert "fixed holds eye and look still" in patch_schema and "orbit" in patch_schema and "1080 x 1920" in patch_schema
     assert 'template_id "blank"' in tools["world3d.scene.instantiate"]["description"]
+    assert "eye [0, 1.6, 6]" in tools["world3d.scene.instantiate"]["description"] and "no walls" in tools["world3d.scene.instantiate"]["description"]
+    recipe = tools["world3d.scene.patch"]["description"]
+    assert "needs add: true" in recipe and 'assets {workspace, kind: "model3d"}' in recipe
+    assert "characters.list" in recipe and "still: true" in tools["world3d.scene.preview"]["description"]
+    assert "about 40 degrees" in tools["world3d.scene.face"]["description"] and "{start, end, value}" in tools["world3d.scene.talk"]["description"]
     assert "No card is needed" in tools["world3d.scene.patch"]["description"]
     assert "scenes.world3d.export.receipt" in tools["world3d.scene.publish"]["description"]
 
@@ -483,4 +495,17 @@ def test_exports_say_which_receipt_to_poll():
     from services.jobs_wait import command_catalog as jobs_catalog
     from services.world3d_export import command_catalog as export_catalog
     assert "scenes.world3d.export.receipt" in jobs_catalog()[0]["description"]
-    assert "not jobs.wait" in next(tool for tool in export_catalog() if tool["name"] == "scenes.world3d.export")["description"]
+    export = next(tool for tool in export_catalog() if tool["name"] == "scenes.world3d.export")["description"]
+    assert "not jobs.wait" in export and "as world3d.scene.publish returns it" in export
+
+
+def test_a_table_glb_without_its_height_is_said_before_anyone_sits_at_it(stage):
+    (stage / WORKSPACE / "cc0-table.glb").write_bytes((stage / WORKSPACE / "crate.glb").read_bytes())
+    unsized = patch(stage, [{"object_id": "dining", "add": True, "source_url": "/api/v1/file/cc0-table.glb?workspace=studio"}])
+    assert "furniture_size_unusual: dining is drawn 1.70 m tall (every model is 1.7 m x scale until it is sized); a table is about 0.75 m: " \
+           "give dining height 0.75" in unsized["warnings"]
+    tall = patch(stage, [{"object_id": "dining", "height": 1.3}])
+    assert any(line.startswith("furniture_size_unusual: dining is 1.30 m high and a table is 0.6 to 1.15 m") for line in tall["warnings"])
+    fine = patch(stage, [{"object_id": "dining", "height": 0.75}, {"object_id": "tablet", "add": True,
+                                                                     "source_url": "/api/v1/file/crate.glb?workspace=studio"}])
+    assert not [line for line in fine["warnings"] if line.startswith("furniture_size_unusual")], "a table at 0.75 m, and a crate named tablet"

@@ -489,17 +489,20 @@ def create_wangp_mcp_router(*, handlers, journal_path, token_getter=None, comman
 
 
 def _tool_content(value):
-    """Keep the JSON summary first. Image blocks follow so a vision client can see the preview."""
-    content = [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}]
+    """Keep the JSON summary first. Image blocks follow so a vision client can see the preview; the summary names them
+    instead of carrying the same base64 again."""
     images = value.get('images') if isinstance(value, dict) else None
     if not isinstance(images, list):
-        return content
+        return [{'type': 'text', 'text': json.dumps(value, ensure_ascii=False)}]
+    blocks, shown = [], []
     for image in images:
         if not isinstance(image, dict) or not isinstance(image.get('data'), str) or not image['data']:
+            shown.append(image)
             continue
         mime = image.get('mimeType')
-        content.append({'type': 'image', 'mimeType': mime if isinstance(mime, str) and mime else 'image/png', 'data': image['data']})
-    return content
+        blocks.append({'type': 'image', 'mimeType': mime if isinstance(mime, str) and mime else 'image/png', 'data': image['data']})
+        shown.append({**image, 'data': f'(image block {len(blocks)} below)'})
+    return [{'type': 'text', 'text': json.dumps({**value, 'images': shown}, ensure_ascii=False)}, *blocks]
 
 
 def _tool_result_is_error(value):
