@@ -124,7 +124,7 @@ def test_beside_refuses_cycles_unknown_objects_and_removing_what_it_names(stage)
                   {"object_id": "chair", "add": True, "furniture": "chair", "beside": {"object": "table"}}])
     with pytest.raises(World3DSceneError, match="beside_cycle|circle"):
         patch(stage, [{"object_id": "table", "beside": {"object": "chair"}}])
-    with pytest.raises(World3DSceneError, match="not a 3D model object"):
+    with pytest.raises(World3DSceneError, match="is not an object of the scene"):
         patch(stage, [{"object_id": "chair", "beside": {"object": "sofa"}}])
     with pytest.raises(World3DSceneError, match="item_in_use|before removing"):
         patch(stage, [{"object_id": "table", "remove": True}])
@@ -394,3 +394,63 @@ def test_a_beat_that_acts_stands_the_sitter_up_and_says_so(stage):
     assert any(line.startswith("rest_released: pet") for line in acted["warnings"])
     assert "rest" not in slot_of(acted, "pet") and slot_of(acted, "pet")["sourceUrl"] == PET
     assert "Sit Down" in [cue["clip"]["name"] for cue in slot_of(acted, "pet")["clips"]]
+
+
+def test_without_a_table_the_hands_rest_on_the_thighs_or_beside_the_hips_on_a_wide_seat(stage):
+    viewed = patch(stage, [{"object_id": "chair", "add": True, "furniture": {"kind": "chair", "seat": 0.4}},
+                           {"object_id": "pet", "add": True, "source_url": PET, "height": 1.75, "rest": {"pose": "sit", "on": "chair"}}])
+    lap = joints(stage, viewed, "pet").joints
+    for side in ("Left", "Right"):
+        thigh = (lap[f"{side}UpLeg"] + lap[f"{side}Leg"]) / 2
+        assert lap[f"{side}Hand"][1] > thigh[1] and np.linalg.norm(lap[f"{side}Hand"][[0, 2]] - thigh[[0, 2]]) < 0.2, "a hand on its thigh"
+    bed = patch(stage, [{"object_id": "bed", "add": True, "furniture": {"kind": "bed", "height": 0.4}, "position": [3, 0, 0]},
+                        {"object_id": "pet", "rest": {"pose": "sit", "on": "bed"}}])
+    hands = joints(stage, bed, "pet").joints
+    top = item(bed, "bed")["boundsM"]["min"][1] + 0.4
+    for side in ("Left", "Right"):
+        assert hands[f"{side}Hand"][1] == pytest.approx(top + rest_place.HAND_LIFT_M, abs=0.04), "on the mattress beside the hips"
+    assert abs(hands["LeftHand"][0] - hands["RightHand"][0]) > abs(hands["LeftUpLeg"][0] - hands["RightUpLeg"][0]) + 0.2
+    arms = patch(stage, [{"object_id": "pet", "rest": {"pose": "sit", "on": "bed", "hands": False}}])
+    assert slot_of(arms, "pet")["sourceUrl"] != slot_of(bed, "pet")["sourceUrl"], "hands: false bakes the clip's own arms"
+
+
+def test_a_grown_body_that_would_need_a_childs_seat_is_told_its_legs_look_wrong(stage):
+    viewed = patch(stage, [{"object_id": "chair", "add": True, "furniture": {"kind": "chair", "seat": 0.62}},
+                           {"object_id": "pet", "add": True, "source_url": PET, "height": 1.5, "rest": {"pose": "sit", "on": "chair"}}])
+    line = next(line for line in viewed["warnings"] if line.startswith("legs_unusually_short"))
+    assert "pet is 1.50 m tall" in line and "a child's" in line and "Re-rig" in line
+    assert "seat_height_unusual" not in codes(viewed) and not any(fix.get("object_id") == "chair" for fix in contact(viewed, "pet").get("fix", []))
+
+
+def test_a_character_is_drawn_at_the_height_its_maker_recorded(stage):
+    (stage / WORKSPACE / "pet.meta.json").write_text(json.dumps({"params": {"traits": {"height": 1.62}}}))
+    viewed = patch(stage, [{"object_id": "pet", "add": True, "source_url": PET}])
+    assert slot_of(viewed, "pet")["scale"] == pytest.approx(1.62 / MODEL_HEIGHT) and item(viewed, "pet")["recordedHeightM"] == 1.62
+    chosen = patch(stage, [{"object_id": "other", "add": True, "source_url": PET, "height": 1.8}])
+    assert slot_of(chosen, "other")["scale"] == pytest.approx(1.8 / MODEL_HEIGHT), "a height given wins"
+    plain = patch(stage, [{"object_id": "crate", "add": True, "source_url": "/api/v1/file/crate.glb?workspace=studio"}])
+    assert slot_of(plain, "crate")["scale"] == 1 and "recordedHeightM" not in item(plain, "crate")
+
+
+def test_a_stage_rooms_bed_and_desk_are_named_like_objects(stage):
+    room = {"mold": {"id": "dormitorio", "blocks": [{"id": "bed", "kind": "bed", "box": [0, 0, -1.3, 1.7, 0.45, 2.2]},
+                                                    {"id": "desk", "kind": "desk", "box": [2.5, 0, -1.0, 1.2, 0.68, 0.7]},
+                                                    {"id": "sofa", "kind": "sofa", "box": [-2.5, 0, -1.0, 2.0, 0.8, 0.8]}]}}
+    path = stage / WORKSPACE / "world3d-edits" / f"{SCENE}.json"
+    record = json.loads(path.read_text())
+    record["document"]["room"] = room
+    path.write_text(json.dumps(record))
+    viewed = patch(stage, [{"object_id": "pet", "add": True, "source_url": PET, "height": 1.75, "rest": {"pose": "sit", "on": "bed"}}])
+    row = contact(viewed, "pet")
+    assert row["pose"] == "seated" and row["seat"]["object"] == "bed" and row["seat"]["topM"] == pytest.approx(0.45, abs=0.01)
+    assert not row.get("issues"), viewed["warnings"]
+    sofa = patch(stage, [{"object_id": "pet", "rest": {"pose": "sit", "on": "sofa"}}])
+    assert any(line.startswith("seat_surface_guessed: sofa is a box of the stage's set") for line in sofa["warnings"])
+    chair = patch(stage, [{"object_id": "chair", "add": True, "furniture": {"kind": "chair", "seat": 0.4},
+                           "beside": {"object": "desk", "side": "front"}}, {"object_id": "pet", "rest": {"pose": "sit", "on": "chair", "at": "desk"}}])
+    assert contact(chair, "pet")["at"]["object"] == "desk"
+    with pytest.raises(World3DSceneError) as refused:
+        patch(stage, [{"object_id": "marker", "add": True}, {"object_id": "pet", "rest": {"pose": "sit", "on": "wardrobe"}}])
+    message = str(refused.value)
+    assert "the stage's own furniture (part of the set, named as it is): bed, desk, sofa" in message
+    assert "empty markers (bind a GLB first): marker" in message and "add: true, furniture" in message

@@ -267,12 +267,17 @@ class _Report:
         for (person, row), (lowest, _ideal, highest) in zip(members, spans):
             row["at"] = {"object": piece.id, "topM": round(top_y - floor, 3), "rangeM": [round(lowest - floor, 3), round(highest - floor, 3)]}
             if piece.id not in self.sized and not lowest <= top_y <= highest:
-                fix = _resize(piece, common - floor, top_y - floor, "height")
-                self.warn(row, f"at_height_unusual: {piece.id}'s top is {top_y - floor:.2f} m high; seated, {person.id}'s hips are at "
-                               f"{person.joints['Hips'][1] - floor:.2f} m and chest at {person.joints['Spine2'][1] - floor:.2f} m, so a table "
-                               f"for {'everyone at it' if len(members) > 1 else person.id} is {common - floor:.2f} m: give {piece.id} {_text(fix)}",
-                          {"object_id": piece.id, **fix})
+                self._at_height(row, person, piece, (top_y - floor, common - floor, floor), len(members) > 1)
             self._reach(row, person, piece, corners)
+
+    def _at_height(self, row: dict, person: Person, piece: Piece, heights: tuple, shared: bool) -> None:
+        top, wanted, floor = heights
+        fix = None if piece.slot.get("roomBlock") else _resize(piece, wanted, top, "height")
+        how = (f"give {piece.id} {_text(fix)}" if fix else f"{piece.id} is part of the stage's set: add a table of that height, "
+               f"{{object_id: \"table\", add: true, furniture: {{kind: \"table\", height: {wanted:.2f}}}}}, and seat them at it")
+        self.warn(row, f"at_height_unusual: {piece.id}'s top is {top:.2f} m high; seated, {person.id}'s hips are at "
+                       f"{person.joints['Hips'][1] - floor:.2f} m and chest at {person.joints['Spine2'][1] - floor:.2f} m, so a table "
+                       f"for {'everyone at it' if shared else person.id} is {wanted:.2f} m: {how}", *([{"object_id": piece.id, **fix}] if fix else []))
 
     def _reach(self, row: dict, person: Person, piece: Piece, corners: np.ndarray) -> None:
         chest = person.joints["Spine2"]
@@ -338,6 +343,8 @@ def _standing_fix(person: Person, piece: Piece) -> tuple[str, dict | None]:
 def _seated_fix(person: Person, piece: Piece, depth: float, out: np.ndarray, seats: dict) -> tuple[str, dict | None]:
     """A sitter's limb in a table or another piece: raise or lower its top when the way out is up or down, else move it away."""
     rest = person.slot.get("rest") if isinstance(person.slot.get("rest"), dict) else {}
+    if piece.slot.get("roomBlock"):
+        return f"{piece.id} is part of the stage's set: move {person.id} (its seat's beside gap or position)", None
     if piece.id == rest.get("on"):
         return f"move {person.id} or {piece.id} apart (rest re-places the sitter; a beside gap moves a chair)", None
     gap = _gap_fix(rest, piece, depth, seats)

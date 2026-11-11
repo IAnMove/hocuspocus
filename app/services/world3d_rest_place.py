@@ -28,6 +28,7 @@ import numpy as np
 from services.world3d_body_pose import body_of, measures
 from services.world3d_mesh_solid import mesh_of
 from services.world3d_rest_fields import BASE_FIELDS
+from services.world3d_room_blocks import block_box, block_frame, block_mesh, block_parts, block_seat, block_slot, room_blocks
 from services.world3d_rest_hands import HAND_LIFT_M, Sitter, edge_distance as _edge_distance, resting_hands  # noqa: F401
 from services.world3d_scene_bounds import resolve_workspace_glb, slot_native_bounds, slot_native_parts
 from services.world3d_seats import seat_surface, table_top
@@ -48,6 +49,10 @@ class Furniture:
 
     def __init__(self, slot: dict, workspace: str, workspace_dir) -> None:
         self.slot = slot
+        if isinstance(slot.get("roomBlock"), dict):           # a box of the stage's room (world3d_room_blocks)
+            block = slot["roomBlock"]
+            self.box, self.ok, self.parts, self.mesh, self.frame = block_box(block), True, block_parts(block), block_mesh(block), block_frame()
+            return
         self.box = slot_native_bounds(slot, workspace, workspace_dir)
         self.ok = bool(self.box.get("ok"))
         self.parts = slot_native_parts(slot, workspace, workspace_dir)["parts"] if self.ok else []
@@ -70,7 +75,9 @@ class Furniture:
 def resolve_placing(document: dict, workspace: str | None, workspace_dir) -> list[str]:
     """Place every ``beside`` (in dependency order), then seat every ``rest``. Returns warnings; refuses unknown targets and cycles."""
     slots = {slot.get("id"): slot for slot in document.get("slots") or [] if isinstance(slot, dict)}
-    _check_targets(slots)
+    blocks = {name: {**block_slot(block), "roomBlock": block} for name, block in room_blocks(document).items() if name not in slots}
+    _check_targets(slots, blocks)
+    slots = {**blocks, **slots}
     if not workspace or workspace_dir is None:
         return []
     warnings: list[str] = []
@@ -86,15 +93,28 @@ def _refuse(code: str, message: str):
     return World3DSceneError(code, message)
 
 
-def _check_targets(slots: dict) -> None:
-    models = [key for key, slot in slots.items() if (slot.get("media") or "model3d") == "model3d"]
+def _check_targets(slots: dict, blocks: dict) -> None:
+    """``beside.object``, ``rest.on`` and ``rest.at`` name a 3D model object with its GLB bound, or a block of the stage's room."""
+    models = [key for key, slot in slots.items() if (slot.get("media") or "model3d") == "model3d" and slot.get("sourceUrl")]
     for key, slot in slots.items():
         named = [("beside.object", (slot.get("beside") or {}).get("object")), ("rest.on", (slot.get("rest") or {}).get("on")),
                  ("rest.at", (slot.get("rest") or {}).get("at"))]
         for field, target in named:
-            if target is not None and target not in models:
-                others = ", ".join(str(item) for item in models if item != key) or "none"
-                raise _refuse("unknown_object", f"{key}: {field} {target!r} is not a 3D model object of the scene (models: {others})")
+            if target is not None and target not in models and target not in blocks:
+                raise _refuse("unknown_object", _unknown(key, field, target, slots, models, blocks))
+
+
+def _unknown(key: str, field: str, target: str, slots: dict, models: list, blocks: dict) -> str:
+    markers = [name for name, slot in slots.items() if (slot.get("media") or "model3d") == "model3d" and not slot.get("sourceUrl")]
+    text = f"{key}: {field} {target!r} is not an object of the scene. 3D models: {', '.join(m for m in models if m != key) or 'none'}"
+    if target in markers:
+        text += f"; {target} is an empty marker: bind a GLB to it (source_url) first"
+    elif markers:
+        text += f"; empty markers (bind a GLB first): {', '.join(markers)}"
+    if blocks:
+        text += f"; the stage's own furniture (part of the set, named as it is): {', '.join(blocks)}"
+    return text + (f". To sit on or beside something new, add it: {{object_id: \"{target}\", add: true, furniture: {{kind: \"chair\" | "
+                   f"\"table\" | \"bed\" | …}}}}")
 
 
 def _beside_order(slots: dict) -> list[dict]:
@@ -196,6 +216,10 @@ def _fresh_base(slot: dict, workspace: str, workspace_dir) -> dict:
 
 def _seat(rest: dict, furniture: Furniture):
     surface = rest.get("surface")
+    if isinstance(furniture.slot.get("roomBlock"), dict) and not surface and block_seat(furniture.slot["roomBlock"]) is not None:
+        found = block_seat(furniture.slot["roomBlock"])
+        found.extra["block"] = True
+        return found
     if surface and "point" in surface:
         return _point_seat(surface["point"], furniture)
     return seat_surface(furniture.box, furniture.frame.factor, furniture.mesh, furniture.parts, surface)
@@ -211,6 +235,9 @@ def _point_seat(point: list, furniture: Furniture):
 def _seat_notes(name: str, on: str, seat) -> list[str]:
     if not seat.guessed:
         return []
+    if seat.extra.get("block"):
+        return [f"seat_surface_guessed: {on} is a box of the stage's set as tall as its back; {name} sits at {seat.extra.get('heightM', 0):.2f} m, "
+                f"a share of its height. For a real seat add one: {{object_id: \"seat_{name}\", add: true, furniture: {{kind: \"chair\"}}}}"]
     return [f"seat_surface_guessed: {on} is one mesh; {name} sits on its flat face at {seat.extra.get('heightM', 0):.2f} m found from its "
             f"faces. If that is not the seat give {name} rest {{pose: \"sit\", on: \"{on}\", surface: {{point: [x, y, z]}}}} (scene metres)"]
 

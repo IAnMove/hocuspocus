@@ -134,7 +134,14 @@ def measure_scene(document: dict, workspace: str, workspace_dir, seconds: float)
             people.append(found)
         elif found is not None:
             pieces.append(found)
-    return people, pieces, drawn
+    return people, pieces + _room_pieces(document, {piece.id for piece in pieces}), drawn
+
+
+def _room_pieces(document: dict, taken: set) -> list[Piece]:
+    """The stage's own furniture (``world3d_room_blocks``): boxes of the set a person sits on or knocks into."""
+    from services.world3d_room_blocks import block_box, block_frame, block_mesh, block_parts, block_slot, room_blocks
+    return [Piece(block_slot(block), block_box(block), block_parts(block), block_mesh(block), block_frame())
+            for name, block in room_blocks(document).items() if name not in taken]
 
 
 def _still_models(document: dict, workspace: str, workspace_dir):
