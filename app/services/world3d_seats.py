@@ -29,6 +29,7 @@ SEAT_RANGE_M = (0.1, 1.2)     # a seat's height above the furniture's foot, in m
 CLEAR_M = 0.25                # room above a seat for the body
 TOP_M = 0.3                   # a table top is at least this wide both ways
 BACK_M = 0.12                 # geometry this far above the seat is a backrest (or arms, a headboard)
+_GRID = 17                    # rays per side of the seat when looking for its backrest
 _SEAT_WORDS = re.compile(r"seat|mattress|cushion|asiento|colch[oó]n|coj[ií]n|saddle|sill[ií]n|futon|banco", re.IGNORECASE)
 _TOP_WORDS = re.compile(r"(^|[^a-z])top($|[^a-z])|tabletop|tablero|encimera|desktop|countertop", re.IGNORECASE)
 
@@ -156,25 +157,37 @@ def _from_boxes(box: dict, factor: float, parts: list[dict]) -> Surface | None:
 
 
 def _front(seat: Surface, factor: float, mesh: Mesh | None, box: dict) -> list | None:
-    """Away from what stands above the seat along one edge (a backrest), snapped to the nearest axis; None without one."""
+    """Away from what stands over one edge of the seat (a backrest), snapped to an axis; None without one.
+
+    Rays go up from a grid over the seat (and a band around it) from ``BACK_M`` above it. A row or column near one edge
+    that is mostly covered, with the opposite edge open, is the back. Arms cover both sides and cancel out."""
     if mesh is None:
         return None
-    points = mesh.triangles.reshape(-1, 3)
-    margin = 0.06 / factor
-    near = ((points[:, 0] >= seat.low[0] - margin) & (points[:, 0] <= seat.high[0] + margin)
-            & (points[:, 2] >= seat.low[1] - margin) & (points[:, 2] <= seat.high[1] + margin)
-            & (points[:, 1] >= seat.y + BACK_M / factor))
-    if not near.any():
-        return None
-    above = points[near]
-    centre = np.array(seat.center)
-    lean = np.array([above[:, 0].mean(), above[:, 2].mean()]) - centre
-    axis = int(np.argmax(np.abs(lean) / np.maximum(np.array(seat.size), 1e-9)))
-    if abs(lean[axis]) < 0.2 * seat.size[axis]:
-        return None                                            # arms on both sides, or something in the middle
-    along = seat.size[1 - axis]
-    if seat.size[axis] > 1.25 * along:
+    covered = _covered(seat, factor, mesh)
+    edge = _GRID // 4
+    rows, columns = covered.mean(axis=1), covered.mean(axis=0)
+    bands = {(0, -1): columns[:edge].max(), (0, 1): columns[-edge:].max(), (1, -1): rows[:edge].max(), (1, 1): rows[-edge:].max()}
+    axis = max((0, 1), key=lambda item: abs(bands[(item, -1)] - bands[(item, 1)]))
+    back = -1 if bands[(axis, -1)] > bands[(axis, 1)] else 1
+    if bands[(axis, back)] < 0.6 or bands[(axis, back)] - bands[(axis, -back)] < 0.4:
+        return None                                            # nothing over an edge, or arms on both sides
+    if seat.size[axis] > 1.25 * seat.size[1 - axis]:
         return None                                            # a headboard across a bed's short end
     front = [0.0, 0.0]
-    front[axis] = -1.0 if lean[axis] > 0 else 1.0
+    front[axis] = float(-back)
     return front
+
+
+def _covered(seat: Surface, factor: float, mesh: Mesh) -> np.ndarray:
+    """``[z row, x column]`` of the grid: True where something stands over the seat (or the band around it)."""
+    from services.world3d_mesh_solid import _hits
+    margin = 0.08 / factor
+    xs = np.linspace(seat.low[0] - margin, seat.high[0] + margin, _GRID)
+    zs = np.linspace(seat.low[1] - margin, seat.high[1] + margin, _GRID)
+    up, reach = np.array([0.0, 1.0, 0.0]), 1.0 / factor
+    grid = np.zeros((_GRID, _GRID), dtype=bool)
+    for row, z in enumerate(zs):
+        for column, x in enumerate(xs):
+            distances, _ = _hits(mesh, np.array([x, seat.y + BACK_M / factor, z]), up)
+            grid[row, column] = bool(len(distances)) and distances.min() < reach
+    return grid
