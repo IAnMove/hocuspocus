@@ -51,9 +51,9 @@ export function geometrySampleTimes(duration: number): number[] {
 
 /** Bodies seated with `rest` (`world3d.scene.patch`): the seat and the table they rest on or at, by id. Their boxes overlap
  * by design; the server's joint-based contact check (`layout.contacts`) judges those pairs instead. */
-export function restContacts(slots: readonly Pick<Scene3DSlot, 'id' | 'rest'>[]): Record<string, string[]> {
+export function restContacts(slots: readonly Pick<Scene3DSlot, 'id' | 'rest'>[] | undefined): Record<string, string[]> {
   const found: Record<string, string[]> = {}
-  for (const slot of slots) {
+  for (const slot of slots ?? []) {
     if (slot.rest?.on) found[slot.id] = [slot.rest.on, ...(slot.rest.at ? [slot.rest.at] : [])]
   }
   return found
