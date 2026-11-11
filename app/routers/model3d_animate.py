@@ -67,7 +67,7 @@ def command_catalog():
                                                                        "duration": {"type": "number", "minimum": 0.5, "maximum": 120},
                                                                        "name": {"type": "string", "minLength": 1, "maxLength": 60}}},
                                                           "interactions": {"type": "array", "minItems": 1, "maxItems": 8,
-                                                                           "description": "Clips that meet the scene, with model-space points: {kind: 'sit', seat: [x,y,z] top of the seat, stand_up?, look?}, {kind: 'reach', target, hand?: left|right|auto, hold?, look?}, {kind: 'look', target}; each takes duration (0.8-30 s) and name.",
+                                                                           "description": "Clips that meet the scene, with model-space points: {kind: 'sit', seat: [x,y,z] top of the seat, stand_up?, look?, hands? [left wrist, right wrist] points to rest the forearms on}, {kind: 'reach', target, hand?: left|right|auto, hold?, look?}, {kind: 'look', target}; each takes duration (0.8-30 s) and name.",
                                                                            "items": {"type": "object", "required": ["kind"],
                                                                                      "properties": {"kind": {"enum": ["sit", "reach", "look"]}}}}}}}}}]
 
@@ -163,7 +163,7 @@ def _path_duration(duration) -> float:
 
 
 _INTERACTION_FIELDS = {
-    "sit": ({"seat"}, {"duration", "stand_up", "look", "name"}),
+    "sit": ({"seat"}, {"duration", "stand_up", "look", "name", "hands"}),
     "reach": ({"target"}, {"duration", "hand", "hold", "look", "name"}),
     "look": ({"target"}, {"duration", "name"}),
 }
@@ -200,7 +200,15 @@ def _interaction(item) -> dict:
         clean["hand"] = item["hand"]
     if "name" in item:
         clean["name"] = _text(item, "name", 60)
+    if "hands" in item:
+        clean["hands"] = _hands(item["hands"])
     return clean
+
+
+def _hands(value) -> list[list[float]]:
+    if not isinstance(value, list) or len(value) != 2:
+        raise ValueError("hands must be [left wrist, right wrist], two [x, y, z] points")
+    return [_point3(item, "hands") for item in value]
 
 
 def _point3(value, label: str) -> list[float]:

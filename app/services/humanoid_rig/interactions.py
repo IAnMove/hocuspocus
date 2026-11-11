@@ -24,8 +24,10 @@ _HEAD_YAW, _HEAD_PITCH = 70.0, (-35.0, 45.0)
 _UNREACHABLE_LEAN = 0.5         # how far the body bends toward a target it cannot reach
 
 
-def sit_clip(rig: Rig, seat, duration: float = 3.0, stand_up: bool = False, look=None, name: str = "Sit") -> dict:
-    """Lower the hips onto ``seat`` (the middle of the seat's top surface) and stay; optionally stand again."""
+def sit_clip(rig: Rig, seat, duration: float = 3.0, stand_up: bool = False, look=None, name: str = "Sit", hands=None) -> dict:
+    """Lower the hips onto ``seat`` (the middle of the seat's top surface) and stay; optionally stand again.
+
+    ``hands`` (``[left wrist, right wrist]``, model-space points) rests the wrists there: forearms on a table top."""
     point = _point(seat, "seat")
     times, seconds = _times(duration)
     warnings: list[str] = []
@@ -47,6 +49,11 @@ def sit_clip(rig: Rig, seat, duration: float = 3.0, stand_up: bool = False, look
         pose.elbow(side, 14.0 + 40.0 * seated)
     if _knee_overreach(rig, target):
         warnings.append("seat_out_of_reach: the seat is too far from the feet; they leave the floor")
+    if hands is not None:
+        if not isinstance(hands, (list, tuple)) or len(hands) != 2:
+            raise InvalidInput("hands must be [left wrist, right wrist], two [x, y, z] points")
+        for side, point in zip(("Left", "Right"), hands):
+            pose.reach_world(side, _point(point, "hands"), pole=(0.4, -1.0, -0.6))
     _aim_head(pose, rig, look, times, seconds)
     return _clip(pose, rig, times, seconds, name, warnings)
 

@@ -25,10 +25,12 @@ from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
 from services.world3d_blank_scene import editor_warnings
-from services.world3d_scene_fit import apply_fit
 from services.world3d_scene_collisions import scene_collisions
+from services.world3d_scene_contacts import scene_contacts
 from services.world3d_scene_layout import scene_layout
 from services.world3d_scene_motion import bind_motion, retime as retime_motion
+from services.world3d_rest_fields import bind_declared, referenced
+from services.world3d_rest_place import resolve_placing
 from services.world3d_world_fx import set_world_fx, world_fx_view
 from services.world3d_stage_cards import is_stage
 from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
@@ -196,11 +198,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     document = record["document"]
     warnings = []
     _set_duration(document, changes)
-    bindings = _bindings(changes)
-    stand_ins: set[str] = set()
-    for binding in bindings:
-        warnings.extend(_bind(document, binding, stand_ins, workspace, workspace_dir))
-    _check_carriers(document["slots"], bindings)
+    stand_ins = apply_bindings(document, changes, warnings, workspace, workspace_dir)
     if "camera_template" in changes:
         warnings.extend(_set_camera_template(document, changes["camera_template"]))
     if isinstance(changes.get("camera"), dict):
@@ -231,6 +229,16 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     record["templateId"] = document.get("templateId") or record["templateId"]
     _write(workspace, scene_id, record, workspace_dir)
     return _view(scene_id, record, workspace, workspace_dir)
+
+
+def apply_bindings(document: dict, changes: dict, warnings: list, workspace: str | None, workspace_dir) -> set[str]:
+    """The bindings of a patch (or of the editor's arrange call), then ``beside`` and ``rest`` solved over the whole document."""
+    bindings, stand_ins = _bindings(changes), set()
+    for binding in bindings:
+        warnings.extend(_bind(document, binding, stand_ins, workspace, workspace_dir))
+    _check_carriers(document["slots"], bindings)
+    warnings.extend(resolve_placing(document, workspace, workspace_dir))
+    return stand_ins
 
 
 def update_scene(workspace: str, scene_id: str, workspace_dir, base_revision: int, change) -> dict:
@@ -530,8 +538,8 @@ def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | N
         _add_slot(document, binding)
     slot = _target(document["slots"], binding)
     if binding.get("remove") is True:
-        if any((s.get("hold") or {}).get("carrier") == slot["id"] for s in document["slots"]):
-            raise World3DSceneError("item_in_use", "Remove held objects before their carrier")
+        if any((s.get("hold") or {}).get("carrier") == slot["id"] for s in document["slots"]) or referenced(document, slot["id"]):
+            raise World3DSceneError("item_in_use", f"Remove held objects, and the beside or rest naming {slot['id']}, before removing it")
         document["slots"].remove(slot)
         return []
     warnings = _clip_warning(slot, binding)
@@ -550,7 +558,7 @@ def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | N
     _bind_checked(slot, binding)
     _bind_directional(slot, binding)
     bind_motion(slot, binding, document.get("duration") or 0)
-    return warnings + apply_fit(slot, binding, workspace, workspace_dir)
+    return warnings + bind_declared(slot, binding, workspace, workspace_dir)
 
 
 PICTURE_SCALE = 0.85     # a 1.7 m model over a 2 m cutout plane (ui/src/features/scene3d/pictureStandIn.ts)
@@ -814,14 +822,16 @@ def _retarget(document: dict) -> None:
 
 def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_dir=None) -> dict:
     document = record["document"]
-    passes = scene_collisions(document, workspace, workspace_dir)
+    passes, contacts = scene_collisions(document, workspace, workspace_dir), scene_contacts(document, workspace, workspace_dir)
     shown = scene_layout(document, workspace, workspace_dir, passes)
+    shown["layout"]["contacts"] = contacts["contacts"]
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document), "worldFx": world_fx_view(document),
-        "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"]], "traits": _traits(document),
+        "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"], *contacts["warnings"]], "traits": _traits(document),
         **shown,
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationX", "rotationY", "rotationZ", "scale",
+                     "height", "beside", "rest", "furniture",
                      "motion", "collide", "grounded", "camera", "playbackSpeed", "worldFx", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
                      "renderLook", "toon", "motionLab", "grade", "lens", "camera_template", "look"],
     }
@@ -846,7 +856,7 @@ def _objects(document: dict) -> list[dict]:
             "marker": not source, "finished": bool(source), "clip": slot.get("clip"), "position": slot.get("position"),
             "rotationY": slot.get("rotationY"), **_shown_tilt(slot), "scale": slot.get("scale"), "motion": slot.get("motion"),
             "accepted": [slot.get("media") or "model3d"], **({"collide": False} if slot.get("collide") is False else {}),
-            **{key: slot[key] for key in _CHECKED_FIELDS if slot.get(key) is not None},
+            **{key: slot[key] for key in (*_CHECKED_FIELDS, "beside", "rest", "furniture") if slot.get(key) is not None},
         })
     return objects
 
