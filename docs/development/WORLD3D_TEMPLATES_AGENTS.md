@@ -345,3 +345,7 @@ A film in one shot: `put` a blank stage, `instantiate`, `patch` the models in wi
 - Two objects with the same role, such as the two props in `dark-still-salt-sea`, must be named by object id. The role resolves only when exactly one slot has it.
 - A two-character shot keeps `subject_2`. Supplying one subject does not remove the other hole.
 - `reference` is a still of the real technique from a film, never a frame of ours; `preview` is ours, and shows empty slots as placeholders, not your cast.
+
+## Seated people (`furniture`, `height`, `beside`, `rest`)
+
+A card whose cast sits (`vertical-dialogue-across`, `dialogue-table`) should not hold `sit_down` on its own: that clip knows no seat. Declare the furniture and the sitters instead (`docs/3d-video-compositor/HOWUSEIT.md`, "people seated at a table or on a bed"): `furniture: {kind: "table"}`, two `furniture: {kind: "chair"}` with `beside: {object: "table", side: "front" | "back"}`, and each subject `rest: {pose: "sit", on: <chair>, at: "table"}` at its real `height`. Inspect warns `seated_without_seat` for a held `sit_down` with nothing under the hips, with the bindings to add.

@@ -30,6 +30,11 @@ from services.world3d_rest_place import CLIP_NAME, HIP_ABOVE_SEAT, _edge_distanc
 from services.world3d_seats import table_top
 
 LOG = logging.getLogger(__name__)
+CONTACTS_DOC = ("layout.contacts: one row per rigged character, judged from its joints at the pose it holds mid-shot against the furniture's "
+                "real faces: {id, pose seated|standing, hipsM, seat? {object, part, topM, gapM}, at? {object, topM, rangeM [lowest, highest], "
+                "edgeM}, through? [{limb, object, part, depthM, at}], issues?, fix? [bindings to paste into world3d.scene.patch]}. Warnings: "
+                "seated_without_seat, floats_above_seat, sunk_into_seat, seat_height_unusual, limb_through_object, inside_object, "
+                "at_height_unusual, at_out_of_reach, at_not_in_front, furniture_size_unusual; each ends with the fix in numbers.")
 MAX_PEOPLE = 8
 TOLERANCE_M = 0.05            # hips this close to where the seat puts them are on it
 THROUGH_M = 0.03              # a limb this deep in furniture goes through it
