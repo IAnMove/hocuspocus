@@ -3,7 +3,7 @@
 A *person* is a model object whose GLB has the standard humanoid skeleton: its joints at the pose it shows at a scene
 second (``world3d_body_pose``), in scene metres, with its floor and lengths. A *piece* is any other model object no
 bigger than ``PIECE_M`` on every side whose triangles can be read (``world3d_mesh_solid``): a chair, a table, a bed.
-A whole room or a village is not a piece; the collision check covers those for things that move.
+A whole room or a village is not a piece. An object with a ``motion`` is left out: the collision check covers what moves.
 """
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import numpy as np
 from services.world3d_body_pose import Body, body_of, held_time, measures
 from services.world3d_mesh_solid import Mesh, inside_exits, mesh_of, passes_through
 from services.world3d_scene_bounds import resolve_workspace_glb, slot_native_bounds, slot_native_parts
+from services.world3d_scene_collisions import _moves
 from services.world3d_slot_frame import SlotFrame, slot_frame
 
 PIECE_M = 6.0
@@ -122,25 +123,28 @@ class Person:
 def measure_scene(document: dict, workspace: str, workspace_dir, seconds: float) -> tuple[list[Person], list[Piece], dict]:
     """People, pieces of furniture, and the drawn height (metres) and scale of every measurable model object."""
     people, pieces, drawn = [], [], {}
-    for slot in document.get("slots") or []:
-        if not isinstance(slot, dict) or (slot.get("media") or "model3d") != "model3d" or slot.get("hold") or not slot.get("sourceUrl"):
-            continue
-        path, _reason = resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir)
-        if path is None:
-            continue
+    for slot, path in _still_models(document, workspace, workspace_dir):
         box = slot_native_bounds(slot, workspace, workspace_dir)
         if box.get("ok"):
             drawn[slot.get("id")] = (box["size"][1] * slot_frame(slot, box).factor, float(slot.get("scale") or 1))
         body = body_of(path)
-        if body is not None:
-            person = _person(slot, body, workspace, workspace_dir, seconds)
-            if person is not None:
-                people.append(person)
-            continue
-        piece = _piece(slot, path, workspace, workspace_dir)
-        if piece is not None:
-            pieces.append(piece)
+        found = _person(slot, body, workspace, workspace_dir, seconds) if body is not None else _piece(slot, path, workspace, workspace_dir)
+        if isinstance(found, Person):
+            people.append(found)
+        elif found is not None:
+            pieces.append(found)
     return people, pieces, drawn
+
+
+def _still_models(document: dict, workspace: str, workspace_dir):
+    """``(slot, workspace GLB path)`` of the model objects that hold still: not held in a hand, no ``motion`` (the
+    collision check follows what moves)."""
+    for slot in document.get("slots") or []:
+        if not isinstance(slot, dict) or (slot.get("media") or "model3d") != "model3d" or slot.get("hold") or not slot.get("sourceUrl"):
+            continue
+        path, _reason = resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir)
+        if path is not None and not _moves(slot):
+            yield slot, path
 
 
 def _piece(slot: dict, path, workspace: str, workspace_dir) -> Piece | None:

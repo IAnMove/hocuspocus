@@ -21,15 +21,20 @@ warning ends with the fix in numbers and field names to paste into ``world3d.sce
 """
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
 import logging
 
 import numpy as np
 
 from services.world3d_contact_poses import Person, Piece, measure_scene
+from services.world3d_scene_bounds import resolve_workspace_glb
 from services.world3d_rest_place import CLIP_NAME, HIP_ABOVE_SEAT, _edge_distance
 from services.world3d_seats import table_top
 
 LOG = logging.getLogger(__name__)
+_MEMO: dict = {}
 CONTACTS_DOC = ("layout.contacts: one row per rigged character, judged from its joints at the pose it holds mid-shot against the furniture's "
                 "real faces: {id, pose seated|standing, hipsM, seat? {object, part, topM, gapM}, at? {object, topM, rangeM [lowest, highest], "
                 "edgeM}, through? [{limb, object, part, depthM, at}], issues?, fix? [bindings to paste into world3d.scene.patch]}. Warnings: "
@@ -46,22 +51,44 @@ _KIND_HEIGHTS = (("chair", 0.9), ("silla", 0.9), ("table", 0.75), ("mesa", 0.75)
 
 
 def scene_contacts(document: dict, workspace: str | None, workspace_dir) -> dict:
-    """``{contacts, warnings}``; never raises."""
+    """``{contacts, warnings}``; never raises. The same document over the same files is judged once (an inspect after a
+    patch, the editor reopening it)."""
     if not workspace or workspace_dir is None:
         return {"contacts": [], "warnings": []}
     try:
-        seconds = float(document.get("duration") or 0) / 2
-        people, pieces, drawn = measure_scene(document, workspace, workspace_dir, seconds)
-        report = _Report(pieces, drawn)
-        for person in people[:MAX_PEOPLE]:
-            report.check(person)
-        report.tables(people[:MAX_PEOPLE])
-        for row in report.rows:
-            row.pop("seatTooHigh", None)
-        return {"contacts": report.rows, "warnings": report.warnings[:MAX_WARNINGS]}
+        key = _memo_key(document, workspace, workspace_dir)
+        if key not in _MEMO:
+            if len(_MEMO) >= 16:
+                _MEMO.clear()
+            _MEMO[key] = _judged(document, workspace, workspace_dir)
+        return copy.deepcopy(_MEMO[key])
     except Exception:  # noqa: BLE001 - a contact check never fails an inspect
         LOG.exception("world3d contact check failed")
         return {"contacts": [], "warnings": []}
+
+
+def _memo_key(document: dict, workspace: str, workspace_dir) -> tuple:
+    """The slots and duration as written, and the version of every workspace GLB they show."""
+    files = []
+    for slot in document.get("slots") or []:
+        path, _reason = resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir) if isinstance(slot, dict) else (None, None)
+        if path is not None:
+            stat = path.stat()
+            files.append((str(path), stat.st_mtime_ns, stat.st_size))
+    text = json.dumps([document.get("slots"), document.get("duration")], sort_keys=True, default=str)
+    return workspace, hashlib.sha256(text.encode()).hexdigest(), tuple(files)
+
+
+def _judged(document: dict, workspace: str, workspace_dir) -> dict:
+    seconds = float(document.get("duration") or 0) / 2
+    people, pieces, drawn = measure_scene(document, workspace, workspace_dir, seconds)
+    report = _Report(pieces, drawn)
+    for person in people[:MAX_PEOPLE]:
+        report.check(person)
+    report.tables(people[:MAX_PEOPLE])
+    for row in report.rows:
+        row.pop("seatTooHigh", None)
+    return {"contacts": report.rows, "warnings": report.warnings[:MAX_WARNINGS]}
 
 
 class _Report:
