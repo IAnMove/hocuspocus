@@ -413,10 +413,10 @@ more than four shots).
 Never compute coordinates for sitting (every model is 1.7 m × `scale` tall). In `world3d.scene.patch` bindings declare:
 `{object_id: "table", add: true, furniture: {kind: "table"}}` (or any GLB with `height` in metres), chairs
 `{object_id: "chair_1", add: true, furniture: {kind: "chair"}, beside: {object: "table", side: "left"}}`, and each rigged
-character `{object_id: "ana", height: 1.62, rest: {pose: "sit", on: "chair_1", at: "table"}}` (a bed: `rest: {pose: "sit",
-on: "bed"}`). Then apply the `fix` bindings of `layout.contacts` (short legs need a lower seat) until no contact warning
-is left. An empty stage is a personal template with `slots: []` (`world3d.templates.user.put`, then instantiate). A `go`,
-`face` or `do` beat stands a sitter up (`rest_released`); lying down is not made yet.
+character `{object_id: "ana", rest: {pose: "sit", on: "chair_1", at: "table"}}` (a `model3d.*.make` character keeps its
+recorded height, `recordedHeightM`; a bed: `on: "bed"`, also a stage's own bed). Then apply the `fix` bindings of
+`layout.contacts` until no contact warning is left. No card needed: `world3d.scene.instantiate {template_id: "blank"}`.
+A `go`, `face` or `do` beat stands a sitter up (`rest_released`); lying down is not made yet.
 
 ## Edit one shot ("the fifth shot")
 
