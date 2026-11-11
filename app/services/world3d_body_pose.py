@@ -94,27 +94,41 @@ def body_of(path: Path) -> Body | None:
 def _read(data: bytes) -> Body | None:
     document, buffers = split_glb(data)
     nodes = document.get("nodes") or []
-    joints = {}
+    joints = _joints(nodes)
+    if any(name not in joints for name in _REQUIRED):
+        return None
+    marker = ((nodes[joints["Hips"]].get("extras") or {}).get(_MARKER) or {})
+    body = Body(document, buffers, _parents(nodes), joints, 1, 0.0, _lowest(document),
+                [str(item.get("name") or f"Clip {index + 1}") for index, item in enumerate(document.get("animations") or [])])
+    body.facing = int(marker.get("facing")) if marker.get("facing") in (1, -1) else _facing(body.pose())
+    body.floor = float(marker["floor"]) if isinstance(marker.get("floor"), (int, float)) else body.box_low
+    return body
+
+
+def _joints(nodes: list) -> dict:
+    """Joint name -> node index; ``mixamorig:Hips`` counts as ``Hips``."""
+    joints: dict = {}
     for index, node in enumerate(nodes):
         name = str(node.get("name") or "").rsplit(":", 1)[-1]
         if name in JOINTS and name not in joints:
             joints[name] = index
-    if any(name not in joints for name in _REQUIRED):
-        return None
+    return joints
+
+
+def _parents(nodes: list) -> list:
     parents: list = [None] * len(nodes)
     for index, node in enumerate(nodes):
         for child in node.get("children") or []:
             if isinstance(child, int) and 0 <= child < len(nodes):
                 parents[child] = index
+    return parents
+
+
+def _lowest(document: dict) -> float:
+    """The native y of the bind pose's lowest point (the POSITION boxes under their nodes)."""
     from services.procedural_3d.glb_bounds import _mesh_nodes, _primitive_boxes
     lows = [box[0][1] for _i, _n, _w, mesh in _mesh_nodes(document) for box in _primitive_boxes(document, mesh)]
-    marker = ((nodes[joints["Hips"]].get("extras") or {}).get(_MARKER) or {})
-    body = Body(document, buffers, parents, joints, 1, 0.0, min(lows) if lows else 0.0,
-                [str(item.get("name") or f"Clip {index + 1}") for index, item in enumerate(document.get("animations") or [])])
-    rest = body.pose()
-    body.facing = int(marker.get("facing")) if marker.get("facing") in (1, -1) else _facing(rest)
-    body.floor = float(marker["floor"]) if isinstance(marker.get("floor"), (int, float)) else body.box_low
-    return body
+    return min(lows) if lows else 0.0
 
 
 def _facing(rest: dict) -> int:
@@ -141,18 +155,22 @@ def held_time(slot: dict, body: Body, seconds: float) -> tuple[int | None, float
     if cues:
         active = [cue for cue in sorted(cues, key=lambda item: float(item.get("start") or 0)) if float(cue.get("start") or 0) <= seconds]
         return _cue_time(active[-1] if active else cues[0], body, seconds)
-    clip = slot.get("clip")
-    index = _clip_index(clip, body)
+    index = _clip_index(slot.get("clip"), body)
     if index is None:
         return None, 0.0, False
+    return index, *_single_time(slot, body, index, seconds)
+
+
+def _single_time(slot: dict, body: Body, index: int, seconds: float) -> tuple[float, bool]:
+    """The bound clip's time by ``performanceClipTime``: ``clipPlayback`` start and speed, looping unless ``loop: false``."""
     if slot.get("performance") == "idle":
-        return index, 0.0, False
+        return 0.0, False
     playback = slot.get("clipPlayback") if isinstance(slot.get("clipPlayback"), dict) else {}
     length = body.clip_duration(index)
     time = float(playback.get("start") or 0) + max(0.0, seconds) * float(playback.get("speed") or 1)
     if playback.get("loop") is False:
-        return index, min(length, time), time >= length
-    return index, time % length if length > 0 else 0.0, False
+        return min(length, time), time >= length
+    return (time % length if length > 0 else 0.0), False
 
 
 def _cue_time(cue: dict, body: Body, seconds: float) -> tuple[int | None, float, bool]:

@@ -25,7 +25,6 @@ export function Scene3DRestControls({ slot, document, workspace, locked: panelLo
   const [height, setHeight] = useState('')
   if (slot.media !== 'model3d' || !slot.sourceUrl) return null
   const others = document.slots.filter(item => item.id !== slot.id && item.media === 'model3d' && item.sourceUrl)
-  const rest = slot.rest
   const drawn = Math.round(1.7 * slot.scale * 100) / 100
   const run = async (binding: Record<string, unknown>) => {
     setBusy(true)
@@ -44,23 +43,9 @@ export function Scene3DRestControls({ slot, document, workspace, locked: panelLo
   }
   const locked = panelLocked || busy
   const why = controlReason(locked, busy ? 'disabled.actionInProgress' : 'disabled.panelLocked')
-  const label = (item: Scene3DSlot) => item.character?.name || item.furniture?.kind && `${item.id} (${item.furniture.kind})` || item.id
   return <div className="mt-3 space-y-2" aria-busy={busy}>
     <div className="flex flex-wrap items-center gap-3">
-      <label className="text-xs">{t('restSitOn')}
-        <select aria-label={`${t('restSitOn')} ${slot.id}`} disabled={locked || (!rest && !others.length)} title={why} value={rest?.on ?? ''} className={fieldClass}
-          onChange={event => void run({ rest: event.target.value ? { pose: 'sit', on: event.target.value, ...(rest?.at ? { at: rest.at } : {}) } : null })}>
-          <option value="">{t('restStanding')}</option>
-          {others.map(item => <option key={item.id} value={item.id}>{label(item)}</option>)}
-        </select>
-      </label>
-      {rest?.on && <label className="text-xs">{t('restAt')}
-        <select aria-label={`${t('restAt')} ${slot.id}`} disabled={locked} title={why} value={rest.at ?? ''} className={fieldClass}
-          onChange={event => void run({ rest: { pose: 'sit', on: rest.on, ...(event.target.value ? { at: event.target.value } : {}) } })}>
-          <option value="">{t('restNoTable')}</option>
-          {others.filter(item => item.id !== rest.on).map(item => <option key={item.id} value={item.id}>{label(item)}</option>)}
-        </select>
-      </label>}
+      <RestSelects slot={slot} others={others} locked={locked} why={why} onRest={value => void run({ rest: value })} />
       <label className="text-xs">{t('realHeight')}
         <input aria-label={`${t('realHeight')} ${slot.id}`} type="number" min={0.05} max={100} step={0.01} disabled={locked} title={why}
           value={height || String(drawn)} className={`${fieldClass} w-20`} onChange={event => setHeight(event.target.value)} />
@@ -72,4 +57,38 @@ export function Scene3DRestControls({ slot, document, workspace, locked: panelLo
     <p className="text-xs text-text-muted">{t('restHelp')}</p>
     {notes.map(line => <p key={line} role="status" className="text-xs text-amber-300">{line}</p>)}
   </div>
+}
+
+function objectLabel(item: Scene3DSlot): string {
+  if (item.character?.name) return item.character.name
+  return item.furniture?.kind ? `${item.id} (${item.furniture.kind})` : item.id
+}
+
+/** The seat (or Standing) and, once seated, the table: each choice is one ``rest`` binding. */
+function RestSelects({ slot, others, locked, why, onRest }: {
+  slot: Scene3DSlot
+  others: readonly Scene3DSlot[]
+  locked: boolean
+  why: string | undefined
+  onRest: (rest: Record<string, unknown> | null) => void
+}) {
+  const { t } = useUiTranslation('scene3dEditor')
+  const rest = slot.rest
+  const at = rest?.at ? { at: rest.at } : {}
+  return <>
+    <label className="text-xs">{t('restSitOn')}
+      <select aria-label={`${t('restSitOn')} ${slot.id}`} disabled={locked || (!rest && !others.length)} title={why} value={rest?.on ?? ''} className={fieldClass}
+        onChange={event => onRest(event.target.value ? { pose: 'sit', on: event.target.value, ...at } : null)}>
+        <option value="">{t('restStanding')}</option>
+        {others.map(item => <option key={item.id} value={item.id}>{objectLabel(item)}</option>)}
+      </select>
+    </label>
+    {rest?.on && <label className="text-xs">{t('restAt')}
+      <select aria-label={`${t('restAt')} ${slot.id}`} disabled={locked} title={why} value={rest.at ?? ''} className={fieldClass}
+        onChange={event => onRest({ pose: 'sit', on: rest.on, ...(event.target.value ? { at: event.target.value } : {}) })}>
+        <option value="">{t('restNoTable')}</option>
+        {others.filter(item => item.id !== rest.on).map(item => <option key={item.id} value={item.id}>{objectLabel(item)}</option>)}
+      </select>
+    </label>}
+  </>
 }

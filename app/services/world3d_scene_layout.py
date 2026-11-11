@@ -12,6 +12,7 @@ from copy import deepcopy
 
 from services.world3d_scene_bounds import CUTOUT_HEIGHT, MODEL_HEIGHT, placed_bounds, slot_native_bounds
 from services.world3d_scene_collisions import scene_collisions
+from services.world3d_scene_contacts import scene_contacts
 
 MAX_ITEMS = 32
 CONVENTION = (f"metres, y up. A 3D model is drawn {MODEL_HEIGHT:g} m x scale tall (its bounding-box height, whatever its length); "
@@ -34,16 +35,18 @@ _PLAIN_CAMERA = ("family", "eye", "look", "fov", "frameFormat", "orbitRadius", "
 _FRAMING = ("targetSlot", "anchor", "from", "to", "lookFrom", "lookTo", "orbitTurns", "fovFrom", "fovTo", "relativeToFacing")
 
 
-def scene_layout(document: dict, workspace: str | None, workspace_dir, passes: dict | None = None) -> dict:
+def scene_layout(document: dict, workspace: str | None, workspace_dir, passes: dict | None = None, contacts: dict | None = None) -> dict:
     """``camera``, ``light``, ``duration``, ``size`` and ``layout`` of a scene document, ready to merge into a view.
 
     ``layout.collisions`` lists where a moving object passes through another (``passes``: the result of ``scene_collisions``
-    when the caller has it already)."""
+    when the caller has it already); ``layout.contacts`` how each rigged character sits or stands among the furniture
+    (``contacts``: the result of ``scene_contacts``)."""
     camera, light = document.get("camera"), document.get("light")
     size = {key: document[key] for key in ("width", "height", "fps") if key in document}
     layout = _layout(document, workspace, workspace_dir)
     found = passes if passes is not None else scene_collisions(document, workspace, workspace_dir)
     layout["collisions"] = found["collisions"]
+    layout["contacts"] = (contacts if contacts is not None else scene_contacts(document, workspace, workspace_dir))["contacts"]
     if found["omitted"]:
         layout["collisionsOmitted"] = found["omitted"]
     return {"camera": _camera(camera) if isinstance(camera, dict) else None,

@@ -134,6 +134,13 @@ def beside(value, slot: dict) -> dict:
     target = value.get("object")
     if not isinstance(target, str) or not target or target == name:
         raise _refuse("invalid_beside", f"{name}: beside.object is the id of another object of the scene")
+    facing = value.get("facing", "object")
+    if facing not in BESIDE_FACINGS and not _number(facing, -360, 360):
+        raise _refuse("invalid_beside", f"{name}: beside.facing is object, away, same or degrees")
+    return {"object": target, **_beside_numbers(value, name), "facing": facing if isinstance(facing, str) else float(facing)}
+
+
+def _beside_numbers(value: dict, name) -> dict:
     side = value.get("side", 0.0)
     side = SIDES.get(side, side) if isinstance(side, str) else side
     if not _number(side, -360, 360):
@@ -141,11 +148,7 @@ def beside(value, slot: dict) -> dict:
     for key, low, high in (("gap", -2.0, 10.0), ("offset", -10.0, 10.0)):
         if value.get(key) is not None and not _number(value[key], low, high):
             raise _refuse("invalid_beside", f"{name}: beside.{key} is {low:g} to {high:g} metres")
-    facing = value.get("facing", "object")
-    if facing not in BESIDE_FACINGS and not _number(facing, -360, 360):
-        raise _refuse("invalid_beside", f"{name}: beside.facing is object, away, same or degrees")
-    return {"object": target, "side": float(side) % 360, "gap": float(value.get("gap") or 0.0), "offset": float(value.get("offset") or 0.0),
-            "facing": facing if isinstance(facing, str) else float(facing)}
+    return {"side": float(side) % 360, "gap": float(value.get("gap") or 0.0), "offset": float(value.get("offset") or 0.0)}
 
 
 def rest(value, slot: dict) -> dict:
@@ -157,26 +160,38 @@ def rest(value, slot: dict) -> dict:
         raise _refuse("invalid_rest", f"{name}: rest is {{pose: sit, on, at?, surface?, facing?, hands?}}")
     if value.get("pose", "sit") not in REST_POSES:
         raise _refuse("invalid_rest", f"{name}: rest.pose is sit (lying and standing at a counter are not made yet)")
-    stored = {"pose": "sit"}
+    stored = {"pose": "sit", **_rest_targets(value, name)}
+    if value.get("surface") is not None:
+        stored["surface"] = _surface(value["surface"], name)
+    return {**stored, **_rest_options(value, name)}
+
+
+def _rest_targets(value: dict, name) -> dict:
+    """``on`` (required) and ``at``: ids of other objects."""
+    found = {}
     for key in ("on", "at"):
         target = value.get(key)
         if target is None and key == "at":
             continue
         if not isinstance(target, str) or not target or target == name:
             raise _refuse("invalid_rest", f"{name}: rest.{key} is the id of another object of the scene")
-        stored[key] = target
-    if value.get("surface") is not None:
-        stored["surface"] = _surface(value["surface"], name)
+        found[key] = target
+    return found
+
+
+def _rest_options(value: dict, name) -> dict:
+    """``facing`` (degrees, at, away) and ``hands`` (true or false)."""
+    found = {}
     facing = value.get("facing")
     if facing is not None:
         if facing not in REST_FACINGS and not _number(facing, -360, 360):
             raise _refuse("invalid_rest", f"{name}: rest.facing is degrees (0 faces +z), at or away")
-        stored["facing"] = facing if isinstance(facing, str) else float(facing)
+        found["facing"] = facing if isinstance(facing, str) else float(facing)
     if value.get("hands") is not None:
         if not isinstance(value["hands"], bool):
             raise _refuse("invalid_rest", f"{name}: rest.hands is true or false")
-        stored["hands"] = value["hands"]
-    return stored
+        found["hands"] = value["hands"]
+    return found
 
 
 def _surface(value, name) -> dict:
@@ -186,6 +201,12 @@ def _surface(value, name) -> dict:
     if isinstance(point, list) and len(point) == 3 and all(_number(item, -10_000, 10_000) for item in point):
         return {"point": [float(item) for item in point]}
     raise _refuse("invalid_rest", f"{name}: rest.surface is {{part: <name or index>}} or {{point: [x, y, z]}} in scene metres")
+
+
+def check_removable(document: dict, slot: dict) -> None:
+    """An object held in a hand, or named by a ``beside`` or ``rest``, is not removed before what names it."""
+    if any((other.get("hold") or {}).get("carrier") == slot["id"] for other in document["slots"]) or referenced(document, slot["id"]):
+        raise _refuse("item_in_use", f"Remove held objects, and the beside or rest naming {slot['id']}, before removing it")
 
 
 def referenced(document: dict, object_id: str) -> list[str]:

@@ -29,7 +29,7 @@ from services.world3d_scene_collisions import scene_collisions
 from services.world3d_scene_contacts import scene_contacts
 from services.world3d_scene_layout import scene_layout
 from services.world3d_scene_motion import bind_motion, retime as retime_motion
-from services.world3d_rest_fields import bind_declared, referenced
+from services.world3d_rest_fields import bind_declared, check_removable
 from services.world3d_rest_place import resolve_placing
 from services.world3d_world_fx import set_world_fx, world_fx_view
 from services.world3d_stage_cards import is_stage
@@ -538,8 +538,7 @@ def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | N
         _add_slot(document, binding)
     slot = _target(document["slots"], binding)
     if binding.get("remove") is True:
-        if any((s.get("hold") or {}).get("carrier") == slot["id"] for s in document["slots"]) or referenced(document, slot["id"]):
-            raise World3DSceneError("item_in_use", f"Remove held objects, and the beside or rest naming {slot['id']}, before removing it")
+        check_removable(document, slot)
         document["slots"].remove(slot)
         return []
     warnings = _clip_warning(slot, binding)
@@ -823,8 +822,7 @@ def _retarget(document: dict) -> None:
 def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_dir=None) -> dict:
     document = record["document"]
     passes, contacts = scene_collisions(document, workspace, workspace_dir), scene_contacts(document, workspace, workspace_dir)
-    shown = scene_layout(document, workspace, workspace_dir, passes)
-    shown["layout"]["contacts"] = contacts["contacts"]
+    shown = scene_layout(document, workspace, workspace_dir, passes, contacts)
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document), "worldFx": world_fx_view(document),

@@ -194,6 +194,12 @@ def _interaction(item) -> dict:
             clean[flag] = _flag(item[flag], flag)
     if "look" in item:
         clean["look"] = _flag(item["look"], "look") if kind == "reach" else _point3(item["look"], "look")
+    return {**clean, **_labels(item)}
+
+
+def _labels(item: dict) -> dict:
+    """``hand`` (reach), ``name`` and ``hands`` (sit: the wrists' resting points)."""
+    clean: dict = {}
     if "hand" in item:
         if item["hand"] not in ("left", "right", "auto"):
             raise ValueError("hand must be left, right or auto")
