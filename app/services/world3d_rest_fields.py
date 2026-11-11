@@ -110,8 +110,8 @@ def stand_up(slot: dict, binding: dict) -> None:
     for key in BASE_FIELDS:
         if key in binding or _snake(key) in binding:
             continue
-        if key in base and base[key] is not None:
-            slot[key] = base[key]
+        if base.get(key) is not None or key == "clip":          # a slot always carries clip, null when it has none
+            slot[key] = base.get(key)
         else:
             slot.pop(key, None)
 

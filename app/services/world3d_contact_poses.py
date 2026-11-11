@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from services.world3d_body_pose import Body, body_of, held_time, measures
-from services.world3d_mesh_solid import Mesh, crossings, inside, mesh_of
+from services.world3d_mesh_solid import Mesh, inside, mesh_of, passes_through
 from services.world3d_scene_bounds import resolve_workspace_glb, slot_native_bounds, slot_native_parts
 from services.world3d_slot_frame import SlotFrame, slot_frame
 
@@ -51,9 +51,9 @@ class Piece:
         return depth * self.frame.factor, part
 
     def crossed(self, start: np.ndarray, end: np.ndarray) -> np.ndarray:
-        """The parts whose faces a scene segment crosses."""
+        """The parts a scene segment passes right through."""
         native = self.frame.to_native([start, end])
-        return crossings(self.mesh, native[0], native[1])
+        return passes_through(self.mesh, native[0], native[1])
 
     def part_name(self, index: int) -> str:
         name = self.mesh.names[index] if 0 <= index < len(self.mesh.names) else None

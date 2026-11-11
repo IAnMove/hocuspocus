@@ -177,18 +177,29 @@ def inside(mesh: Mesh, points) -> tuple[np.ndarray, np.ndarray]:
     return depth, part
 
 
-def crossings(mesh: Mesh, start, end) -> np.ndarray:
-    """The parts whose faces the segment from ``start`` to ``end`` crosses (one entry per face crossed)."""
+def passes_through(mesh: Mesh, start, end) -> np.ndarray:
+    """The parts the segment from ``start`` to ``end`` passes right through: it crosses two opposite faces of the part
+    (in one side of a table top and out of the other, across a leg). Cutting a corner (in by the top, out by the front)
+    is a graze, not a pass."""
     start, end = np.asarray(start, dtype=np.float64) + _JITTER, np.asarray(end, dtype=np.float64) + _JITTER
     length = float(np.linalg.norm(end - start))
     if length < 1e-9 or np.any(np.maximum(start, end) < mesh.low) or np.any(np.minimum(start, end) > mesh.high):
         return np.zeros(0, dtype=np.int32)
-    distances, owners = _hits(mesh, start, (end - start) / length)
-    return owners[distances < length]
+    distances, owners, faces = _hits(mesh, start, (end - start) / length, faces=True)
+    keep = distances < length
+    owners, faces = owners[keep], faces[keep]
+    if len(faces) < 2:
+        return np.zeros(0, dtype=np.int32)
+    triangles = mesh.triangles[faces]
+    normals = np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0])
+    normals /= np.maximum(np.linalg.norm(normals, axis=1, keepdims=True), 1e-12)
+    opposite = (normals @ normals.T < -0.9) & (owners[:, None] == owners[None, :])
+    return np.unique(owners[opposite.any(axis=1)])
 
 
-def _hits(mesh: Mesh, origin: np.ndarray, direction: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Distances along ``direction`` at which the ray from ``origin`` crosses a triangle (Moller-Trumbore), and their parts."""
+def _hits(mesh: Mesh, origin: np.ndarray, direction: np.ndarray, faces: bool = False):
+    """Distances along ``direction`` at which the ray from ``origin`` crosses a triangle (Moller-Trumbore), their parts,
+    and with ``faces`` the triangle indices."""
     a, b, c = mesh.triangles[:, 0], mesh.triangles[:, 1], mesh.triangles[:, 2]
     edge1, edge2 = b - a, c - a
     pvec = np.cross(direction, edge2)
@@ -201,4 +212,6 @@ def _hits(mesh: Mesh, origin: np.ndarray, direction: np.ndarray) -> tuple[np.nda
     v = (qvec @ direction) * inverse
     t = np.einsum("ij,ij->i", edge2, qvec) * inverse
     crossing = usable & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 1e-9)
+    if faces:
+        return t[crossing], mesh.parts[crossing], np.flatnonzero(crossing)
     return t[crossing], mesh.parts[crossing]

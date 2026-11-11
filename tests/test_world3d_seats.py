@@ -6,7 +6,7 @@ from services.procedural_3d.compose import compose_glb
 from services.procedural_3d.furniture import KINDS, furniture_glb, furniture_spec
 from services.procedural_3d.glb_bounds import glb_bounds
 from services.procedural_3d.glb_parts import glb_parts
-from services.world3d_mesh_solid import crossings, flat_tops, inside, mesh_of
+from services.world3d_mesh_solid import flat_tops, inside, mesh_of, passes_through
 from services.world3d_scene_bounds import normalisation
 from services.world3d_seats import seat_surface, table_top
 
@@ -114,8 +114,9 @@ def test_a_one_mesh_table_is_solid_only_where_it_has_material(tmp_path):
     assert depth[0] == 0, "knees under the top are in the leg room, not in the table"
     assert depth[1] == pytest.approx(0.02, abs=0.002) and depth[2] > 0 and depth[3] == 0
     assert list(part[[0, 3]]) == [-1, -1]
-    assert len(crossings(mesh, [0.0, 0.6, 0.0], [0.0, 0.9, 0.0])) == 2, "a forearm through the top crosses its two faces"
-    assert len(crossings(mesh, [0.0, 0.4, 0.0], [0.0, 0.6, 0.0])) == 0
+    assert list(passes_through(mesh, [0.0, 0.6, 0.0], [0.0, 0.9, 0.0])) == [0], "a forearm through the top crosses both its faces"
+    assert len(passes_through(mesh, [0.0, 0.4, 0.0], [0.0, 0.6, 0.0])) == 0
+    assert len(passes_through(mesh, [0.0, 0.8, 0.39], [0.0, 0.72, 0.45])) == 0, "a thigh over the front edge only cuts its corner"
 
 
 def test_flat_tops_group_faces_by_height_with_their_area(tmp_path):

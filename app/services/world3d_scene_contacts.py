@@ -50,6 +50,8 @@ def scene_contacts(document: dict, workspace: str | None, workspace_dir) -> dict
         for person in people[:MAX_PEOPLE]:
             report.check(person)
         report.tables(people[:MAX_PEOPLE])
+        for row in report.rows:
+            row.pop("seatTooHigh", None)
         return {"contacts": report.rows, "warnings": report.warnings[:MAX_WARNINGS]}
     except Exception:  # noqa: BLE001 - a contact check never fails an inspect
         LOG.exception("world3d contact check failed")
@@ -148,6 +150,7 @@ class _Report:
         if lowest <= seat <= highest:
             return
         what = "the feet leave the floor" if seat > highest else "the knees come up toward the chest"
+        row.setdefault("seatTooHigh", []).append(piece.id)
         fix = _resize(piece, best, seat, "seat")
         self.warn(row, f"seat_height_unusual: {piece.id}'s seat is {seat:.2f} m high and {person.id}'s knees are {knee:.2f} m high, so {what}; "
                        f"a seat for {person.id} is {best:.2f} m: give {piece.id} {_text(fix)}", {"object_id": piece.id, **fix})
@@ -175,6 +178,8 @@ class _Report:
             row.setdefault("through", []).append({"limb": label, "object": piece.id, "part": piece.part_name(part), "depthM": round(depth, 3),
                                                   "at": _rounded(point)})
             standing_inside = not seated and label in core and depth >= THROUGH_M
+            if piece.id in row.get("seatTooHigh", ()) and label.endswith("thigh"):
+                continue                                         # the seat's height is the cause, and it has its warning
             self._through_warning(row, person, standing_inside, label, piece, part, depth)
 
     def _through_warning(self, row: dict, person: Person, inside_it: bool, label: str, piece: Piece, part: int, depth: float) -> None:
