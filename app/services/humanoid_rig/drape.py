@@ -47,7 +47,22 @@ def drape(table: np.ndarray, adjacency, cells: np.ndarray, cloth: np.ndarray, sk
         out[waist] = _legs_to_hips(out[waist])
         seam = skirt | (waist & (cells[:, 1] < top + float(skeleton["height"]) * _WAIST))
     out = _blur(out, adjacency, cloth & ~skirt, _CLOTH_SMOOTH)
-    return _blur(out, adjacency, seam, _SKIRT_SMOOTH)
+    out = _blur(out, adjacency, seam, _SKIRT_SMOOTH)
+    return _no_shin(out, cells, top, skeleton["robe"]) if (skeleton.get("robe") or {}).get("skirt") else out
+
+
+def _no_shin(table: np.ndarray, cells: np.ndarray, top: float, robe: dict) -> np.ndarray:
+    """Above the hem of a skirt over legs nothing follows the shins: the blur reaches up the thigh's long quads from the
+    knee (rings 30 cm apart), and a seated shin, which moves the knee forward and up, pushed the thigh through the cloth."""
+    above = (cells[:, 1] < top) & (cells[:, 1] > float(robe["hem"]))
+    out = table.copy()
+    for side in ("Left", "Right"):
+        thigh = _DEFORM.index(f"{side}UpLeg")
+        for part in ("Leg", "Foot", "ToeBase"):
+            bone = _DEFORM.index(f"{side}{part}")
+            out[above, thigh] += out[above, bone]
+            out[above, bone] = 0.0
+    return out
 
 
 def _hip_line(skeleton: dict) -> float:
