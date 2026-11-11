@@ -274,7 +274,7 @@ def test_a_seat_too_high_for_the_legs_says_the_seat_height_to_use(stage):
                            {"object_id": "pet", "add": True, "source_url": PET, "height": 1.2, "rest": {"pose": "sit", "on": "chair"}}])
     line = next(line for line in viewed["warnings"] if line.startswith("seat_height_unusual"))
     fix = next(item for item in contact(viewed, "pet")["fix"] if item.get("object_id") == "chair")
-    assert "the feet leave the floor" in line and 0.2 < fix["furniture"]["seat"] < 0.32
+    assert "the feet barely reach the floor" in line and 0.2 < fix["furniture"]["seat"] < 0.32
     assert f"seat: {fix['furniture']['seat']:g}" in line
     assert "limb_through_object" not in codes(viewed), "the thighs on a too-high seat are the same problem"
 

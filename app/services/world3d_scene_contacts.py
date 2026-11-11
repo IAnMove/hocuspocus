@@ -182,10 +182,10 @@ class _Report:
         knee = float((rest["LeftLeg"][1] + rest["RightLeg"][1]) / 2 - person.body.box_low) * factor
         drop = float(rest["Hips"][1] - (rest["LeftUpLeg"][1] + rest["RightUpLeg"][1]) / 2) * factor
         flesh = HIP_ABOVE_SEAT * size["leg"]
-        lowest, best, highest = (knee + share * size["thigh"] - flesh + drop for share in (-0.3, 0.1, 0.45))
+        lowest, best, highest = (knee + share * size["thigh"] - flesh + drop for share in (-0.3, 0.1, 0.55))
         if lowest <= seat <= highest:
             return
-        what = "the feet leave the floor" if seat > highest else "the knees come up toward the chest"
+        what = "the thighs slope steeply and the feet barely reach the floor" if seat > highest else "the knees come up toward the chest"
         row.setdefault("seatTooHigh", []).append(piece.id)
         if best < CHILD_SEAT_M and person.height > ADULT_M:
             self._short_legs(row, person, knee, best)
