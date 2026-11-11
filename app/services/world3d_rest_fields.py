@@ -4,6 +4,8 @@ They say what is meant instead of where it lands, and the server works out the n
 
 - ``height: 0.75`` this object is really 0.75 m tall. It is ``fit: {heightM: 0.75}`` (every model is drawn 1.7 m x
   ``scale``), so it sets ``scale`` and is not stored; inspect shows the real size as ``layout.items[].boundsM.size``.
+  A character whose maker recorded its height (``model3d.blob.make``, ``model3d.anime.make``) is drawn at that height
+  when it is bound without ``height``, ``fit`` or ``scale``.
 - ``beside: {object, side?, gap?, offset?, facing?}`` stand next to another object on one side of its box, on its floor.
   ``side`` is degrees around it from its front (+z, turned with it) toward its right (+x seen from the front), or
   ``front`` (0), ``right`` (90), ``back`` (180), ``left`` (270); ``gap`` metres between the boxes (default 0, negative
@@ -81,7 +83,19 @@ def bind_declared(slot: dict, binding: dict, workspace: str | None, workspace_di
     from services.world3d_scene_fit import apply_fit
     bind_placing(slot, binding)
     bind_furniture(slot, binding, workspace, workspace_dir)
-    return apply_fit(slot, height_fit(slot, binding) or binding, workspace, workspace_dir)
+    return apply_fit(slot, height_fit(slot, binding) or _recorded_fit(slot, binding, workspace, workspace_dir) or binding, workspace, workspace_dir)
+
+
+def _recorded_fit(slot: dict, binding: dict, workspace: str | None, workspace_dir) -> dict | None:
+    """A model bound with no size of its own is drawn at the height its maker recorded (``world3d_model_height``)."""
+    if not any(key in binding for key in ("sourceUrl", "source_url")) or any(key in binding for key in ("scale", "fit", "height", "furniture")):
+        return None
+    if (slot.get("media") or "model3d") != "model3d" or not workspace or workspace_dir is None:
+        return None
+    from services.world3d_model_height import recorded_height
+    from services.world3d_scene_bounds import resolve_workspace_glb
+    metres = recorded_height(resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir)[0])
+    return {"fit": {"heightM": metres}} if metres else None
 
 
 def bind_placing(slot: dict, binding: dict) -> None:

@@ -20,7 +20,8 @@ CONVENTION = (f"metres, y up. A 3D model is drawn {MODEL_HEIGHT:g} m x scale tal
               "boundsM.min/max/center/bottomY are in the scene after position and Euler XYZ (rotationX, rotationY, rotationZ; omitted X and Z are 0, which matches a yaw-only turn). A grounded object's lowest point sits at position[1].")
 LAYOUT_DOC = ("It also shows the shot in metres: camera (the authored family, eye, look, fov, framing and a shake summary; an orbit, "
               "a framing or a shake moves the live camera from these), light, duration, size {width, height, fps} and layout.items, one per object "
-              "(at most %d) with id, role, media, position, rotationY, rotationX and rotationZ when set, scale, sourceUrl, clip and boundsM. boundsM is a 3D model's real size and place "
+              "(at most %d) with id, role, media, position, rotationY, rotationX and rotationZ when set, scale, sourceUrl, clip, boundsM and, for a "
+              "character whose maker recorded it, recordedHeightM (its real height, used when it is bound without height, fit or scale). boundsM is a 3D model's real size and place "
               "from its workspace .glb, by the renderer's own sums: a model is drawn 1.7 m x scale tall (its bounding-box height, whatever its length), "
               "so a whole-environment GLB is 1.7 m tall at scale 1. boundsM.size is its own width, height and depth; min, max, center and bottomY are "
               "scene coordinates after position and Euler XYZ (rotationX, rotationY, rotationZ; omitted X and Z are 0), and a grounded object's lowest point sits at position[1]. It is the rest pose, so an "
@@ -101,7 +102,20 @@ def _item(slot: dict, workspace: str | None, workspace_dir) -> dict:
     item["boundsM"], reason = _bounds(slot, item["media"], workspace, workspace_dir)
     if reason:
         item["boundsReason"] = reason
+    recorded = _recorded(slot, item["media"], workspace, workspace_dir)
+    if recorded:
+        item["recordedHeightM"] = recorded
     return item
+
+
+def _recorded(slot: dict, media: str, workspace: str | None, workspace_dir) -> float | None:
+    """The real height the model's maker recorded (a mould character), shown so nobody guesses it."""
+    if media != "model3d" or not workspace or workspace_dir is None:
+        return None
+    from services.world3d_model_height import recorded_height
+    from services.world3d_scene_bounds import resolve_workspace_glb
+    base = slot.get("restBase") if isinstance(slot.get("restBase"), dict) else {}
+    return recorded_height(resolve_workspace_glb(base.get("sourceUrl") or slot.get("sourceUrl"), workspace, workspace_dir)[0])
 
 
 def _bounds(slot: dict, media: str, workspace: str | None, workspace_dir) -> tuple[dict | None, str | None]:
