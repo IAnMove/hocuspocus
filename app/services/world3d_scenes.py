@@ -31,6 +31,7 @@ from services.world3d_scene_layout import scene_layout
 from services.world3d_scene_motion import bind_motion, retime as retime_motion
 from services.world3d_rest_fields import bind_declared, check_removable
 from services.world3d_rest_place import resolve_placing
+from services.world3d_scene_frame import set_frame
 from services.world3d_world_fx import set_world_fx, world_fx_view
 from services.world3d_stage_cards import is_stage
 from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
@@ -198,6 +199,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     document = record["document"]
     warnings = []
     _set_duration(document, changes)
+    set_frame(document, changes)
     stand_ins = apply_bindings(document, changes, warnings, workspace, workspace_dir)
     if "camera_template" in changes:
         warnings.extend(_set_camera_template(document, changes["camera_template"]))
@@ -421,9 +423,10 @@ def published_name(workspace: str, scene_id: str, record: dict, workspace_dir) -
     return f"{title}-{scene_id}" if title else scene_id
 
 
-def publish_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
+def publish_scene(workspace: str, scene_id: str, workspace_dir, name: str | None = None) -> dict:
     record = _read(workspace, scene_id, workspace_dir)
-    saved = save_document(workspace, record["document"], name=published_name(workspace, scene_id, record, workspace_dir),
+    named = f"{ascii_slug(name, 60)}-{scene_id}" if isinstance(name, str) and ascii_slug(name, 60) else None
+    saved = save_document(workspace, record["document"], name=named or published_name(workspace, scene_id, record, workspace_dir),
                           preview=None, workspace_dir=workspace_dir, capability="world3d.scene.publish")
     opened = get_document(workspace, saved["name"], workspace_dir=workspace_dir)
     traits = _traits(opened["document"])

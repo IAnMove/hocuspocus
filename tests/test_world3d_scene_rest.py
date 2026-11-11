@@ -454,3 +454,33 @@ def test_a_stage_rooms_bed_and_desk_are_named_like_objects(stage):
     message = str(refused.value)
     assert "the stage's own furniture (part of the set, named as it is): bed, desk, sofa" in message
     assert "empty markers (bind a GLB first): marker" in message and "add: true, furniture" in message
+
+
+def test_an_agent_starts_from_an_empty_stage_sets_the_frame_and_names_the_scene(tmp_path):
+    from services.world3d_template_commands import command_catalog, execute_command
+    folder = tmp_path / WORKSPACE
+    folder.mkdir()
+    made = execute_command("world3d.scene.instantiate", {"version": 1, "intent_id": "blank-1", "input": {
+        "workspace": WORKSPACE, "template_id": "blank", "width": 1080, "height": 1920, "duration": 6}}, workspace_dir(tmp_path))
+    scene = made["result"]["scene"]
+    assert (scene["document"]["width"], scene["document"]["height"], scene["document"]["duration"], scene["document"]["slots"]) == (1080, 1920, 6, [])
+    changed = execute_command("world3d.scene.patch", {"version": 1, "intent_id": "frame-1", "input": {
+        "workspace": WORKSPACE, "scene_id": scene["sceneId"], "base_revision": 1, "width": 1920, "height": 1080, "fps": 24}}, workspace_dir(tmp_path))
+    document = changed["result"]["scene"]["document"]
+    assert (document["width"], document["height"], document["fps"]) == (1920, 1080, 24)
+    with pytest.raises(Exception):
+        execute_command("world3d.scene.patch", {"version": 1, "intent_id": "frame-2", "input": {
+            "workspace": WORKSPACE, "scene_id": scene["sceneId"], "base_revision": 2, "width": 1081}}, workspace_dir(tmp_path))
+    tools = {tool["name"]: tool for tool in command_catalog()}
+    patch_schema = json.dumps(tools["world3d.scene.patch"]["inputSchema"])
+    assert "fixed holds eye and look still" in patch_schema and "orbit" in patch_schema and "1080 x 1920" in patch_schema
+    assert 'template_id "blank"' in tools["world3d.scene.instantiate"]["description"]
+    assert "No card is needed" in tools["world3d.scene.patch"]["description"]
+    assert "scenes.world3d.export.receipt" in tools["world3d.scene.publish"]["description"]
+
+
+def test_exports_say_which_receipt_to_poll():
+    from services.jobs_wait import command_catalog as jobs_catalog
+    from services.world3d_export import command_catalog as export_catalog
+    assert "scenes.world3d.export.receipt" in jobs_catalog()[0]["description"]
+    assert "not jobs.wait" in next(tool for tool in export_catalog() if tool["name"] == "scenes.world3d.export")["description"]
