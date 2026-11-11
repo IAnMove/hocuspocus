@@ -38,6 +38,7 @@ CONTACTS_DOC = ("layout.contacts: one row per rigged character, judged from its 
 MAX_PEOPLE = 8
 TOLERANCE_M = 0.05            # hips this close to where the seat puts them are on it
 THROUGH_M = 0.03              # a limb this deep in furniture goes through it
+_CORE = ("back", "neck")       # the body itself, not a limb
 REACH = 0.6                   # arm lengths from the seated chest to the table's edge that the forearms still rest on
 MAX_WARNINGS = 12
 _KIND_HEIGHTS = (("chair", 0.9), ("silla", 0.9), ("table", 0.75), ("mesa", 0.75), ("desk", 0.75), ("escritorio", 0.75), ("bed", 0.55),
@@ -164,29 +165,36 @@ class _Report:
 
     def _through(self, row: dict, person: Person, seated: bool) -> None:
         """Limbs (and, standing, the body) that run inside a piece of furniture or cross its faces."""
-        found = []
-        for piece in self.pieces.values():
-            for label, start, end in person.segments():
-                hit = _limb_hit(piece, start, end)
-                if hit is not None:
-                    found.append((hit[0], label, piece, *hit[1:]))
+        found = self._limb_hits(person)
+        # A body inside a piece is one warning (inside_object), not one per limb as well.
+        inside = {piece.id for depth, label, piece, *_rest in found if not seated and label in _CORE and depth >= THROUGH_M}
         seen = set()
         for depth, label, piece, part, point, out in sorted(found, key=lambda item: -item[0]):
-            if (label, piece.id) in seen or len(seen) >= 4:
+            key = ("body", piece.id) if piece.id in inside else (label, piece.id)
+            if key in seen or len(seen) >= 4:
                 continue
-            seen.add((label, piece.id))
+            seen.add(key)
             row.setdefault("through", []).append({"limb": label, "object": piece.id, "part": piece.part_name(part), "depthM": round(depth, 3),
                                                   "at": _rounded(point)})
             if piece.id in row.get("seatTooHigh", ()) and label.endswith("thigh"):
                 continue                                         # the seat's height is the cause, and it has its warning
             self._through_warning(row, person, seated, (label, piece, part, depth, out))
 
+    def _limb_hits(self, person: Person) -> list[tuple]:
+        found = []
+        for piece in self.pieces.values():
+            for label, start, end in person.segments():
+                hit = _limb_hit(piece, start, end)
+                if hit is not None:
+                    found.append((hit[0], label, piece, *hit[1:]))
+        return found
+
     def _through_warning(self, row: dict, person: Person, seated: bool, hit: tuple) -> None:
         label, piece, part, depth, out = hit
         seats = {name: item.slot for name, item in self.pieces.items()}
         text, fix = _standing_fix(person, piece) if not seated else _seated_fix(person, piece, depth, out, seats)
         where = f"{piece.id} ({piece.part_name(part)})"
-        if not seated and label in ("back", "neck") and depth >= THROUGH_M:
+        if not seated and label in _CORE and depth >= THROUGH_M:
             self.warn(row, f"inside_object: {person.id} stands inside {where}, its {label} {depth:.2f} m deep; {text}", *([fix] if fix else []))
             return
         how = f"goes {depth:.2f} m inside" if depth >= THROUGH_M else "passes right through"
