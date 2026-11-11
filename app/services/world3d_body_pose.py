@@ -26,6 +26,7 @@ _REQUIRED = ("Hips", "LeftUpLeg", "LeftLeg", "LeftFoot", "RightUpLeg", "RightLeg
 _MARKER = "hocuspocus_humanoid"
 _CACHE: dict = {}
 _CACHE_LIMIT = 32
+MAX_BYTES = 96 * 1024 * 1024
 _PATHS = {"translation": 0, "rotation": 1, "scale": 2}
 
 
@@ -77,18 +78,26 @@ class Body:
 
 
 def body_of(path: Path) -> Body | None:
-    """The humanoid of a GLB, or None (cached per file version)."""
+    """The humanoid of a GLB, or None (cached per file version). Only the JSON chunk of a model is read to tell: a set or
+    a prop with no standard skeleton never has its buffers loaded, and no file over ``MAX_BYTES`` is."""
     try:
         stat = Path(path).stat()
         key = ("body", str(path), stat.st_mtime_ns, stat.st_size)
         if key not in _CACHE:
             if len(_CACHE) >= _CACHE_LIMIT:
                 _CACHE.clear()
-            _CACHE[key] = _read(Path(path).read_bytes())
+            _CACHE[key] = _read(Path(path).read_bytes()) if stat.st_size <= MAX_BYTES and _has_skeleton(Path(path)) else None
         return _CACHE[key]
     except Exception:  # noqa: BLE001 - a model that cannot be read is not a body
         LOG.debug("body_of failed for %s", path, exc_info=True)
         return None
+
+
+def _has_skeleton(path: Path) -> bool:
+    """The standard joints are named in the GLB's JSON chunk (``glb_bounds`` reads only that chunk)."""
+    from services.procedural_3d.glb_bounds import MAX_JSON_BYTES, _read_document
+    joints = _joints(_read_document(path, MAX_JSON_BYTES).get("nodes") or [])
+    return all(name in joints for name in _REQUIRED)
 
 
 def _read(data: bytes) -> Body | None:

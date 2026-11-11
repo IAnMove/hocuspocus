@@ -167,34 +167,29 @@ class _Report:
         found = []
         for piece in self.pieces.values():
             for label, start, end in person.segments():
-                points = start + (end - start) * np.linspace(0.0, 1.0, 5)[:, None]
-                depth, parts = piece.depth(points)
-                crossed = piece.crossed(start, end)
-                deepest = int(np.argmax(depth))
-                if depth[deepest] >= THROUGH_M or len(crossed):
-                    part = int(parts[deepest]) if depth[deepest] > 0 else int(crossed[0])
-                    found.append((float(depth[deepest]), label, piece, part, points[deepest] if depth[deepest] > 0 else (start + end) / 2))
-        core = {"back", "neck"}
+                hit = _limb_hit(piece, start, end)
+                if hit is not None:
+                    found.append((hit[0], label, piece, *hit[1:]))
         seen = set()
-        for depth, label, piece, part, point in sorted(found, key=lambda item: -item[0]):
+        for depth, label, piece, part, point, out in sorted(found, key=lambda item: -item[0]):
             if (label, piece.id) in seen or len(seen) >= 4:
                 continue
             seen.add((label, piece.id))
             row.setdefault("through", []).append({"limb": label, "object": piece.id, "part": piece.part_name(part), "depthM": round(depth, 3),
                                                   "at": _rounded(point)})
-            standing_inside = not seated and label in core and depth >= THROUGH_M
             if piece.id in row.get("seatTooHigh", ()) and label.endswith("thigh"):
                 continue                                         # the seat's height is the cause, and it has its warning
-            self._through_warning(row, person, standing_inside, label, piece, part, depth)
+            self._through_warning(row, person, seated, (label, piece, part, depth, out))
 
-    def _through_warning(self, row: dict, person: Person, inside_it: bool, label: str, piece: Piece, part: int, depth: float) -> None:
-        if inside_it:
-            self.warn(row, f"inside_object: {person.id} stands inside {piece.id} ({piece.part_name(part)}), its {label} {depth:.2f} m deep; move "
-                           f"{person.id} out of it, or seat it: {person.id}: rest {{pose: \"sit\", on: \"{piece.id}\"}}")
+    def _through_warning(self, row: dict, person: Person, seated: bool, hit: tuple) -> None:
+        label, piece, part, depth, out = hit
+        text, fix = _standing_fix(person, piece) if not seated else _seated_fix(person, piece, depth, out)
+        where = f"{piece.id} ({piece.part_name(part)})"
+        if not seated and label in ("back", "neck") and depth >= THROUGH_M:
+            self.warn(row, f"inside_object: {person.id} stands inside {where}, its {label} {depth:.2f} m deep; {text}", *([fix] if fix else []))
             return
-        how = f"{depth:.2f} m inside" if depth >= THROUGH_M else "through"
-        self.warn(row, f"limb_through_object: {person.id}'s {label} goes {how} {piece.id} ({piece.part_name(part)}); move {person.id} or "
-                       f"{piece.id} apart (a seat: rest re-places the sitter; beside gap moves a chair), or give {person.id} collide: false")
+        how = f"goes {depth:.2f} m inside" if depth >= THROUGH_M else "passes right through"
+        self.warn(row, f"limb_through_object: {person.id}'s {label} {how} {where}; {text}, or give {person.id} collide: false", *([fix] if fix else []))
 
     # ---------------------------------------------------------------------------------------------------------- tables
 
@@ -262,6 +257,48 @@ class _Report:
         self.warn(row, f"furniture_size_unusual: {name} is drawn 1.70 m tall (every model is 1.7 m x scale until it is sized); a "
                        f"{'table' if use == 'at' else 'seat'} like it is about {wanted:g} m: give {name} height {wanted:g}, then read the "
                        f"seat and table warnings again", {"object_id": name, "height": wanted})
+
+
+def _limb_hit(piece: Piece, start: np.ndarray, end: np.ndarray):
+    """``(depth m, part, point, way out)`` of a limb inside a piece or right through it, or None."""
+    points = start + (end - start) * np.linspace(0.0, 1.0, 9)[:, None]
+    depth, parts, exits = piece.depth_exits(points)
+    crossed = piece.crossed(start, end)
+    deepest = int(np.argmax(depth))
+    if depth[deepest] < THROUGH_M and not len(crossed):
+        return None
+    if depth[deepest] > 0:
+        return float(depth[deepest]), int(parts[deepest]), points[deepest], exits[deepest]
+    return 0.0, int(crossed[0]), (start + end) / 2, np.zeros(3)
+
+
+def _standing_fix(person: Person, piece: Piece) -> tuple[str, dict | None]:
+    """Step the person out of the piece's footprint, away from its middle."""
+    corners = piece.frame.to_world([[x, piece.box["min"][1], z] for x in (piece.box["min"][0], piece.box["max"][0])
+                                    for z in (piece.box["min"][2], piece.box["max"][2])])[:, [0, 2]]
+    centre, here = corners.mean(axis=0), person.joints["Hips"][[0, 2]]
+    away = here - centre
+    away = away / np.linalg.norm(away) if np.linalg.norm(away) > 1e-6 else np.array([0.0, 1.0])
+    distance = float(((corners - centre) @ away).max() - (here - centre) @ away) + 0.3      # its far edge plus a body
+    position = [float(value) for value in person.slot.get("position") or [0, 0, 0]]
+    moved = [round(float(position[0] + away[0] * distance), 3), position[1], round(float(position[2] + away[1] * distance), 3)]
+    return f"move {person.id} {distance:.2f} m out of it: position {_js(moved)}", {"object_id": person.id, "position": moved}
+
+
+def _seated_fix(person: Person, piece: Piece, depth: float, out: np.ndarray) -> tuple[str, dict | None]:
+    """A sitter's limb in a table or another piece: raise or lower its top when the way out is up or down, else move it away."""
+    rest = person.slot.get("rest") if isinstance(person.slot.get("rest"), dict) else {}
+    if piece.id == rest.get("on") or not out.any():
+        return f"move {person.id} or {piece.id} apart (rest re-places the sitter; a beside gap moves a chair)", None
+    top = float(piece.frame.to_world([[0.0, piece.box["max"][1], 0.0]])[0][1]) - piece.floor_y()
+    wanted = top + (depth + 0.05) * (-1 if out[1] > 0 else 1)
+    if abs(out[1]) > 0.7 and abs(piece.floor_y() - person.floor) < 0.05 and wanted >= 0.2:
+        fix = _resize(piece, wanted, top, "height")       # a table top in the knees or the forearms: its height
+        return f"{'lower' if out[1] > 0 else 'raise'} {piece.id} to {wanted:.2f} m: give {piece.id} {_text(fix)}", {"object_id": piece.id, **fix}
+    position = [float(value) for value in piece.slot.get("position") or [0, 0, 0]]
+    step = -out * (depth + 0.05)
+    moved = [round(float(position[axis] + step[axis]), 3) for axis in range(3)]
+    return f"move {piece.id} {depth + 0.05:.2f} m away: position {_js(moved)}", {"object_id": piece.id, "position": moved}
 
 
 def _span(person: Person) -> tuple[float, float, float]:

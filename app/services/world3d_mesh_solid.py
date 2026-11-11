@@ -157,9 +157,16 @@ def _grouped(triangles: np.ndarray, owners: np.ndarray, heights: np.ndarray, are
 
 def inside(mesh: Mesh, points) -> tuple[np.ndarray, np.ndarray]:
     """``(depth, part)`` per point: how deep it is inside the solid (0 outside) and the part of the nearest face (-1 outside)."""
+    depth, part, _exits = inside_exits(mesh, points)
+    return depth, part
+
+
+def inside_exits(mesh: Mesh, points) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``inside`` plus, per point, the axis direction of the nearest way out (a unit vector; zero outside)."""
     points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
     depth = np.zeros(len(points))
     part = np.full(len(points), -1, dtype=np.int32)
+    exits = np.zeros((len(points), 3))
     for row, point in enumerate(points):
         if np.any(point < mesh.low) or np.any(point > mesh.high):
             continue
@@ -170,11 +177,12 @@ def inside(mesh: Mesh, points) -> tuple[np.ndarray, np.ndarray]:
         holders = np.flatnonzero(counts % 2 == 1)
         if not len(holders):
             continue
-        nearest = [(distances[mask].min(), owners[mask][distances[mask].argmin()]) for distances, owners in hits
+        nearest = [(distances[mask].min(), owners[mask][distances[mask].argmin()], axis) for axis, (distances, owners) in enumerate(hits)
                    for mask in [np.isin(owners, holders)] if mask.any()]
         if nearest:
-            depth[row], part[row] = min(nearest, key=lambda item: item[0])
-    return depth, part
+            depth[row], part[row], axis = min(nearest, key=lambda item: item[0])
+            exits[row] = _DIRECTIONS[axis]
+    return depth, part, exits
 
 
 def passes_through(mesh: Mesh, start, end) -> np.ndarray:

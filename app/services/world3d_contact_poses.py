@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from services.world3d_body_pose import Body, body_of, held_time, measures
-from services.world3d_mesh_solid import Mesh, inside, mesh_of, passes_through
+from services.world3d_mesh_solid import Mesh, inside_exits, mesh_of, passes_through
 from services.world3d_scene_bounds import resolve_workspace_glb, slot_native_bounds, slot_native_parts
 from services.world3d_slot_frame import SlotFrame, slot_frame
 
@@ -47,8 +47,13 @@ class Piece:
 
     def depth(self, points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """How deep each scene point is inside the piece (metres) and the part it is in."""
-        depth, part = inside(self.mesh, self.frame.to_native(points))
-        return depth * self.frame.factor, part
+        depth, part, _exits = self.depth_exits(points)
+        return depth, part
+
+    def depth_exits(self, points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """``depth`` plus the scene direction of each point's nearest way out of the piece."""
+        depth, part, exits = inside_exits(self.mesh, self.frame.to_native(points))
+        return depth * self.frame.factor, part, exits @ self.frame.rotation.T
 
     def crossed(self, start: np.ndarray, end: np.ndarray) -> np.ndarray:
         """The parts a scene segment passes right through."""

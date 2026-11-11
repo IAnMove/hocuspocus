@@ -310,12 +310,16 @@ def test_limbs_through_furniture_and_standing_inside_it_are_reported_unless_coll
     viewed = patch(stage, [crate])
     row = contact(viewed, "pet")
     assert any(hit["limb"].endswith("shin") and hit["object"] == "box" for hit in row["through"]) and "limb_through_object" in codes(viewed)
+    moved = next(fix for fix in row["fix"] if fix["object_id"] == "box")
+    assert moved.get("position", crate["position"]) != crate["position"] or moved.get("height"), "the fix moves or resizes the box, in numbers"
     assert "limb_through_object" not in codes(patch(stage, [{"object_id": "pet", "collide": False}]))
     inside = patch(stage, [{"object_id": "box", "remove": True},
                            {"object_id": "crate", "add": True, "source_url": "/api/v1/file/crate.glb?workspace=studio", "height": 1.6},
                            {"object_id": "walker", "add": True, "source_url": PET, "grounded": True, "height": 1.7}])
     line = next(line for line in inside["warnings"] if line.startswith("inside_object"))
-    assert line.startswith("inside_object: walker stands inside crate")
+    assert line.startswith("inside_object: walker stands inside crate") and "out of it: position [" in line
+    step = next(fix for fix in contact(inside, "walker")["fix"] if fix["object_id"] == "walker")["position"]
+    assert math.hypot(step[0], step[2]) > 0.9, "out past the crate's edge (0.6 m from its middle) and a body more"
 
 
 # --------------------------------------------------------------------------------------------------------------- scene
