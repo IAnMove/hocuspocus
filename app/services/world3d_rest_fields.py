@@ -44,8 +44,8 @@ SEATED_RECIPE = ("People seated at a table or on a bed, by intent (no coordinate
                  "beside it, {object_id: \"chair_1\", add: true, furniture: {kind: \"chair\"}, beside: {object: \"table\", side: \"left\"}}; "
                  "3) each character seated (a character made by model3d.*.make is drawn at its recorded height, layout.items[].recordedHeightM; "
                  "give height only for other models), {object_id: \"ana\", source_url, rest: {pose: \"sit\", on: \"chair_1\", "
-                 "at: \"table\"}}; 4) read layout.contacts and the warnings and apply every fix binding (seat and table heights for short "
-                 "legs, beside gap) until none is left. On the edge of a bed: rest {pose: \"sit\", on: \"bed\"}. A go, face or do beat stands a "
+                 "at: \"table\"}}; 4) read layout.contacts and the warnings and apply every fix binding (a seat "
+                 "or table height, beside gap) until none is left. On the edge of a bed: rest {pose: \"sit\", on: \"bed\"}. A go, face or do beat stands a "
                  "sitter up (rest_released).")
 PLACING_DOC = ("height: metres, the object's real height (the same as fit {heightM}). beside: {object, side? degrees around it from its "
                "front toward its right, or front|right|back|left, gap? m between the boxes (negative tucks in), offset? m along that side, "
@@ -92,8 +92,8 @@ def _recorded_fit(slot: dict, binding: dict, workspace: str | None, workspace_di
     """A model bound with no size of its own is drawn at the height its maker recorded (``world3d_model_height``)."""
     if not any(key in binding for key in ("sourceUrl", "source_url")) or any(key in binding for key in ("scale", "fit", "height", "furniture")):
         return None
-    if (slot.get("media") or "model3d") != "model3d" or not workspace or workspace_dir is None:
-        return None
+    if (slot.get("media") or "model3d") != "model3d" or not workspace or workspace_dir is None or float(slot.get("scale") or 1) != 1:
+        return None                                       # a template that sized its object keeps that size
     from services.world3d_model_height import recorded_height
     from services.world3d_scene_bounds import resolve_workspace_glb
     metres = recorded_height(resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir)[0])

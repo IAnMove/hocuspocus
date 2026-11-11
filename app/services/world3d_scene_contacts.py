@@ -39,8 +39,9 @@ _MEMO: dict = {}
 CONTACTS_DOC = ("layout.contacts: one row per rigged character, judged from its joints at the pose it holds mid-shot against the furniture's "
                 "real faces: {id, pose seated|standing, hipsM, seat? {object, part, topM, gapM}, at? {object, topM, rangeM [lowest, highest], "
                 "edgeM}, through? [{limb, object, part, depthM, at}], issues?, fix? [bindings to paste into world3d.scene.patch]}. Warnings: "
-                "seated_without_seat, floats_above_seat, sunk_into_seat, seat_height_unusual, limb_through_object, inside_object, "
-                "at_height_unusual, at_out_of_reach, at_not_in_front, furniture_size_unusual; each ends with the fix in numbers.")
+                "seated_without_seat, floats_above_seat, sunk_into_seat, seat_height_unusual, legs_unusually_short (a grown body that would need "
+                "a child's seat: no seat is shrunk for it), limb_through_object, inside_object, at_height_unusual, at_out_of_reach, "
+                "at_not_in_front, furniture_size_unusual, and from beats rest_released; each ends with the fix in numbers.")
 MAX_PEOPLE = 8
 TOLERANCE_M = 0.05            # hips this close to where the seat puts them are on it
 THROUGH_M = 0.03              # a limb this deep in furniture goes through it
@@ -78,7 +79,7 @@ def _memo_key(document: dict, workspace: str, workspace_dir) -> tuple:
         if path is not None:
             stat = path.stat()
             files.append((str(path), stat.st_mtime_ns, stat.st_size))
-    text = json.dumps([document.get("slots"), document.get("duration")], sort_keys=True, default=str)
+    text = json.dumps([document.get("slots"), document.get("duration"), document.get("room")], sort_keys=True, default=str)
     return workspace, hashlib.sha256(text.encode()).hexdigest(), tuple(files)
 
 
@@ -199,8 +200,9 @@ class _Report:
         hips = person.rest_hips_height
         self.warn(row, f"legs_unusually_short: {person.id} is {person.height:.2f} m tall but its knees are {knee:.2f} m high and its hips "
                        f"{hips:.2f} m (a body that tall has its knees near {KNEE_SHARE * person.height:.2f} m), so it would need a "
-                       f"{best:.2f} m seat, a child's; its rig most likely bent the legs at a skirt's or a coat's hem. Re-rig the character "
-                       f"(a mould body: model3d.blob.make or model3d.anime.make again) instead of shrinking the furniture")
+                       f"{best:.2f} m seat, a child's. Either its rig bent the legs at a skirt's or a coat's hem (make the character again "
+                       f"with model3d.blob.make or model3d.anime.make, whose rig now reads the legs under a skirt), or it really is a "
+                       f"short-legged figure (a chibi, a blob): then give its seat that height yourself; no seat is changed for you")
 
     # ---------------------------------------------------------------------------------------------------------- limbs
 

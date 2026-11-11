@@ -418,7 +418,7 @@ def test_a_grown_body_that_would_need_a_childs_seat_is_told_its_legs_look_wrong(
     viewed = patch(stage, [{"object_id": "chair", "add": True, "furniture": {"kind": "chair", "seat": 0.62}},
                            {"object_id": "pet", "add": True, "source_url": PET, "height": 1.5, "rest": {"pose": "sit", "on": "chair"}}])
     line = next(line for line in viewed["warnings"] if line.startswith("legs_unusually_short"))
-    assert "pet is 1.50 m tall" in line and "a child's" in line and "Re-rig" in line
+    assert "pet is 1.50 m tall" in line and "a child's" in line and "make the character again" in line and "short-legged figure" in line
     assert "seat_height_unusual" not in codes(viewed) and not any(fix.get("object_id") == "chair" for fix in contact(viewed, "pet").get("fix", []))
 
 
