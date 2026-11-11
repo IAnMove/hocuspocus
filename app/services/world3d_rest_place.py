@@ -40,7 +40,7 @@ HOLD_AT = 1.9                 # seated from 1.0 s of the 2 s clip
 VERSION = "rest-sit-3"
 HIP_ABOVE_SEAT = 0.16         # leg lengths: sit_clip's hips joint over the seat surface
 HAND_LIFT_M = 0.04           # a wrist rests this far over the table top, 0.12 m in from its edge
-BAKER = None                  # tests replace the worker call (routers.model3d_animate.execute_animate)
+BAKER = None                  # tests replace the worker call (humanoid_animate_runner.execute_animate)
 
 
 class Furniture:
@@ -360,7 +360,7 @@ def _bake(source: Path, plan: dict, workspace: str, workspace_dir) -> int:
 
 
 def _write_derived(source: Path, target: Path, request: dict) -> None:
-    from routers.model3d_animate import execute_animate
+    from services.humanoid_animate_runner import execute_animate
     target.parent.mkdir(parents=True, exist_ok=True)
     interaction = {"kind": "sit", "seat": request["seat"], "duration": CLIP_SECONDS, "name": CLIP_NAME}
     if request["hands"] is not None:

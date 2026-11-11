@@ -410,27 +410,13 @@ more than four shots).
 
 ## People seated at a table or on a bed (Video 3D)
 
-Never compute coordinates for sitting: every model is drawn 1.7 m × `scale` tall and its origin is wherever the GLB put
-it. Start from a card that has the place (`world3d.templates.suggest`: `dialogue-table`, a `stage-<mold>`) or from an empty
-stage (`world3d.templates.user.put` a personal template whose document is `{version: 1, units: "meters", up: "y", width,
-height, fps: 30, duration, camera: {family: "fixed", eye, look, fov}, light: {kind: "directional", direction, intensity,
-color}, slots: []}`, then `world3d.scene.instantiate`). Declare the intent in `world3d.scene.patch` bindings and the
-server places everything:
-
-1. Furniture: `{object_id: "table", add: true, furniture: {kind: "table"}}` (kinds `chair`, `stool`, `bench`, `sofa`,
-   `table`, `desk`, `bed`, `nightstand`, real sizes, named parts; `height`, `seat`, `width`, `depth` in metres), or any
-   workspace GLB with `height: 0.75` (its real height).
-2. Seats around it: `{object_id: "chair_1", add: true, furniture: {kind: "chair"}, beside: {object: "table", side: "left"}}`
-   (`side` `front`/`right`/`back`/`left` or degrees, `gap` m, `facing` `object` by default).
-3. Each character at its real height, seated: `{object_id: "ana", height: 1.62, rest: {pose: "sit", on: "chair_1", at: "table"}}`.
-   On the edge of a bed: `rest: {pose: "sit", on: "bed"}`. The character keeps the seated pose for the whole shot,
-   hands on the table with `at`; `rest: null` stands it up again.
-4. Read `layout.contacts` and the warnings of the reply (`seat_height_unusual`, `at_height_unusual`, `at_out_of_reach`,
-   `seated_without_seat`, `limb_through_object`…): each one ends with the binding to paste (short legs need a lower seat:
-   `furniture: {kind: "chair", seat: 0.26}`). Patch again until none is left, then publish. A card's own held
-   `sit_down` with no chair warns `seated_without_seat` with the chair and `rest` to add.
-5. Not made yet: lying down, standing at a counter, two sitters on one sofa or bed (give each `rest.surface {point}`),
-   and acting while seated: a `go`, `face` or `do` beat stands the sitter up (`rest_released`).
+Never compute coordinates for sitting (every model is 1.7 m × `scale` tall). In `world3d.scene.patch` bindings declare:
+`{object_id: "table", add: true, furniture: {kind: "table"}}` (or any GLB with `height` in metres), chairs
+`{object_id: "chair_1", add: true, furniture: {kind: "chair"}, beside: {object: "table", side: "left"}}`, and each rigged
+character `{object_id: "ana", height: 1.62, rest: {pose: "sit", on: "chair_1", at: "table"}}` (a bed: `rest: {pose: "sit",
+on: "bed"}`). Then apply the `fix` bindings of `layout.contacts` (short legs need a lower seat) until no contact warning
+is left. An empty stage is a personal template with `slots: []` (`world3d.templates.user.put`, then instantiate). A `go`,
+`face` or `do` beat stands a sitter up (`rest_released`); lying down is not made yet.
 
 ## Edit one shot ("the fifth shot")
 
