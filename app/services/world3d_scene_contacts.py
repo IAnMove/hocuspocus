@@ -316,7 +316,7 @@ class _Report:
 
 def _limb_hit(piece: Piece, start: np.ndarray, end: np.ndarray):
     """``(depth m, part, point, way out)`` of a limb inside a piece or right through it, or None."""
-    points = start + (end - start) * np.linspace(0.0, 1.0, 9)[:, None]
+    points = start + (end - start) * np.linspace(0.0, 1.0, 17)[:, None]
     depth, parts, exits = piece.depth_exits(points)
     crossed = piece.crossed(start, end)
     deepest = int(np.argmax(depth))

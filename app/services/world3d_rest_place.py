@@ -41,6 +41,7 @@ CLIP_SECONDS = 2.0
 HOLD_AT = 1.9                 # seated from 1.0 s of the 2 s clip
 VERSION = "rest-sit-4"
 HIP_ABOVE_SEAT = 0.16         # leg lengths: sit_clip's hips joint over the seat surface
+THIGH_RADIUS = 0.06           # leg lengths: a thigh's half thickness, kept clear of a seat's front edge
 BAKER = None                  # tests replace the worker call (humanoid_animate_runner.execute_animate)
 
 
@@ -253,14 +254,16 @@ def _seat_plan(slot: dict, body, source: Path, furniture: Furniture, seat, slots
     size = measures(rest_joints)
     char_box = slot_native_bounds({"sourceUrl": slot["restBase"]["sourceUrl"]}, workspace, workspace_dir)
     factor = (1.7 / max(char_box["size"][1], 1e-3)) * float(slot.get("scale") or 1)
-    point = _contact(rect, facing, size["thigh"] * factor)
     floor = furniture.floor_y()
-    seat_up = (float(point[1]) - floor) / factor                                   # model units above the soles
+    seat_up = (float(rect[:, 1].mean()) - floor) / factor                          # model units above the soles
     hips = rest_joints["Hips"]
     hip_y = body.box_low + seat_up + HIP_ABOVE_SEAT * size["leg"]
     thigh_y = hip_y - (hips[1] - (rest_joints["LeftUpLeg"][1] + rest_joints["RightUpLeg"][1]) / 2)
     knee_y = float((rest_joints["LeftLeg"][1] + rest_joints["RightLeg"][1]) / 2)
     reach = math.sqrt(max(size["thigh"] ** 2 - (thigh_y - knee_y) ** 2, (0.3 * size["thigh"]) ** 2))
+    # A thigh that slopes down to a knee under the seat's top (a high bed) clears the front edge: sit nearer it.
+    clear = reach * (thigh_y - (body.box_low + seat_up) - THIGH_RADIUS * size["leg"]) / (thigh_y - knee_y) if thigh_y > knee_y else math.inf
+    point = _contact(rect, facing, size["thigh"] * factor, max(clear, 0.0) * factor)
     ankle_forward = float((rest_joints["LeftFoot"][2] + rest_joints["RightFoot"][2]) / 2) * body.facing
     seat_model = np.array([hips[0], body.box_low + seat_up, (ankle_forward - reach) * body.facing])
     yaw = yaw_of(facing) + (math.pi if body.facing < 0 else 0.0)
@@ -305,12 +308,13 @@ def _open_side(seat, frame, centre: np.ndarray, document: dict) -> np.ndarray:
     return max(sides, key=lambda side: float(side @ toward))
 
 
-def _contact(rect: np.ndarray, facing: np.ndarray, thigh_m: float) -> np.ndarray:
-    """The point of the seat under the hips: centred across, inset from the front edge along ``facing``."""
+def _contact(rect: np.ndarray, facing: np.ndarray, thigh_m: float, most: float = math.inf) -> np.ndarray:
+    """The point of the seat under the hips: centred across, inset from the front edge along ``facing`` (at most ``most``)."""
     centre = rect.mean(axis=0)
     flat = rect[:, [0, 2]] - centre[[0, 2]]
     half = float((flat @ facing).max())
-    inset = min(max(0.6 * thigh_m, 0.06), max(2 * half - 0.1, half))
+    inset = max(min(0.6 * thigh_m, most), 0.06)
+    inset = min(inset, max(2 * half - 0.1, half))
     point = centre.copy()
     point[[0, 2]] += facing * (half - inset)
     return point
