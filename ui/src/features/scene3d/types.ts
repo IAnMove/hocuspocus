@@ -244,7 +244,7 @@ export type Scene3DSlot = {
    *  re-solves it on every patch; the renderer reads only those plain fields. */
   rest?: Scene3DRest
   /** Placed next to another object by their boxes (`world3d.scene.patch` beside), re-solved on every patch. */
-  beside?: { object: string; side?: number; gap?: number; offset?: number; facing?: string | number }
+  beside?: { object: string; side?: number | string; gap?: number; offset?: number; facing?: string | number }
   /** A plain piece the server made in the workspace (`world3d.scene.patch` furniture). */
   furniture?: { kind: string; height?: number; seat?: number; width?: number; depth?: number; color?: string }
 }
