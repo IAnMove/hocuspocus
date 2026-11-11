@@ -383,3 +383,14 @@ def test_the_editor_arranges_its_own_document_with_the_same_bindings(stage):
     refused = TestClient(app).post("/api/v1/world3d/templates/arrange", json={"workspace": WORKSPACE, "document": editor,
                                                                               "bindings": [{"object_id": "tall", "rest": {"pose": "lie", "on": "x"}}]})
     assert refused.status_code == 422 and refused.json()["detail"]["code"] == "invalid_rest"
+
+
+def test_a_beat_that_acts_stands_the_sitter_up_and_says_so(stage):
+    from services.world3d_beats import beat_scene
+    viewed = patch(stage, [{"object_id": "chair", "add": True, "furniture": {"kind": "chair", "seat": 0.4}},
+                           {"object_id": "pet", "add": True, "source_url": PET, "height": 1.75, "rest": {"pose": "sit", "on": "chair"}}])
+    acted = beat_scene(WORKSPACE, SCENE, workspace_dir(stage), {"beats": [{"t": 1, "who": "pet", "verb": "do", "action": "Sit Down"}]},
+                       viewed["revision"])
+    assert any(line.startswith("rest_released: pet") for line in acted["warnings"])
+    assert "rest" not in slot_of(acted, "pet") and slot_of(acted, "pet")["sourceUrl"] == PET
+    assert "Sit Down" in [cue["clip"]["name"] for cue in slot_of(acted, "pet")["clips"]]
