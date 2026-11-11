@@ -76,6 +76,7 @@ class Person:
     size: dict                # metres: thigh, shank, leg, arm, forearm
     floor: float              # scene y of the soles at rest
     held: bool
+    height: float = 0.0       # drawn height, metres
 
     @property
     def id(self) -> str:
@@ -177,5 +178,5 @@ def _person(slot: dict, body: Body, workspace: str, workspace_dir, seconds: floa
     joints = {name: frame.to_world([point])[0] for name, point in native.items()}
     soles = frame.to_world([[0.0, body.box_low if lowest is None else lowest, 0.0]])[0][1]
     size = {key: value * frame.factor for key, value in measures(rest).items()}
-    return Person(slot, body, frame, joints, rest, size, float(soles), held)
+    return Person(slot, body, frame, joints, rest, size, float(soles), held, float(box["size"][1] * frame.factor))
 

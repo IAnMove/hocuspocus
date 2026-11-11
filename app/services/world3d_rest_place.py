@@ -28,6 +28,7 @@ import numpy as np
 from services.world3d_body_pose import body_of, measures
 from services.world3d_mesh_solid import mesh_of
 from services.world3d_rest_fields import BASE_FIELDS
+from services.world3d_rest_hands import HAND_LIFT_M, Sitter, edge_distance as _edge_distance, resting_hands  # noqa: F401
 from services.world3d_scene_bounds import resolve_workspace_glb, slot_native_bounds, slot_native_parts
 from services.world3d_seats import seat_surface, table_top
 from services.world3d_slot_frame import slot_frame, yaw_of
@@ -37,9 +38,8 @@ FOLDER = "world3d-rest"
 CLIP_NAME = "Rest Sit"
 CLIP_SECONDS = 2.0
 HOLD_AT = 1.9                 # seated from 1.0 s of the 2 s clip
-VERSION = "rest-sit-3"
+VERSION = "rest-sit-4"
 HIP_ABOVE_SEAT = 0.16         # leg lengths: sit_clip's hips joint over the seat surface
-HAND_LIFT_M = 0.04           # a wrist rests this far over the table top, 0.12 m in from its edge
 BAKER = None                  # tests replace the worker call (humanoid_animate_runner.execute_animate)
 
 
@@ -240,7 +240,9 @@ def _seat_plan(slot: dict, body, source: Path, furniture: Furniture, seat, slots
     turned = np.array([[math.cos(yaw), 0, math.sin(yaw)], [0, 1, 0], [-math.sin(yaw), 0, math.cos(yaw)]])
     offset = turned @ (seat_model * factor)
     position = [float(point[0] - offset[0]), floor - body.box_low * factor, float(point[2] - offset[2])]
-    hands = _hands(slot["rest"], slots, rest_joints, seat_model, size, facing, position, turned, factor, workspace, workspace_dir)
+    sitter = Sitter(rest_joints, seat_model + np.array([0, HIP_ABOVE_SEAT * size["leg"], 0]) - hips, ankle_forward * body.facing,
+                    float(seat_model[1]), size, facing, np.asarray(position), turned, factor)
+    hands = _hands(slot["rest"], sitter, rect, slots, workspace, workspace_dir)
     return {"seat": seat_model, "hands": hands, "position": position, "yaw": yaw, "source": source, "base": slot["restBase"]}
 
 
@@ -287,55 +289,15 @@ def _contact(rect: np.ndarray, facing: np.ndarray, thigh_m: float) -> np.ndarray
     return point
 
 
-def _hands(rest: dict, slots: dict, joints: dict, seat_model: np.ndarray, size: dict, facing: np.ndarray, position: list,
-           turned: np.ndarray, factor: float, workspace: str, workspace_dir) -> list | None:
-    """Both wrists on the table top in front of the shoulders, when ``at`` is a reachable table (model-space points)."""
-    if not rest.get("at") or rest.get("hands") is False:
-        return None
-    table = Furniture(slots[rest["at"]], workspace, workspace_dir)
-    top = table_top(table.box, table.frame.factor, table.mesh, table.parts) if table.ok else None
-    if top is None:
-        return None
-    corners = table.frame.to_world([[top.low[0], top.y, top.low[1]], [top.high[0], top.y, top.low[1]],
-                                    [top.high[0], top.y, top.high[1]], [top.low[0], top.y, top.high[1]]])
-    shift = seat_model + np.array([0, HIP_ABOVE_SEAT * size["leg"], 0]) - joints["Hips"]
-    wrists = []
-    for side in ("Left", "Right"):
-        shoulder = joints[f"{side}Arm"] + shift
-        world = turned @ (shoulder * factor) + np.asarray(position)
-        edge = _edge_distance(corners, world, facing)
-        if edge is None:
-            return None
-        goal = world.copy()
-        goal[[0, 2]] += facing * (edge + 0.12)
-        goal[1] = corners[:, 1].mean() + HAND_LIFT_M
-        if np.linalg.norm(goal - world) > 0.95 * size["arm"] * factor:
-            return None
-        wrists.append(((turned.T @ (goal - np.asarray(position))) / factor).tolist())
-    return wrists
-
-
-def _edge_distance(corners: np.ndarray, origin: np.ndarray, facing: np.ndarray) -> float | None:
-    """How far along ``facing`` the ray from ``origin`` enters the table top (a convex quad on the floor plane), or None."""
-    flat = corners[:, [0, 2]]
-    start = origin[[0, 2]]
-    entry, leave = 0.0, 3.0
-    for index in range(4):
-        a, b = flat[index], flat[(index + 1) % 4]
-        normal = np.array([b[1] - a[1], a[0] - b[0]])
-        if normal @ (flat.mean(axis=0) - a) > 0:
-            normal = -normal                                          # outward
-        denominator, distance = normal @ facing, normal @ (start - a)
-        if abs(denominator) < 1e-9:
-            if distance > 0:
-                return None
-            continue
-        t = -distance / denominator
-        if denominator < 0:
-            entry = max(entry, t)
-        else:
-            leave = min(leave, t)
-    return entry if entry <= leave else None
+def _hands(rest: dict, sitter: Sitter, seat_rect: np.ndarray, slots: dict, workspace: str, workspace_dir) -> list | None:
+    """``rest.hands``: on the table of ``at``, else beside the hips on a wide seat, else on the thighs (``world3d_rest_hands``)."""
+    corners = None
+    table = Furniture(slots[rest["at"]], workspace, workspace_dir) if rest.get("at") and rest.get("hands") is not False else None
+    top = table_top(table.box, table.frame.factor, table.mesh, table.parts) if table is not None and table.ok else None
+    if top is not None:
+        corners = table.frame.to_world([[top.low[0], top.y, top.low[1]], [top.high[0], top.y, top.low[1]],
+                                        [top.high[0], top.y, top.high[1]], [top.low[0], top.y, top.high[1]]])
+    return resting_hands(rest, sitter, seat_rect, corners)
 
 
 # -------------------------------------------------------------------------------------------------------------------- bake

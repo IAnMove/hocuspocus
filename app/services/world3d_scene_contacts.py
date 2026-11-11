@@ -30,7 +30,8 @@ import numpy as np
 
 from services.world3d_contact_poses import Person, Piece, measure_scene
 from services.world3d_scene_bounds import resolve_workspace_glb
-from services.world3d_rest_place import CLIP_NAME, HIP_ABOVE_SEAT, _edge_distance
+from services.world3d_rest_hands import edge_distance as _edge_distance
+from services.world3d_rest_place import CLIP_NAME, HIP_ABOVE_SEAT
 from services.world3d_seats import table_top
 
 LOG = logging.getLogger(__name__)
@@ -44,6 +45,8 @@ MAX_PEOPLE = 8
 TOLERANCE_M = 0.05            # hips this close to where the seat puts them are on it
 THROUGH_M = 0.03              # a limb this deep in furniture goes through it
 _CORE = ("back", "neck")       # the body itself, not a limb
+CHILD_SEAT_M, ADULT_M = 0.35, 1.4   # a seat lower than this for a body taller than that is a child's: the legs are wrong
+KNEE_SHARE = 0.28              # knee height over body height of a grown person
 REACH = 0.6                   # arm lengths from the seated chest to the table's edge that the forearms still rest on
 MAX_WARNINGS = 12
 _KIND_HEIGHTS = (("chair", 0.9), ("silla", 0.9), ("table", 0.75), ("mesa", 0.75), ("desk", 0.75), ("escritorio", 0.75), ("bed", 0.55),
@@ -184,9 +187,20 @@ class _Report:
             return
         what = "the feet leave the floor" if seat > highest else "the knees come up toward the chest"
         row.setdefault("seatTooHigh", []).append(piece.id)
+        if best < CHILD_SEAT_M and person.height > ADULT_M:
+            self._short_legs(row, person, knee, best)
+            return
         fix = _resize(piece, best, seat, "seat")
         self.warn(row, f"seat_height_unusual: {piece.id}'s seat is {seat:.2f} m high and {person.id}'s knees are {knee:.2f} m high, so {what}; "
                        f"a seat for {person.id} is {best:.2f} m: give {piece.id} {_text(fix)}", {"object_id": piece.id, **fix})
+
+    def _short_legs(self, row: dict, person: Person, knee: float, best: float) -> None:
+        """A grown body whose rig put its knees far too low: say so rather than shrink the furniture to a child's."""
+        hips = person.rest_hips_height
+        self.warn(row, f"legs_unusually_short: {person.id} is {person.height:.2f} m tall but its knees are {knee:.2f} m high and its hips "
+                       f"{hips:.2f} m (a body that tall has its knees near {KNEE_SHARE * person.height:.2f} m), so it would need a "
+                       f"{best:.2f} m seat, a child's; its rig most likely bent the legs at a skirt's or a coat's hem. Re-rig the character "
+                       f"(a mould body: model3d.blob.make or model3d.anime.make again) instead of shrinking the furniture")
 
     # ---------------------------------------------------------------------------------------------------------- limbs
 
