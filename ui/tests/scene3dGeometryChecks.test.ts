@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { checkGeometry, geometrySampleTimes, type GeometrySample, type GeometrySlotSample } from '../src/features/scene3d/geometryChecks.ts'
+import { checkGeometry, geometrySampleTimes, restContacts, type GeometrySample, type GeometrySlotSample } from '../src/features/scene3d/geometryChecks.ts'
 
 const body = (patch: Partial<GeometrySlotSample> = {}): GeometrySlotSample => ({
   id: 'hero', character: true, ground: 0, onFloor: true, min: [-0.3, 0, -0.2], max: [0.3, 1.7, 0.2], visible: true, ...patch,
@@ -48,4 +48,13 @@ test('long shots are sampled at most 240 times and always include the end', () =
   assert.ok(times.length <= 242)
   assert.equal(times[times.length - 1], 600)
   assert.deepEqual(geometrySampleTimes(1), [0, 0.25, 0.5, 0.75, 1])
+})
+
+test('a body seated with rest overlaps its seat and table by design; anything else it touches is still noted', () => {
+  const prop = (id: string, x: number): GeometrySlotSample => ({ ...body({ id, character: false }), min: [x - 0.3, 0, -0.3], max: [x + 0.3, 1, 0.3] })
+  const frames = shot(() => [body(), prop('chair', 0), prop('table', 0.1), prop('lamp', -0.1)])
+  const rests = restContacts([{ id: 'hero', rest: { pose: 'sit', on: 'chair', at: 'table' } }, { id: 'chair' }])
+  assert.deepEqual(rests, { hero: ['chair', 'table'] })
+  assert.deepEqual(checkGeometry(frames, rests).warnings.map(w => [w.code, w.slot, w.other]), [['intersects', 'hero', 'lamp']])
+  assert.equal(checkGeometry(frames).warnings.length, 3)
 })
