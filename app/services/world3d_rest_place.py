@@ -25,6 +25,7 @@ from pathlib import Path
 
 import numpy as np
 
+from services.world3d_bed_sides import along_side, beside_way
 from services.world3d_body_pose import body_of, measures
 from services.world3d_mesh_solid import mesh_of
 from services.world3d_rest_fields import BASE_FIELDS
@@ -144,14 +145,16 @@ def place_beside(slot: dict, target: dict, workspace: str, workspace_dir) -> lis
     if not other.ok or not mover.ok:
         missing = target.get("id") if not other.ok else slot.get("id")
         return [f"beside_unresolved: {slot.get('id')} beside {target.get('id')}: {missing} has no workspace GLB to measure yet"]
-    angle = float(target.get("rotationY") or 0) + math.radians(near["side"])
-    out = np.array([math.sin(angle), math.cos(angle)])
+    way = beside_way(near, other, target, slot)
+    if isinstance(way, str):
+        return [way]
+    out, head = way
     slot["rotationY"] = round(_beside_turn(near["facing"], out, mover, target), 6)
     mover = Furniture(slot, workspace, workspace_dir)
-    across = np.array([math.cos(angle), -math.sin(angle)])
+    across = np.array([out[1], -out[0]])
     theirs, ours = other.footprint(), mover.footprint() - np.asarray(slot.get("position") or [0, 0, 0], dtype=float)[[0, 2]]
     along = float((theirs @ out).max()) + near["gap"] - float((ours @ out).min())
-    side = float(((theirs @ across).min() + (theirs @ across).max()) / 2 + near["offset"] - ((ours @ across).min() + (ours @ across).max()) / 2)
+    side = along_side(theirs, ours, across, near["offset"], head)
     x, z = out * along + across * side
     slot["position"] = [round(float(x), 4), round(other.floor_y(), 4), round(float(z), 4)]
     slot["grounded"] = True

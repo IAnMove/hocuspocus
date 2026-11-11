@@ -107,7 +107,7 @@ def test_beside_puts_a_chair_against_a_side_of_the_table_by_their_boxes_facing_i
     assert chair["min"][0] == pytest.approx(table["max"][0] + 0.1, abs=1e-3) and chair["center"][2] == pytest.approx(0, abs=1e-3)
     assert chair["bottomY"] == pytest.approx(0, abs=1e-3)
     assert slot_of(viewed, "chair")["rotationY"] == pytest.approx(-math.pi / 2), "its front (+z) turned toward the table (-x)"
-    assert slot_of(viewed, "chair")["beside"] == {"object": "table", "side": 90.0, "gap": 0.1, "offset": 0.0, "facing": "object"}
+    assert slot_of(viewed, "chair")["beside"] == {"object": "table", "side": "right", "gap": 0.1, "offset": 0.0, "facing": "object"}, "the side is kept as written"
 
 
 def test_beside_follows_a_turned_and_moved_table_on_every_patch(stage):

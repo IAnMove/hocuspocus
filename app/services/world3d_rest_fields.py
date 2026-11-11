@@ -8,9 +8,11 @@ They say what is meant instead of where it lands, and the server works out the n
   when it is bound without ``height``, ``fit`` or ``scale``.
 - ``beside: {object, side?, gap?, offset?, facing?}`` stand next to another object on one side of its box, on its floor.
   ``side`` is degrees around it from its front (+z, turned with it) toward its right (+x seen from the front), or
-  ``front`` (0), ``right`` (90), ``back`` (180), ``left`` (270); ``gap`` metres between the boxes (default 0, negative
-  tucks in); ``offset`` metres along that side (toward +90 degrees); ``facing`` ``object`` (default: its front toward
-  the object), ``away``, ``same`` (the object's turn) or degrees (a scene yaw).
+  ``front`` (0), ``right`` (90), ``back`` (180), ``left`` (270); on a bed ``head``, ``foot``, ``left`` and ``right`` are
+  the bed's own (``world3d_bed_sides``); ``gap`` metres between the boxes (default 0, negative tucks in); ``offset``
+  metres along that side (on the front toward the right, on the right toward the back...; by a bed's head end toward the
+  foot); ``facing`` ``object`` (default: its front toward the object), ``away``, ``same`` (the object's turn) or
+  degrees (a scene yaw). The side is stored as written.
 - ``rest: {pose: "sit", on, at?, surface?, facing?, hands?}`` a character sits on ``on``: hips on its seat, feet on the
   floor, facing away from its backrest (or toward ``at``, or ``facing`` in scene degrees), held seated for the whole shot.
   ``at`` is the table (desk, bar) it sits at: the reply checks the top against its hips and chest and its reach, and puts
@@ -26,7 +28,8 @@ from __future__ import annotations
 
 import math
 
-SIDES = {"front": 0.0, "right": 90.0, "back": 180.0, "left": 270.0}
+from services.world3d_bed_sides import SIDE_WORDS
+
 BESIDE_FACINGS = ("object", "away", "same")
 REST_POSES = ("sit",)
 REST_FACINGS = ("at", "away")
@@ -39,17 +42,24 @@ DECLARED = ("beside", "rest")
 SEATED_RECIPE = ("People seated at a table or on a bed, by intent (no coordinates to compute). No card is needed: start from an "
                  "empty stage, world3d.scene.instantiate {template_id: \"blank\", width, height, duration}, or from a card with the place "
                  "(world3d.templates.suggest: dialogue-table, a stage-<mold> whose own bed, desk or sofa rest and beside can name). "
+                 "Every object the scene does not have yet needs add: true in its first binding (without it the id must exist). "
                  "Then: 1) the furniture, "
-                 "{object_id: \"table\", add: true, furniture: {kind: \"table\"}} (or any workspace GLB with height in metres); 2) seats "
+                 "{object_id: \"table\", add: true, furniture: {kind: \"table\"}} (or a workspace GLB, assets {workspace, kind: \"model3d\"} "
+                 "lists their URLs, with height in metres: a table is about 0.75); 2) seats "
                  "beside it, {object_id: \"chair_1\", add: true, furniture: {kind: \"chair\"}, beside: {object: \"table\", side: \"left\"}}; "
                  "3) each character seated (a character made by model3d.*.make is drawn at its recorded height, layout.items[].recordedHeightM; "
-                 "give height only for other models), {object_id: \"ana\", source_url, rest: {pose: \"sit\", on: \"chair_1\", "
-                 "at: \"table\"}}; 4) read layout.contacts and the warnings and apply every fix binding (a seat "
-                 "or table height, beside gap) until none is left. On the edge of a bed: rest {pose: \"sit\", on: \"bed\"}. A go, face or do beat stands a "
-                 "sitter up (rest_released).")
+                 "give height only for other models), {object_id: \"ana\", add: true, source_url, rest: {pose: \"sit\", on: \"chair_1\", "
+                 "at: \"table\"}} (characters.list gives the kit ids for world3d.scene.face); 4) read layout.contacts and the warnings and "
+                 "apply every fix binding (a seat or table height, beside gap) until none is left. On the edge of a bed: rest {pose: \"sit\", "
+                 "on: \"bed\"}; a bedside table: {object_id: \"nightstand\", add: true, furniture: {kind: \"nightstand\"}, beside: {object: "
+                 "\"bed\"}} (by the head end). A go, face or do beat stands a sitter up (rest_released).")
 PLACING_DOC = ("height: metres, the object's real height (the same as fit {heightM}). beside: {object, side? degrees around it from its "
-               "front toward its right, or front|right|back|left, gap? m between the boxes (negative tucks in), offset? m along that side, "
-               "facing? object|away|same|degrees}: stands next to another object on its floor (chairs round a table, a bedside table). "
+               "front (+z of its GLB) toward its right as seen from the front (+x), or front|right|back|left, gap? m between the boxes "
+               "(negative tucks in), offset? m along that side (on the front toward the right, on the right toward the back, on the back "
+               "toward the left, on the left toward the front), facing? object|away|same|degrees}: stands next to another object on its "
+               "floor (chairs round a table). A bed (furniture {kind: bed}, its headboard at the -x end; or a stage's bed, its head at the "
+               "back wall) has its own sides: head, foot, and left and right as for someone lying in it, by the head end where a bedside "
+               "table stands (offset toward the foot); a nightstand with no side goes on its right. "
                "rest: {pose: sit, on: <seat object>, at?: <table object>, surface? {part} | {point [x,y,z]}, facing? degrees|at|away, "
                "hands? (default true with at)}: a character sits on the seat with its feet on the floor and holds it for the shot; the "
                "server sets its position, turn and a held seated clip from its own legs (no coordinates needed). beside and rest are kept "
@@ -160,14 +170,18 @@ def beside(value, slot: dict) -> dict:
 
 
 def _beside_numbers(value: dict, name) -> dict:
-    side = value.get("side", 0.0)
-    side = SIDES.get(side, side) if isinstance(side, str) else side
-    if not _number(side, -360, 360):
-        raise _refuse("invalid_beside", f"{name}: beside.side is degrees (-360 to 360) or front, right, back, left")
+    """``side`` is kept as written (a word or degrees; none when not given): a bed's left differs from a table's
+    (``world3d_bed_sides``), so a word is resolved when the object it names is known."""
+    side = value.get("side")
+    if isinstance(side, str):
+        side = side.strip().lower()
+    if side is not None and side not in SIDE_WORDS and not _number(side, -360, 360):
+        raise _refuse("invalid_beside", f"{name}: beside.side is degrees (-360 to 360) or front, right, back, left, or a bed's head or foot")
     for key, low, high in (("gap", -2.0, 10.0), ("offset", -10.0, 10.0)):
         if value.get(key) is not None and not _number(value[key], low, high):
             raise _refuse("invalid_beside", f"{name}: beside.{key} is {low:g} to {high:g} metres")
-    return {"side": float(side) % 360, "gap": float(value.get("gap") or 0.0), "offset": float(value.get("offset") or 0.0)}
+    stored = {} if side is None else {"side": side if isinstance(side, str) else float(side) % 360}
+    return {**stored, "gap": float(value.get("gap") or 0.0), "offset": float(value.get("offset") or 0.0)}
 
 
 def rest(value, slot: dict) -> dict:

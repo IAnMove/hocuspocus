@@ -17,7 +17,8 @@ from services.world3d_scene_bounds import MODEL_HEIGHT, native_bounds
 
 FOLDER = "world3d-furniture"
 FURNITURE_DOC = ("furniture: {kind: " + " | ".join(KINDS) + ", height?, seat?, width?, depth?, color? #rrggbb} (metres) makes a plain "
-                 "piece in the workspace with named parts (seat, back, top, mattress...) at its real size, front +z, length along x, "
+                 "piece in the workspace with named parts (seat, back, top, mattress...) at its real size, front +z, length along x (a bed's "
+                 "headboard at -x: seen from its front the head is on the left), "
                  "and binds it to the object (add: true creates the object); a chair is 0.9 m with its seat at 0.46, a table 0.75, a bed's "
                  "mattress 0.55 (seat sets a chair's or sofa's seat height and its height follows). null forgets the declaration.")
 
