@@ -411,7 +411,11 @@ more than four shots).
 ## People seated at a table or on a bed (Video 3D)
 
 Never compute coordinates for sitting: every model is drawn 1.7 m × `scale` tall and its origin is wherever the GLB put
-it. Declare the intent in `world3d.scene.patch` bindings and the server places everything:
+it. Start from a card that has the place (`world3d.templates.suggest`: `dialogue-table`, a `stage-<mold>`) or from an empty
+stage (`world3d.templates.user.put` a personal template whose document is `{version: 1, units: "meters", up: "y", width,
+height, fps: 30, duration, camera: {family: "fixed", eye, look, fov}, light: {kind: "directional", direction, intensity,
+color}, slots: []}`, then `world3d.scene.instantiate`). Declare the intent in `world3d.scene.patch` bindings and the
+server places everything:
 
 1. Furniture: `{object_id: "table", add: true, furniture: {kind: "table"}}` (kinds `chair`, `stool`, `bench`, `sofa`,
    `table`, `desk`, `bed`, `nightstand`, real sizes, named parts; `height`, `seat`, `width`, `depth` in metres), or any
@@ -425,6 +429,8 @@ it. Declare the intent in `world3d.scene.patch` bindings and the server places e
    `seated_without_seat`, `limb_through_object`…): each one ends with the binding to paste (short legs need a lower seat:
    `furniture: {kind: "chair", seat: 0.26}`). Patch again until none is left, then publish. A card's own held
    `sit_down` with no chair warns `seated_without_seat` with the chair and `rest` to add.
+5. Not made yet: lying down, standing at a counter, two sitters on one sofa or bed (give each `rest.surface {point}`),
+   and acting while seated: a `go`, `face` or `do` beat stands the sitter up (`rest_released`).
 
 ## Edit one shot ("the fifth shot")
 

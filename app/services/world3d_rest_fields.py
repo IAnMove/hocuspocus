@@ -34,12 +34,15 @@ _PLACING = ("position", "rotationY", "rotation_y", "motion")
 _CLIP_FIELDS = ("clip", "clips")
 BASE_FIELDS = ("sourceUrl", "sourceRef", "clip", "clips", "clipPlayback", "grounded", "performance", "inPlace", "motion")
 DECLARED = ("beside", "rest")
-SEATED_RECIPE = ("People seated at a table or on a bed, by intent (no coordinates to compute): 1) the furniture, "
+SEATED_RECIPE = ("People seated at a table or on a bed, by intent (no coordinates to compute). Start from a card with the place "
+                 "(world3d.templates.suggest, e.g. dialogue-table, a stage-<mold>) or an empty stage (world3d.templates.user.put a "
+                 "personal template whose document has slots: [], then world3d.scene.instantiate it). Then: 1) the furniture, "
                  "{object_id: \"table\", add: true, furniture: {kind: \"table\"}} (or any workspace GLB with height in metres); 2) seats "
                  "beside it, {object_id: \"chair_1\", add: true, furniture: {kind: \"chair\"}, beside: {object: \"table\", side: \"left\"}}; "
                  "3) each character at its real height and seated, {object_id: \"ana\", height: 1.62, rest: {pose: \"sit\", on: \"chair_1\", "
                  "at: \"table\"}}; 4) read layout.contacts and the warnings and apply every fix binding (seat and table heights for short "
-                 "legs, beside gap) until none is left. On the edge of a bed: rest {pose: \"sit\", on: \"bed\"}.")
+                 "legs, beside gap) until none is left. On the edge of a bed: rest {pose: \"sit\", on: \"bed\"}. A go, face or do beat stands a "
+                 "sitter up (rest_released).")
 PLACING_DOC = ("height: metres, the object's real height (the same as fit {heightM}). beside: {object, side? degrees around it from its "
                "front toward its right, or front|right|back|left, gap? m between the boxes (negative tucks in), offset? m along that side, "
                "facing? object|away|same|degrees}: stands next to another object on its floor (chairs round a table, a bedside table). "
