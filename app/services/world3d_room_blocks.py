@@ -4,8 +4,10 @@ can name.
 A stage card (``stage-dormitorio``…) draws its furniture as boxes of the set, not as objects: ``box`` is ``[x, y, z,
 width, height, depth]`` in scene metres (``roomSet.ts``: centred on x and z, standing on y, front toward +z). A block that
 a library model replaced (``room.libraryBlocks``) is an object of the scene and is left out. A box's top is where a
-person sits on a bed, a stool, a low bench or a desk; a box drawn for a chair, an armchair or a sofa is as tall as its
-back, so its seat is taken at ``SEAT_SHARE`` of its height and the seat finder says it guessed.
+person sits on a bed, a stool, a low bench, a desk or a cushion (a ``seat`` box no taller than ``_TALL_BENCH``). A box
+drawn for a chair, an armchair, a sofa, a tall bench or a tall ``seat`` (cushion and back in one prism, as in an
+airliner or a car) is as tall as its back, so its seat is taken at ``SEAT_SHARE`` of its height and the seat finder
+says it guessed.
 """
 from __future__ import annotations
 
@@ -65,12 +67,23 @@ def block_frame() -> SlotFrame:
     return SlotFrame(1.0, np.eye(3), np.zeros(3))
 
 
+def _seat_share(kind: str, height: float) -> float | None:
+    """Where the cushion is in a box that draws its back, or None so the caller reads the box top."""
+    share = SEAT_SHARE.get(kind)
+    if share is not None:
+        return share
+    if kind == "seat" and height > _TALL_BENCH:
+        return 0.52
+    if kind == "bench" and height > _TALL_BENCH:
+        return 0.55
+    return None
+
+
 def block_seat(block: dict):
-    """The seat of a block drawn as tall as its back (a chair, a sofa, a high bench), or None to read its top."""
+    """The seat of a block drawn as tall as its back (a chair, a sofa, a high bench, a tall cabin seat), or None to read its top."""
     from services.world3d_seats import Surface
-    kind = str(block.get("kind") or "")
     box = block_box(block)
-    share = SEAT_SHARE.get(kind) or (0.55 if kind == "bench" and box["size"][1] > _TALL_BENCH else None)
+    share = _seat_share(str(block.get("kind") or ""), box["size"][1])
     if share is None:
         return None
     return Surface(box["min"][1] + share * box["size"][1], [box["min"][0], box["min"][2]], [box["max"][0], box["max"][2]], "block",

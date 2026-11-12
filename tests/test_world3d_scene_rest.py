@@ -447,6 +447,10 @@ def test_a_stage_rooms_bed_and_desk_are_named_like_objects(stage):
     assert not row.get("issues"), viewed["warnings"]
     sofa = patch(stage, [{"object_id": "pet", "rest": {"pose": "sit", "on": "sofa"}}])
     assert any(line.startswith("seat_surface_guessed: sofa is a box of the stage's set") for line in sofa["warnings"])
+    sat = contact(sofa, "pet")
+    assert sat["seat"]["topM"] == pytest.approx(0.55 * 0.8, abs=0.02) and sat["seat"]["gapM"] == pytest.approx(0.0, abs=0.05)
+    assert "sunk_into_seat" not in (sat.get("issues") or []) and not any(fix.get("object_id") == "sofa" for fix in sat.get("fix") or [])
+    assert not any(hit.get("object") == "sofa" for hit in sat.get("through") or [])
     chair = patch(stage, [{"object_id": "chair", "add": True, "furniture": {"kind": "chair", "seat": 0.4},
                            "beside": {"object": "desk", "side": "front"}}, {"object_id": "pet", "rest": {"pose": "sit", "on": "chair", "at": "desk"}}])
     assert contact(chair, "pet")["at"]["object"] == "desk"
@@ -455,6 +459,27 @@ def test_a_stage_rooms_bed_and_desk_are_named_like_objects(stage):
     message = str(refused.value)
     assert "the stage's own furniture (part of the set, named as it is): bed, desk, sofa" in message
     assert "empty markers (bind a GLB first): marker" in message and "add: true, furniture" in message
+
+
+def test_a_tall_cabin_seat_is_the_cushion_and_a_low_one_keeps_its_top(stage):
+    """An airliner seat is cushion and back in one prism. A car cushion is only the cushion. Neither repair targets the block."""
+    path = stage / WORKSPACE / "world3d-edits" / f"{SCENE}.json"
+    record = json.loads(path.read_text())
+    record["document"]["room"] = {"mold": {"id": "cabina_avion", "blocks": [
+        {"id": "seat_0_0", "kind": "seat", "box": [0, 0, 0, 0.7, 1.0, 0.75]},
+        {"id": "seat_driver", "kind": "seat", "box": [2, 0, 0, 0.5, 0.36, 0.56]}]}}
+    path.write_text(json.dumps(record))
+    tall = patch(stage, [{"object_id": "pet", "add": True, "source_url": PET, "height": 1.75, "rest": {"pose": "sit", "on": "seat_0_0"}}])
+    row = contact(tall, "pet")
+    assert row["pose"] == "seated" and row["seat"]["topM"] == pytest.approx(0.52, abs=0.03)
+    assert row["seat"]["gapM"] == pytest.approx(0.0, abs=0.05) and "sunk_into_seat" not in (row.get("issues") or [])
+    assert not any(fix.get("object_id") == "seat_0_0" for fix in row.get("fix") or [])
+    assert not any(hit.get("object") == "seat_0_0" for hit in row.get("through") or [])
+    low = patch(stage, [{"object_id": "pet", "rest": {"pose": "sit", "on": "seat_driver"}}])
+    cushion = contact(low, "pet")
+    assert cushion["seat"]["object"] == "seat_driver" and cushion["seat"]["topM"] == pytest.approx(0.36, abs=0.02)
+    assert cushion["seat"]["gapM"] == pytest.approx(0.0, abs=0.05)
+    assert not any(fix.get("object_id") == "seat_driver" for fix in cushion.get("fix") or [])
 
 
 def test_an_agent_starts_from_an_empty_stage_sets_the_frame_and_names_the_scene(tmp_path):

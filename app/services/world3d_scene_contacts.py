@@ -159,7 +159,7 @@ class _Report:
         for piece in self.pieces.values():
             depth, part = piece.depth(np.array([hips]))
             if depth[0] > 0:
-                top = self._top_over(piece, hips)
+                top = _support_y(piece, hips)
                 if best is None or top > best[1]:
                     best = (piece, top, int(part[0]))
                 continue
@@ -194,6 +194,11 @@ class _Report:
         if best < CHILD_SEAT_M and person.height > ADULT_M:
             self._short_legs(row, person, knee, best)
             return
+        if piece.slot.get("roomBlock"):
+            how, fix = _stage_seat(person, piece.id, best)
+            self.warn(row, f"seat_height_unusual: {piece.id}'s seat is {seat:.2f} m high and {person.id}'s knees are {knee:.2f} m high, so {what}; "
+                           f"a seat for {person.id} is {best:.2f} m: {how}", fix)
+            return
         fix = _resize(piece, best, seat, "seat")
         self.warn(row, f"seat_height_unusual: {piece.id}'s seat is {seat:.2f} m high and {person.id}'s knees are {knee:.2f} m high, so {what}; "
                        f"a seat for {person.id} is {best:.2f} m: give {piece.id} {_text(fix)}", {"object_id": piece.id, **fix})
@@ -211,7 +216,7 @@ class _Report:
 
     def _through(self, row: dict, person: Person, seated: bool) -> None:
         """Limbs (and, standing, the body) that run inside a piece of furniture or cross its faces."""
-        found = self._limb_hits(person)
+        found = _hits_outside_own_backrest(person, self._limb_hits(person), seated)
         # A body inside a piece is one warning (inside_object), not one per limb as well.
         inside = {piece.id for depth, label, piece, *_rest in found if not seated and label in _CORE and depth >= THROUGH_M}
         seen = set()
@@ -317,6 +322,41 @@ class _Report:
         self.warn(row, f"furniture_size_unusual: {name} is drawn 1.70 m tall (every model is 1.7 m x scale until it is sized); a "
                        f"{'table' if use == 'at' else 'seat'} like it is about {wanted:g} m: give {name} height {wanted:g}, then read the "
                        f"seat and table warnings again", {"object_id": name, "height": wanted})
+
+
+def _seat_of_block(piece: Piece):
+    """The cushion of a stage box that includes its back, or None when the box top is the seat (a bed, a stool, a low cushion)."""
+    block = piece.slot.get("roomBlock")
+    if not isinstance(block, dict):
+        return None
+    from services.world3d_room_blocks import block_seat
+    return block_seat(block)
+
+
+def _support_y(piece: Piece, point: np.ndarray) -> float:
+    """Scene y of the surface under a point inside a piece: the cushion when the box draws a back, else the lid."""
+    seat = _seat_of_block(piece)
+    if seat is None:
+        return _Report._top_over(piece, point)
+    return float(piece.frame.to_world([[0.0, seat.y, 0.0]])[0][1])
+
+
+def _hits_outside_own_backrest(person: Person, found: list, seated: bool) -> list:
+    """A sitter's body inside the stage box it sits on is the backrest, not a limb through furniture."""
+    rest = person.slot.get("rest") if seated and isinstance(person.slot.get("rest"), dict) else {}
+    on = rest.get("on")
+    if not on:
+        return found
+    return [hit for hit in found if hit[2].id != on or _seat_of_block(hit[2]) is None]
+
+
+def _stage_seat(person: Person, block_id: str, best: float) -> tuple[str, dict]:
+    """A stage box has no ``height`` binding. The repair is a real chair, which ``world3d.scene.patch`` can add."""
+    seat_id = f"seat_{person.id}"
+    fix = {"object_id": seat_id, "add": True, "furniture": {"kind": "chair", "seat": round(best, 2)}}
+    how = (f"{block_id} is part of the stage's set: add a seat of that height, "
+           f"{{object_id: \"{seat_id}\", add: true, furniture: {{kind: \"chair\", seat: {best:.2f}}}}}")
+    return how, fix
 
 
 def _limb_hit(piece: Piece, start: np.ndarray, end: np.ndarray):
