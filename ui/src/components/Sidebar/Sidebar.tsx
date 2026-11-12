@@ -33,6 +33,7 @@ import { VoiceRefSection } from './VoiceRefSection'
 import { Hunyuan3DPanel } from './Hunyuan3DPanel'
 import { BlobBodyPanel } from './BlobBodyPanel'
 import { AnimeCharacterPanel } from './AnimeCharacterPanel'
+import { RealCharacterPanel } from './RealCharacterPanel'
 import { HardwareStatusBar } from './HardwareStatusBar'
 import { H3PromptControls } from './H3PromptControls'
 import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
@@ -165,6 +166,7 @@ export function DirectGenerationWorkspace() {
         </Suspense> : isModel3d ? <>
           <BlobBodyPanel />
           <AnimeCharacterPanel />
+          <RealCharacterPanel />
           <Hunyuan3DPanel />
         </> : (
         <>

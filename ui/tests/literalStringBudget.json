@@ -66,6 +66,7 @@
   "src/features/agent/navigationQueueCapabilities.ts": 31,
   "src/features/agent/productionWorkCapabilities.ts": 3,
   "src/features/agent/programmaticVideo.ts": 4,
+  "src/features/agent/realCharacterCapability.ts": 6,
   "src/features/agent/roomSetsCapabilities.ts": 3,
   "src/features/agent/seriesShotCardCapabilities.ts": 3,
   "src/features/agent/seriesShotEditCapabilities.ts": 9,

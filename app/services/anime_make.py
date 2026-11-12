@@ -312,8 +312,14 @@ def _photo_hair_color(workspace_dir: Path, workspace: str, resolved: dict, trait
     resolved["body"]["hair"] = {**resolved["body"]["hair"], "color": hair_of(_picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head"))}
 
 
-def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, traits: Any, *, base_revision: int | None = None) -> dict[str, Any]:
-    """Body, rig, kit. Writes the GLBs and the kit; returns one reply with everything a scene needs."""
+NO_KIT = {"kit_id": None, "poses": [], "preview": None, "face": None}
+
+
+def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, traits: Any, *, base_revision: int | None = None,
+                   face_kit: bool = True) -> dict[str, Any]:
+    """Body, rig, kit. Writes the GLBs and the kit; returns one reply with everything a scene needs. ``face_kit`` False skips the
+    drawn face kit (``model3d.real.make`` makes a photo kit from ``face_pose_file`` instead): ``kit_id``, ``poses``, ``preview`` and
+    ``face`` are then empty."""
     from services.blob_face import save_face_kit
     from services.blob_make import _clips
 
@@ -323,7 +329,8 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
     token = "anime-" + hashlib.sha256(f"{slug(name)}:{workspace}".encode()).hexdigest()[:10]
     Path(workspace_dir).mkdir(parents=True, exist_ok=True)
     # the kit first: a painted face brings its own skin, and the body's head and hands take it so the face is not a mask
-    kit = save_face_kit(str(workspace_dir), workspace, resolved["face"], name=f"{name} face", kit_id=token, base_revision=base_revision, picture=picture)
+    kit = save_face_kit(str(workspace_dir), workspace, resolved["face"], name=f"{name} face", kit_id=token, base_revision=base_revision,
+                        picture=picture) if face_kit else NO_KIT
     _paint_body_from_kit(resolved, picture, kit)
     if resolved["style"] == "real" and resolved["texture_head"] and resolved["head_fit"]:
         resolved["body"]["skull_fit"] = _head_fit(workspace_dir, workspace, resolved)
@@ -356,13 +363,11 @@ def _head_join(resolved: dict, parts, frame: dict) -> dict | None:
     return {"radius": radius_map(head_triangles(parts[0][0], frame), frame), "frame": frame, "face_yaw": resolved["face_span"], "blend": resolved["face_feather"]}
 
 
-def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dict, body: dict) -> dict:
-    """A realistic mould: write the two guides (the body views and the head tiles, the pictures to repaint) and, when ``texture``
-    names a picture of this workspace (with ``texture_head`` for the face), write the atlas into the GLBs. Painting other pictures
-    over the same guides and calling make again dresses the same body anew."""
+def _write_guides(workspace_dir: Path, name: str, resolved: dict):
+    """The two guides of a realistic mould, written to the workspace: the lofted mould, its parts, the file stem and the PNG bytes."""
     from services.blob_builder import blob_pieces
     from services.blob_loft import loft_parts
-    from services.blob_texture import ATLAS, atlas_frame, attach_texture, guide_png, neck_skin, stack_atlas
+    from services.blob_texture import guide_png
 
     lofted = blob_pieces({**resolved["body"], "mesh": "loft"})
     parts = loft_parts(lofted["traits"], lofted["layout"])
@@ -370,8 +375,35 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
     guides = {part: guide_png(parts, lofted["layout"], part) for part in ("body", "head")}
     for part, data in guides.items():
         (Path(workspace_dir) / f"{base}-guide-{part}.png").write_bytes(data)
-    out = {"guide_body_file": f"{base}-guide-body.png", "guide_head_file": f"{base}-guide-head.png",
-           "atlas": {"width": ATLAS[0], "height": ATLAS[1], "layout": "body views (front left, back right) over three head tiles (front, side, back; 3x the scale)"}}
+    return lofted, parts, base, guides
+
+
+def _guide_reply(base: str) -> dict:
+    from services.blob_texture import ATLAS
+
+    return {"guide_body_file": f"{base}-guide-body.png", "guide_head_file": f"{base}-guide-head.png",
+            "atlas": {"width": ATLAS[0], "height": ATLAS[1], "layout": "body views (front left, back right) over three head tiles (front, side, back; 3x the scale)"}}
+
+
+def real_guides(workspace_dir: Path, name: str, traits: dict) -> dict[str, Any]:
+    """Only the two guides of a realistic mould (what the first ``model3d.anime.make`` call of the texture recipe answers), with no
+    body built, rigged or written: ``guide_body_file``, ``guide_head_file``, ``atlas`` and ``guides`` (the PNG bytes, by part)."""
+    resolved = resolve_traits({**traits, "style": "real"})
+    if resolved["texture"] or resolved["texture_head"]:
+        _fail("invalid_traits", "the guides are made from the traits alone, without texture or texture_head")
+    Path(workspace_dir).mkdir(parents=True, exist_ok=True)
+    *_mould, base, guides = _write_guides(workspace_dir, name, resolved)
+    return {**_guide_reply(base), "guides": guides}
+
+
+def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dict, body: dict) -> dict:
+    """A realistic mould: write the two guides (the body views and the head tiles, the pictures to repaint) and, when ``texture``
+    names a picture of this workspace (with ``texture_head`` for the face), write the atlas into the GLBs. Painting other pictures
+    over the same guides and calling make again dresses the same body anew."""
+    from services.blob_texture import atlas_frame, attach_texture, neck_skin, stack_atlas
+
+    lofted, parts, base, guides = _write_guides(workspace_dir, name, resolved)
+    out = _guide_reply(base)
     if resolved["texture"]:
         painted = _picture_of(workspace_dir, workspace, resolved["texture"], "texture")
         head = _picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head") if resolved["texture_head"] else None

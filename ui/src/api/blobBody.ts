@@ -42,7 +42,7 @@ export interface BlobMakeInput {
   hairStyle?: string
 }
 
-function detailMessage(body: unknown, fallback: string): string {
+export function detailMessage(body: unknown, fallback: string): string {
   const detail = body && typeof body === 'object' && 'detail' in body ? (body as { detail?: unknown }).detail : null
   if (typeof detail === 'string' && detail) return detail
   if (detail && typeof detail === 'object' && 'message' in detail) {

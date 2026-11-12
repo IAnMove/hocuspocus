@@ -367,6 +367,30 @@ def _seed_character_animation(tmp_path):
     return release
 
 
+def _seed_real_character(tmp_path):
+    """A realistic character job whose worker thread is alive, registered by the real handler factory."""
+    import threading
+
+    from routers.model3d_real import command_handlers
+    from services.character_animation_job import JobStore
+    from services.real_character_job import JOBS_DIR, RealCharacterJobs, RealJobDeps
+
+    jobs = RealCharacterJobs(RealJobDeps(call=lambda _tool, _args: {}, workspace_dir=lambda name: str(tmp_path / name)))
+    command_handlers(lambda name: str(tmp_path / name), jobs=jobs)
+    JobStore(str(tmp_path / "film"), JOBS_DIR).save({"jobId": "real-aaaaaaaaaaaa", "workspace": "film", "name": "Marta", "slug": "marta",
+                                                     "status": "running", "steps": []})
+    stop = threading.Event()
+    worker = threading.Thread(target=stop.wait, daemon=True)
+    worker.start()
+    jobs._threads["real-aaaaaaaaaaaa"] = worker
+
+    def release():
+        stop.set()
+        worker.join(2)
+
+    return release
+
+
 def _seed_game_produce(tmp_path):
     """A produce job whose worker thread is alive, as the service itself would register it."""
     import threading
@@ -620,6 +644,7 @@ BUSY_FAMILIES = [
     pytest.param("director-plan", "full", _seed_director_plan, id="director-plan"),
     pytest.param("game-produce", "full", _seed_game_produce, id="game-produce"),
     pytest.param("character-animation", "full", _seed_character_animation, id="character-animation"),
+    pytest.param("real-character", "full", _seed_real_character, id="real-character"),
     pytest.param("series-plan", "full", _seed_series_plan, id="series-plan-full"),
     pytest.param("series-plan", "core", _seed_series_plan, id="series-plan-core"),
     pytest.param("series-render", "full", _seed_series_render, id="series-render"),
@@ -806,7 +831,7 @@ CORE_BUSY_KINDS = {
 }
 ROUTER_BUSY_KINDS = {
     "game-produce", "series-produce", "series-native", "series-voice", "series-assembly", "quick-video-batch",
-    "world3d-export", "scene2d-export", "character-animation",
+    "world3d-export", "scene2d-export", "character-animation", "real-character",
 }
 
 

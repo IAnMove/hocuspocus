@@ -32,7 +32,60 @@
     "blobReady": "Blob listo",
     "animeFailed": "No se pudo crear el personaje anime",
     "blobFailed": "No se pudo crear el blob",
-    "blobPresetsFailed": "No se pudieron leer los preajustes de blob"
+    "blobPresetsFailed": "No se pudieron leer los preajustes de blob",
+    "real": {
+      "title": "Realista (PS2)",
+      "hint": "Una persona realista estilo PS2: Qwen pinta la ropa y la cara a partir de dos textos en inglés, y se monta el personaje con una cara que habla. Tarda unos minutos de GPU.",
+      "defaultName": "Persona",
+      "genders": {
+        "man": "Hombre",
+        "woman": "Mujer"
+      },
+      "outfitPick": "Ropa rápida",
+      "facePick": "Cara rápida",
+      "pick": "Elegir…",
+      "outfit": "Ropa (en inglés)",
+      "face": "Cara y pelo (en inglés)",
+      "seed": "Semilla",
+      "seedRandom": "al azar (se guarda)",
+      "make": "Crear o rehacer",
+      "cancel": "Parar",
+      "progress": "Progreso",
+      "ready": "Personaje realista listo",
+      "failed": "No se pudo hacer el personaje realista",
+      "job": {
+        "queued": "En cola",
+        "running": "Haciéndose…",
+        "cancelling": "Parando…",
+        "completed": "Hecho",
+        "failed": "Falló",
+        "cancelled": "Parado",
+        "interrupted": "Cortado por un reinicio: vuelve a crearlo y se aprovecha lo hecho"
+      },
+      "steps": {
+        "guides": "Guías",
+        "body": "Ropa (Qwen)",
+        "head": "Cara (Qwen)",
+        "character": "Personaje",
+        "kit": "Cara que habla"
+      },
+      "status": {
+        "waiting": "en espera",
+        "running": "en marcha",
+        "done": "hecho",
+        "reused": "reaprovechado",
+        "given": "imagen dada",
+        "skipped": "omitido",
+        "failed": "falló"
+      },
+      "made": "{{file}} · cara {{kit}}",
+      "facePicture": "Cara del personaje",
+      "warnings": "Avisos",
+      "saved": "Personajes realistas guardados",
+      "none": "Aún no hay ninguno en este workspace.",
+      "open": "Abrir",
+      "missing": "falta el GLB"
+    }
   },
   "drama": {
     "reference": "Grabación de referencia",
