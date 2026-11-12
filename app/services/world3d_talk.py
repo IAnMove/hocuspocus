@@ -85,8 +85,10 @@ def _line_cues(line: dict, index: int, mapping: dict | None, mouths: dict[str, s
 
 
 def blink_times(seed: str, duration: float) -> list[float]:
-    """A blink every 2.6-4.6 s, the same for the same seed (like the 2D series shots)."""
-    times, at, step = [], 0.9, 0
+    """A blink every 2.6-4.6 s, the same for the same seed. The first one falls 0.9-2.5 s in, also by seed: with a fixed first blink every
+    face of a scene (and of every shot, which starts at 0) closed its eyes at the same frame."""
+    first = hashlib.sha256(f"{seed}:first".encode()).digest()[0] / 255
+    times, at, step = [], 0.9 + 1.6 * first, 0
     while at < duration - 0.2 and len(times) < 400:
         times.append(round(at, 3))
         digest = hashlib.sha256(f"{seed}:{step}".encode()).digest()

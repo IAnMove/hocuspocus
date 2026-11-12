@@ -1,6 +1,6 @@
 # Video 3D templates for agents
 
-The editor's shot library is the only library. MCP, Ask the Wizard, the production planner and a Series `kind: "3d"` shot search the same short cards: the 823 cards of `app/shared/world3d_templates.json` plus the 28 `stage-*` cards that `app/services/world3d_stage_cards.py` builds from the room molds, 851 in all. A card has the exact id, both titles, format, duration, playback speed, roles, one line and the derived traits below. The full scene document is loaded only for the id that was chosen.
+The editor's shot library is the only library. MCP, Ask the Wizard, the production planner and a Series `kind: "3d"` shot search the same short cards: the 823 cards of `app/shared/world3d_templates.json` plus the 30 `stage-*` cards that `app/services/world3d_stage_cards.py` builds from the room molds, 853 in all. A card has the exact id, both titles, format, duration, playback speed, roles, one line and the derived traits below. The full scene document is loaded only for the id that was chosen.
 
 Regenerate the cards from the UI with `node --import ./node_modules/tsx/dist/loader.mjs scripts/export-world3d-catalog.mjs` inside `ui`. `--check` fails when the JSON drifts from the editor. The contract behind every field, filter and warning is [TEMPLATE_LIBRARY_MODEL.md](TEMPLATE_LIBRARY_MODEL.md).
 
@@ -10,7 +10,7 @@ A shot is chosen on axes, never from a flat list. The two shelves: a **signature
 
 | axis | field | values (cards that carry each one) |
 | --- | --- | --- |
-| kind | `kind` | `scene` 380, `camera` 263, `look` 161, `stage` 28, `transition` 15, `title` 4 |
+| kind | `kind` | `scene` 380, `camera` 263, `look` 161, `stage` 30, `transition` 15, `title` 4 |
 | intent | `uses` | `figure` 455, `establishing` 287, `talk` 287, `look` 161, `action` 92, `reaction` 85, `dialogue` 86, `plate` 78, `speed` 51, `title` 47, `reveal` 41, `impact` 40, `product` 17, `drive` 17, `music` 15, `transition` 16 |
 | place | `place` | 133 ids: a dressing (`citadel`, `chase-street`, `treadmill`, `retro-lab`), an `atmos-*` or `pixel-*` world, a `motion-*` set, a mold (`cocina`, `plaza`) |
 | camera | `shot`, `distance`, `moves` | see the table below |
@@ -53,7 +53,7 @@ Real replies (`search_report` in `app/services/world3d_template_catalog.py`, the
 | `plano general bosque` | `atmos-clearing-wide` 26, `atmos-meadow-wide` 20, `atmos-snow-wide` 19, `atmos-temple-wide` 19… |
 | `órbita` | `pixel-orbit` 94 (its exact Spanish title), `dance-orbit` 40, `vehicle-roof-orbit` 40 |
 | `girar alrededor` | `cine-orbit-360`, `face-reaction-arc`, `reaction-orbit-face`, all 25: a tie |
-| `{"kind": "stage"}` (list, no query) | 28 cards in id order, `stage-aula` first |
+| `{"kind": "stage"}` (list, no query) | 30 cards in id order, `stage-aula` first |
 | `{"kind": "transition"}` | 15 cards: `anime-eyecatch`, `anime-impact-frame`, `anime-snap-zoom`, the eight `transition-*`, and the four `comic-panel-*` |
 | `{"place": "cocina"}` | 1 card; `{"travel": true}` 66 cards |
 
@@ -134,14 +134,15 @@ A shipped or stage card's `preview` is `/api/v1/world3d/templates/<id>/thumbnail
 
 ## Stages
 
-A **mold** is a shape, not a place. Thirteen shape molds (`sala`, `sala_ventana`, `mostrador`, `filas`, `pasillo`, `umbral`, `escalera`, `escenario_publico`, `vehiculo`, and the exteriors `calle`, `plaza`, `orilla`, `azotea`) sit beside the fifteen named interiors that ship as **recipes**, a shape with furniture blocks and a default skin (`aula`, `bar`, `cabina_avion`, `coche_interior`, `cocina`, `despacho`, `dormitorio`, `hemiciclo`, `hospital`, `juzgado`, `oficina_diafana`, `plato_tv`, `sala_prensa`, `salon`, `vagon`). Exteriors have no ceiling, keep their view on `wall_back` and are lit by a sun preset (`daylight`, `dusk`, `night_sky`).
+A **mold** is a shape, not a place. Thirteen shape molds (`sala`, `sala_ventana`, `mostrador`, `filas`, `pasillo`, `umbral`, `escalera`, `escenario_publico`, `vehiculo`, and the exteriors `calle`, `plaza`, `orilla`, `azotea`) sit beside the seventeen named interiors that ship as **recipes**, a shape with furniture blocks and a default skin (`aula`, `bar`, `cabina`, `cabina_avion`, `cabina_nave`, `coche_interior`, `cocina`, `despacho`, `dormitorio`, `hemiciclo`, `hospital`, `juzgado`, `oficina_diafana`, `plato_tv`, `sala_prensa`, `salon`, `vagon`). Exteriors have no ceiling, keep their view on `wall_back` and are lit by a sun preset (`daylight`, `dusk`, `night_sky`).
 
 Every mold is a card `stage-<mold>` built by `app/services/world3d_stage_cards.py`: `kind: stage`, `place: <mold>`, `setting` `interior` or `exterior`, the tag `stage`, `cameras` (always `two_shot`, `ots_a`, `ots_b`, `wide`, `close_1`, `close_2`, `entrance`), `subjects` 2 with roles `subject_1`/`subject_2` and `prop` for every further speaking mark, `shot` and `distance` measured from `two_shot` to the first mark's face, `uses` `dialogue` (two or more marks and not `far`), `talk` and `figure`, `moving: ["effects"]` so no stage is `still`, and the search words `seated`, `entrance` and `crowd` read from the marks and the blocks. The document is the mold staged on `two-shot` with its default skin, exactly what `stageRoomSet` builds in the editor, with low dust motes (`room-dust`) and a key light that breathes ±8 % over 6 s; a mold may set `"ambient": false`. `world3d.templates.get`, `world3d.scene.instantiate`, `world3d.scene.apply_query`, the production `scene3d.template` and a Series `kind: "3d"` shot accept a `stage-*` id; `roomCamera` picks another camera and a `sets` entry of `kind: room` (or the Series location's `set3d`) brings a Qwen skin.
 
 | card | from `two_shot` | marks | words |
 | --- | --- | --- | --- |
 | `stage-aula`, `stage-cocina`, `stage-dormitorio`, `stage-hospital`, `stage-pasillo`, `stage-plato_tv`, `stage-sala_prensa` | wide, 4.4 / 3.5 / 3.7 / 2.6 / 3.3 / 3.8 / 4.3 m | 2 standing + entrance | `entrance` |
-| `stage-bar`, `stage-coche_interior`, `stage-salon` | wide, 3.8 / 2.9 / 2.9 m | 2 seated + entrance | `seated`, `entrance` |
+| `stage-bar`, `stage-salon` | wide, 3.8 / 2.9 m | 2 seated + entrance | `seated`, `entrance` |
+| `stage-cabina`, `stage-coche_interior`, `stage-cabina_nave` | two_shot from behind the seats | 2 seated (driver, passenger) + entrance | `seated`, `entrance` |
 | `stage-despacho` | wide, 4.4 m | `behind_desk` seated, `visitor`, `door` | `seated` |
 | `stage-sala`, `stage-sala_ventana`, `stage-mostrador`, `stage-umbral`, `stage-escalera`, `stage-calle`, `stage-orilla`, `stage-azotea` | wide, 3.5 / 3.5 / 3.9 / 3.7 / 3.6 / 4.1 / 4.1 / 4.1 m | 3 standing + entrance | `entrance` |
 | `stage-escenario_publico` | wide, 4.3 m | 3 standing + entrance, audience seats | `entrance`, `crowd` |
@@ -152,6 +153,33 @@ Every mold is a card `stage-<mold>` built by `app/services/world3d_stage_cards.p
 | `stage-hemiciclo`, `stage-juzgado` | **far**, 6.5 / 5.4 m | 2 standing + entrance | `entrance`, `crowd` |
 
 The five `far` stages carry `talk` and `figure` but not `dialogue`, so `{"use": "dialogue"}` does not list them: ask for them by `place` or `kind` and shoot the lines from `ots_a`, `ots_b` or `close_1`. A stage shot whose skin is only colours warns `stage_unskinned` in the dry run.
+
+### Authoring a stage that reads as a place
+
+A mold is data (`app/shared/set_molds/<id>.json`), written by a generator so it can be reviewed and tuned: `scripts/dev/make_cabin_mold.py`, `make_bedroom_mold.py` and `make_office_mold.py` are the examples. The loop that keeps a stage from looking like a pile of boxes:
+
+1. Keep the old block ids, surface names, marks and the seven cameras when you rebuild a mold: skins, scenes and cards that use them keep working.
+2. Build from blocks that name what they are (`bed`, `pillow`, `duvet`, `chair`, `curtain`, `lamp`, `art`, `rug`, `trim`: each kind needs a word in both languages in `BLOCK_WORDS` of `world3d_stage_cards.py`). A block turns about its own centre with `rot`; mold validation measures the turned box.
+3. Skin it with `pattern` and `view` (see below) so the default look needs no picture. `set_lights.json` is bundled into the UI: rebuild the UI after changing a preset.
+4. `services.set_molds.mold_problems(resolved_mold)` says what validation cannot: `hidden_opening` (furniture within a metre of a wall that covers an opening: a wardrobe in front of the window). `tests/test_set_molds_catalog.py` runs it on every mold at every size.
+5. Test the bare card as an agent receives it: `world3d.scene.instantiate`, bind two models by object id without a position or a clip, read `warnings`, `world3d.scene.fix_placement` if any, export a few seconds and look.
+
+### The vehicle cabin (`stage-cabina`, `stage-coche_interior`, `stage-cabina_nave`)
+
+One geometry, three cards: `stage-cabina` (the neutral vehicle cabin), `stage-coche_interior` (a car: dark leather, carpet, an instrument cluster and a radio painted by the room, a road at night) and `stage-cabina_nave` (a spaceship cockpit: metal panels, glowing side consoles, a yoke, stars streaming past). Any of them is a base for a car, a van, a lorry cab, a boat or a ship: change the skin, the geometry stays. Built from **turned blocks** (`rot: [x, y, z]` radians about the block's centre; `scripts/dev/make_cabin_mold.py` writes the three molds): seats with cushion bolsters, raked back, side wings and a headrest, a console with shifter and cup holder, a dashboard with an instrument binnacle, a radio stack, vents and a glovebox, a tilted steering wheel (a ring of slats) or a yoke, A-, B- and C-pillars, **two windows on each side** with frames and a pillar between them, a rear window, a mirror, visors, a dome light, door pulls and armrests. Size: small 1.8 x 2.5 x 1.25 m, medium 2.1 x 3.0 x 1.45 m, large 2.6 x 3.9 x 1.8 m. Light preset `cabin` (the lamp hangs at 60 percent of the roof height).
+
+**Nothing in the default look is a picture or a clip.** A skin entry may be:
+
+- `{"pattern": "leather", "color": "#4a3a30", "tile_m": 0.35}`: a tile the room paints itself and `color` tints. Tiles: `leather`, `fabric`, `plastic`, `quilt`, `carpet`, `metal`, `wood`, `plaster`, `tile`; faces painted once over the whole block face: `dials` (an instrument cluster) and `radio`. `tile_m` defaults per pattern.
+- `{"view": "road_night", "speed_mps": 15}`: an animated window picture. `road_night`, `road_day`, `road_dawn` and `space` travel (the road comes toward the windshield and leaves through the rear window, the roadside and its guard-rail posts, lamp poles, a far town and oncoming headlights pass the side windows, stars stream past a ship); `night_window` and `day_window` are a quiet house window (moon or sun, twinkling stars, drifting clouds, swaying trees, lit windows, a street lamp). The picture is a pure function of the scene second drawn with a 1/60 s shutter, so it is smooth at any frame rate, never jumps where a clip would loop, and the two side windows show one continuous roadside. `lights: [{x, y, r, color?, colors?, to?, over?, hop?, blink?}]` on a view puts bright things in its sky (fractions of the view: x across the wall, y down it, `r` of its height): `to` is where it is after `over` seconds (position moves, size grows), `hop` makes it jump every `every` seconds, `colors` cycles six times a second, `blink` shows it `on` seconds of every `period`: a planet, a beacon, a craft, all exact at any frame rate. A `video` on a window surface is read through the browser's decoder, which in an export repeated about every third frame (30 fps content came out at 20): prefer a `view` with `lights`; a `video` or an `image` still works when you must have your own picture.
+
+The windows are the surfaces `windshield`, `window_left`, `window_right`, `window_rear`; the rest are `floor`, `ceiling`, `wall_*`, `seat_front/top`, `console_*`, `dash_*`, `cluster_*`, `radio_*`, `wheel_*`, `trim_*`, `pillar_*`, `glow_*` (the dome light and the cockpit panels). `texture` + `tile_m` repeats your own tile, `image` stretches one picture (give it `sideColor` for the ends of a block).
+
+**Seated people.** The two `sit` marks (x = +-0.5, z = -0.25, facing the windshield) put a subject on the cushion by themselves: instantiating the card with two plain models already seats them (`position[1] = cushion top - 0.53 x 1.7`; another height: `0.36 - 0.53 x height`, `rotationY = pi`). There is no sit clip yet: the legs go into the seat block and the placement check judges the person from the cushion up.
+
+### The bedroom (`stage-dormitorio`)
+
+A bed with a frame, headboard, two pillows and a quilted duvet (the mattress `bed` tops at 0.55 m, the duvet at 0.70: both soft, a figure in or on them is not sunk), two bedside tables with lamps, a wardrobe that faces the room from the right wall (it no longer stands in front of the window), a window with frame, sill and curtains over a `day_window` view, a framed door, a rug, a picture and a ceiling lamp. `scripts/dev/make_bedroom_mold.py` writes it; the block ids, surfaces, marks and the seven cameras are the old mold's. A lying figure: `rotationX = -1.5`, head toward the headboard, `position` at its feet (for a 1.65 m figure on the pillow: `[0, 0.64, -1.0]`); read `placement` and let `world3d.scene.fix_placement` correct it.
 
 ## Packs by intent
 
@@ -309,6 +337,16 @@ Forty-eight real ids an agent can reach for before searching, grouped by intent.
 - `pixel-orbit`: High above a planet: its curved horizon glows with atmosphere, city lights dot the night side, nebula clouds breathe among dense stars.
 - `drive-hood`: Immersive forward view with a restrained road bump.
 - `motion-lighthouse-story`: A geometric keeper climbs a coastal lighthouse; the beacon rotates over a volumetric sea and island.
+
+## Check before you look: the cheap scene QA loop
+
+Do not find placement defects with a picture. After `world3d.scene.patch` (or `inspect`) read `warnings` and `layout.placement`: `placement_sinks_into_support`, `placement_overhangs_support`, `placement_outside_room`, `placement_below_floor`, `placement_floating`, `placement_cropped`, `placement_tiny`, each with the `position` that fixes it, and `placement_fix_all` when an object has several. Apply the fixes in one patch. Then the existing ones: `collision: ...` for a mover through a model, `camera_inside_geometry`. Only when the warnings are clean ask `world3d.scene.preview` for one to three frames (at the start, the middle and the end of the shot) and look at them yourself. A reviewer model (a second agent that reads every frame) is for a pilot or a milestone, not for every revision: its 1-5 scores drifted 0.2 between runs on identical frames, a text warning does not drift.
+
+**A model with no clip stands in a T.** A humanoid's bind pose has its arms spread 1.67 m, and that is what is drawn and measured when no clip plays. `world3d.scene.patch` therefore plays the GLB's rest-pose clip (a name like `Idle` or `Stand`) when you bind a model with no `clip` and says so (`clip_default: subject_1 plays "Idle"`); bind `clip` to choose another. A model whose clips are only a walk or a talk keeps its bind pose.
+
+**Fix them in one call.** `world3d.scene.fix_placement` `{scene_id, base_revision, only?}` writes every position fix the check names as one revision (an object it names more than once gets all its fixes added up) and returns the inspect view of the new revision plus `fixed: [{object_id, position}]`. `cropped` and `tiny` are about the camera, so nothing moves for them. MCP and Ask the Wizard call the same operation (`POST /api/v1/world3d/templates/commands`, `operation: "world3d.scene.fix_placement"`); the Wizard reply opens the fixed scene in the Video 3D editor like any other patch. The loop: patch, read the warnings, `fix_placement`, then `world3d.scene.preview` one or two frames yourself.
+
+What the check knows: the room's blocks and every other still prop are the supports; a character is judged by its idle body (its bind pose is a T, `boundsM` is that T), and from the cushion up when it is lowered into a seat block. A lying figure pivots at its FEET (`rotationX` about the position), so its body spreads along -z (head toward -z at `rotationX = -1.5`): read `placement` instead of guessing the offset. A tight close-up of a character the camera is meant to crop will still say `cropped`: it is information, not a refusal.
 
 ## Present a robot
 

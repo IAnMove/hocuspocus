@@ -13,6 +13,7 @@ from copy import deepcopy
 from services.world3d_scene_bounds import CUTOUT_HEIGHT, MODEL_HEIGHT, placed_bounds, slot_native_bounds
 from services.world3d_scene_collisions import scene_collisions
 from services.world3d_scene_contacts import scene_contacts
+from services.world3d_scene_placement import scene_placement
 
 MAX_ITEMS = 32
 CONVENTION = (f"metres, y up. A 3D model is drawn {MODEL_HEIGHT:g} m x scale tall (its bounding-box height, whatever its length); "
@@ -30,6 +31,9 @@ LAYOUT_DOC = ("It also shows the shot in metres: camera (the authored family, ey
               "model, by the other model's parts (one box per mesh node): [{a, b, part, partName?, from_s, to_s, at [x, y, z], depth_m}] with a \"collision: ...\" warning each "
               "(layout.collisionsOmitted counts the passages beyond the cap); flat low parts (the ground) are not obstacles, objects that stand still are never compared, "
               "and collide: false exempts an object. A fixed camera whose eye is inside a part warns camera_inside_geometry. "
+              "layout.placement lists what is wrong with where STILL objects stand, with the position that fixes it, and a \"placement_<code>: ...; fix: position [...]\" warning each: "
+              "outside_room, sinks_into_support (a sleeper in the mattress), overhangs_support (a body hanging off the end of its couch), below_floor, floating, cropped "
+              "(under 70 percent of a character is in frame at the start, middle or end of a fixed or following camera) and tiny; apply the fix with one patch, do not look at a picture to find these. "
               "Publish a scene and it opens in the Video 3D editor's Open dialog."
               ) % MAX_ITEMS
 _PLAIN_CAMERA = ("family", "eye", "look", "fov", "frameFormat", "orbitRadius", "orbitHeight", "orbitTurns", "eyeOffset", "targetOffset", "lensShift")
@@ -41,13 +45,14 @@ def scene_layout(document: dict, workspace: str | None, workspace_dir, passes: d
 
     ``layout.collisions`` lists where a moving object passes through another (``passes``: the result of ``scene_collisions``
     when the caller has it already); ``layout.contacts`` how each rigged character sits or stands among the furniture
-    (``contacts``: the result of ``scene_contacts``)."""
+    (``contacts``: the result of ``scene_contacts``). ``layout.placement`` is what is wrong with where still objects stand."""
     camera, light = document.get("camera"), document.get("light")
     size = {key: document[key] for key in ("width", "height", "fps") if key in document}
     layout = _layout(document, workspace, workspace_dir)
     found = passes if passes is not None else scene_collisions(document, workspace, workspace_dir)
     layout["collisions"] = found["collisions"]
     layout["contacts"] = (contacts if contacts is not None else scene_contacts(document, workspace, workspace_dir))["contacts"]
+    layout["placement"] = scene_placement(document, layout["items"])["issues"]
     if found["omitted"]:
         layout["collisionsOmitted"] = found["omitted"]
     return {"camera": _camera(camera) if isinstance(camera, dict) else None,

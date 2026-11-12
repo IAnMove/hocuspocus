@@ -171,6 +171,7 @@
         "tests/test_output_delete_workspace.py",
         "tests/test_output_move_security.py",
         "tests/test_output_names.py",
+        "tests/test_output_file_cache_header.py",
         "tests/test_pass2_descriptor_canonicalize.py",
         "tests/test_pass3_storyboard_skip.py",
         "tests/test_phase1_issue_fixes.py",
@@ -675,6 +676,9 @@
         "tests/test_world3d_scene_layout.py",
         "tests/test_world3d_agent_built_scene.py",
         "tests/test_world3d_scene_collisions.py",
+        "tests/test_world3d_scene_placement.py",
+        "tests/test_world3d_fix_placement.py",
+        "tests/test_world3d_default_clip.py",
         "tests/test_world3d_world_fx.py",
         "tests/test_minimax_h3_fasth3.py",
         "tests/test_cc0_props.py",
@@ -3116,6 +3120,19 @@
       "paths": [
         "tests/test_world3d_scene_layout.py",
         "tests/test_world3d_agent_built_scene.py"
+      ]
+    },
+    {
+      "prefix": "app/services/world3d_scene_placement.py",
+      "paths": [
+        "tests/test_world3d_scene_placement.py",
+        "tests/test_world3d_fix_placement.py"
+      ]
+    },
+    {
+      "prefix": "app/services/procedural_3d/glb_clips.py",
+      "paths": [
+        "tests/test_world3d_default_clip.py"
       ]
     },
     {

@@ -21,7 +21,7 @@ def test_wall_ratio_cache_and_automatic_color(tmp_path,monkeypatch):
     assert one==two and len(calls)==1
     with Image.open(skins.asset_path(one['wall_back']['image']['asset'],tmp_path,'default')) as image: assert image.size==(1536,768)
     assert one['wall_left']==one['wall_right']=={'color':'#784628'}
-    assert one['floor']=={'color':'#8a6f55'}
+    assert one['floor']=={'pattern':'wood','color':'#8a6a46'}      # the floor keeps the mold's own default (a painted wood pattern now)
 
 
 def test_floor_without_a_mold_colour_takes_a_darker_wall_tone(tmp_path):

@@ -362,7 +362,7 @@ With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GL
 2. Call `series.location.set3d` with a version 1 envelope and a new `intent_id`:
    `input: {workspace, series_id, location_id, mold: "despacho", size: "medium", skin, props: []}`.
    `skin = {wall_back: {image: "straight-on shelves and framed plans"}, floor: {texture: "oak parquet", tile_m: 1}, wall_left: {color: "#b9aa94"}}`.
-   `light` (optional) relights the mold with another preset of its kind: interiors `office_day`, `bar_warm`, `studio`,
+   `light` (optional) relights the mold with another preset of its kind: interiors `office_day`, `bar_warm`, `studio`, `cabin`,
    `clinical`; exteriors `daylight`, `dusk`, `night_sky` (a night street gets a night key light and a dark sky).
    `wall_back: {image: "location"}` reuses the approved location picture. Asset skins: `{image: {asset: "wall.png"}}`,
    `{texture: {asset: "tile.png"}}` or `{video: {asset: "screen.mp4"}}`. Poll `series.location.set3d.status` until

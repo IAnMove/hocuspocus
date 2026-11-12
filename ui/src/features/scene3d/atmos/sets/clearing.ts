@@ -35,6 +35,7 @@ import { addCanopies, addTrunks, addUnderstory, type Kept } from '../forest.ts'
 import { bindShaftLight, createDofPass, createGradePass, createShaftPass, projectSun } from '../passes.ts'
 import type { AtmosSetDefinition } from '../definition.ts'
 import type { AtmosQuality, AtmosSettings, ResolvedAtmos } from '../params.ts'
+import { NIGHT, addNightSky, dimEmissives, effectivePalette, isNight } from '../night.ts'
 
 export type AtmosHandle = {
   sync: (seconds: number, camera: Camera, light: DirectionalLight, quality: AtmosQuality, focus: number, live?: AtmosSettings) => void
@@ -71,6 +72,7 @@ const GRASS = {
   fragment: `
     uniform vec3 uBase;
     uniform vec3 uTip;
+    uniform vec3 uHaze;
     uniform vec2 uCookie;
     varying vec2 vUv;
     varying float vDist;
@@ -86,7 +88,7 @@ const GRASS = {
       color *= mix(0.78, 1.22, vTint);
       color = mix(color, color * vec3(1.22, 1.08, 0.62), smoothstep(0.82, 1.0, vTint) * 0.65);
       color *= mix(0.5, 1.15, dapple);
-      color = mix(color, vec3(0.78, 0.86, 0.7), smoothstep(16.0, 34.0, vDist));
+      color = mix(color, uHaze, smoothstep(16.0, 34.0, vDist));
       gl_FragColor = vec4(color, 1.0);
     }
   `,
@@ -154,6 +156,7 @@ function addGrass(root: Group, resolved: ResolvedAtmos, kept: Kept) {
       uCam: { value: new Vector3() },
       uBase: { value: new Color(resolved.grass).multiplyScalar(0.36) },
       uTip: { value: new Color(resolved.grass).multiplyScalar(0.82) },
+      uHaze: { value: isNight(resolved.timeOfDay) ? new Color(resolved.fogColor) : new Color(0.78, 0.86, 0.7) },
       uCookie: { value: new Vector2() },
     },
     vertexShader: GRASS.vertex,
@@ -225,7 +228,7 @@ function addSky(root: Group, resolved: ResolvedAtmos, kept: Kept) {
     side: BackSide,
     depthWrite: false,
     uniforms: {
-      uTop: { value: new Color(resolved.fogColor).multiplyScalar(1.15) },
+      uTop: { value: isNight(resolved.timeOfDay) ? new Color(NIGHT.zenith) : new Color(resolved.fogColor).multiplyScalar(1.15) },
       uHorizon: { value: new Color(resolved.fogColor) },
       uSun: { value: new Color(resolved.sunColor) },
       uRay: { value: new Vector3(...resolved.sun) },
@@ -286,9 +289,9 @@ function addFallingLeaf(root: Group, kept: Kept) {
   kept.materials.push(mat)
 }
 
-function addProps(root: Group, kept: Kept, figure: boolean) {
+function addProps(root: Group, kept: Kept, figure: boolean, night = false) {
   addLitter(root, kept)
-  addFallingLeaf(root, kept)
+  if (!night) addFallingLeaf(root, kept)          // an orange leaf drifting down reads as a stray rectangle in the dark
   if (!figure) return
   const bodyGeo = new CylinderGeometry(0.22, 0.26, 1.15, 10)
   const bodyMat = new MeshStandardMaterial({ color: 0xc4b59a, roughness: 0.7 })
@@ -334,9 +337,13 @@ export function buildClearing(resolved: ResolvedAtmos, webgl2: boolean): { root:
   const grass = addGrass(root, resolved, kept)
   const motes = addMotes(root, resolved, kept)
   const sky = addSky(root, resolved, kept)
-  addProps(root, kept, resolved.previewFigure === true)
+  if (isNight(resolved.timeOfDay)) {
+    addNightSky(root, kept, resolved.sun, 70, resolved.seed)
+    dimEmissives(root, 0.12)
+  }
+  addProps(root, kept, resolved.previewFigure === true, isNight(resolved.timeOfDay))
   const cookie = keepTexture(kept, leafCookie(resolved.seed))
-  const spot = new SpotLight(resolved.sunColor, 2.4, 46, 1.05, 0.85, 1)
+  const spot = new SpotLight(resolved.sunColor, isNight(resolved.timeOfDay) ? 0.5 : 2.4, 46, 1.05, 0.85, 1)
   spot.map = cookie
   spot.castShadow = false
   spot.target.position.set(CLEARING_SUBJECT[0], 0.2, CLEARING_SUBJECT[2])
@@ -458,7 +465,7 @@ function syncLive(
   projectSun(camera, ray, uniforms.uSunUv.value)
   bindShaftLight(parts.shafts, light, quality === 'high')
   uniforms.uSteps.value = quality === 'high' ? look.shaftSteps : 8
-  uniforms.uStrength.value = 0.5 + look.fogDensity * 0.2
+  uniforms.uStrength.value = (0.5 + look.fogDensity * 0.2) * (isNight(look.timeOfDay) ? 0.2 : 1)
   uniforms.uFogDensity.value = 0.05 + look.fogDensity * 0.12
   uniforms.uFogColor.value.set(look.fogColor)
   uniforms.uProjectionInverse.value.copy(camera.projectionMatrixInverse)
@@ -473,13 +480,13 @@ function syncLive(
     parts.shafts.uniforms.uFar.value = lens.far
   }
   parts.grade.uniforms.uFrame.value = Math.floor(seconds * 24)
-  parts.grade.uniforms.uTemperature.value = look.palette === 'blue' ? -0.05 : 0.2
+  parts.grade.uniforms.uTemperature.value = isNight(look.timeOfDay) ? -0.12 : look.palette === 'blue' ? -0.05 : 0.2
   parts.sky.uniforms.uRay.value.copy(ray)
 }
 
 function liveLook(resolved: ResolvedAtmos, live?: AtmosSettings): ResolvedAtmos {
   if (!live) return resolved
-  return { ...resolved, fogDensity: live.fogDensity, wind: live.wind, motes: live.motes, palette: live.palette }
+  return { ...resolved, fogDensity: live.fogDensity, wind: live.wind, motes: live.motes, palette: effectivePalette(live), timeOfDay: live.timeOfDay }
 }
 
 function moveMotes(root: Group, base: Float32Array, look: ResolvedAtmos, seconds: number) {
@@ -523,18 +530,21 @@ const CLEARING_PALETTES = {
   green: { fog: '#d5e6c6', ground: '#b7bba6', accent: '#7cbc46', sky: ['#d5e6c6', '#e7f0dc'] },
   autumn: { fog: '#ead4b2', ground: '#c6b49c', accent: '#c4a04a', sky: ['#ead4b2', '#f0e2c8'] },
   blue: { fog: '#d4e4f0', ground: '#b7c2c8', accent: '#6aadc4', sky: ['#d4e4f0', '#e4eef6'] },
+  night: { fog: NIGHT.horizon, ground: '#2b3a3f', accent: '#3a7360', sky: [NIGHT.horizon, NIGHT.zenith] },
 } as const
 
 const CLEARING_TIMES = {
   dawn: { sun: [0.7, -0.28, 0.22], sunColor: '#ffb4c0' },
   morning: { sun: [0.4, -0.82, 0.16], sunColor: '#fff4dc' },
   golden: { sun: [0.82, -0.55, 0.16], sunColor: '#ffd39a' },
+  night: { sun: [0.32, -0.3, 0.9], sunColor: '#9fb4ff' },
 } as const
 
 const FALLBACK_GROUND: Record<string, string> = {
   green: '#6d7d58',
   autumn: '#8a7a58',
   blue: '#7d8c86',
+  night: '#1b2a2e',
 }
 
 function hexColor(color: string): [number, number, number] {

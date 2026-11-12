@@ -25,8 +25,12 @@ from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
 from services.world3d_blank_scene import editor_warnings
+from services.procedural_3d.glb_clips import glb_clips, idle_clip
+from services.world3d_scene_bounds import resolve_workspace_glb
+from services.world3d_scene_fit import apply_fit
 from services.world3d_scene_collisions import scene_collisions
 from services.world3d_scene_contacts import scene_contacts
+from services.world3d_scene_placement import placement_warnings
 from services.world3d_scene_layout import scene_layout
 from services.world3d_scene_motion import bind_motion, retime as retime_motion
 from services.world3d_rest_fields import bind_declared, check_removable
@@ -560,7 +564,26 @@ def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | N
     _bind_checked(slot, binding)
     _bind_directional(slot, binding)
     bind_motion(slot, binding, document.get("duration") or 0)
-    return warnings + bind_declared(slot, binding, workspace, workspace_dir)
+    return warnings + _default_clip(slot, binding, workspace, workspace_dir) + apply_fit(slot, binding, workspace, workspace_dir) + bind_declared(slot, binding, workspace, workspace_dir)
+
+
+def _default_clip(slot: dict, binding: dict, workspace: str | None, workspace_dir) -> list[str]:
+    """A model bound with no clip is drawn in its bind pose, and a humanoid's is a T (arms 1.67 m wide): the figure would look broken and the placement
+    check would measure the T. When the GLB has a clip named like a rest pose (Idle, Stand), play it; the reply says so, so the agent can pick another."""
+    if (slot.get("media") or "model3d") != "model3d" or slot.get("clip") or not workspace or workspace_dir is None:
+        return []
+    if _given(binding, "clip") or not (_given(binding, "sourceUrl") or _given(binding, "sourceRef")):
+        return []
+    try:
+        path, _reason = resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir)
+        clip = idle_clip(glb_clips(path)) if path else None
+    except Exception:  # noqa: BLE001 - a default must never fail a binding
+        return []
+    if not clip:
+        return []
+    slot["clip"] = clip
+    slot.setdefault("clipPlayback", {"loop": True})
+    return [f"clip_default: {slot.get('id')} plays \"{clip['name']}\" (no clip was given; a model with none stands in its bind pose, a T for a humanoid). Bind clip to choose another."]
 
 
 PICTURE_SCALE = 0.85     # a 1.7 m model over a 2 m cutout plane (ui/src/features/scene3d/pictureStandIn.ts)
@@ -829,7 +852,7 @@ def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_d
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document), "worldFx": world_fx_view(document),
-        "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"], *contacts["warnings"]], "traits": _traits(document),
+        "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"], *contacts["warnings"], *placement_warnings(shown["layout"].get("placement") or [], shown["layout"]["items"])], "traits": _traits(document),
         **shown,
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationX", "rotationY", "rotationZ", "scale",
                      "height", "beside", "rest", "furniture",
