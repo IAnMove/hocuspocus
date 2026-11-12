@@ -242,7 +242,16 @@ export type Scene3DSlot = {
   splat?: { floorY: number }
   /** A 2D Character Kit painted on the head. The slot stays a model. */
   faceDecal?: Scene3DFaceDecal
+  /** Seated on another object (`world3d.scene.patch` rest). The server resolves it into position, turn and a held clip and
+   *  re-solves it on every patch; the renderer reads only those plain fields. */
+  rest?: Scene3DRest
+  /** Placed next to another object by their boxes (`world3d.scene.patch` beside), re-solved on every patch. */
+  beside?: { object: string; side?: number | string; gap?: number; offset?: number; facing?: string | number }
+  /** A plain piece the server made in the workspace (`world3d.scene.patch` furniture). */
+  furniture?: { kind: string; height?: number; seat?: number; width?: number; depth?: number; color?: string }
 }
+
+export type Scene3DRest = { pose: 'sit'; on: string; at?: string; surface?: { part: string | number } | { point: Vec3 }; facing?: number | string; hands?: boolean }
 
 export type Scene3DCamera = {
   family: Scene3DCameraFamily

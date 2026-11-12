@@ -67,7 +67,9 @@ def bind_world3d_renderer_origin(api, service) -> None:
     # Launch already calls this for the world3d exporter. Remember that service so a comic
     # transition can export without a new launch binding. The scene2d exporter is ignored.
     from services.scene3d_comic import bind_live_exporter
+    from services.world3d_scene_still import bind_still_renderer
     bind_live_exporter(service)
+    bind_still_renderer(service)          # world3d.scene.preview {still: true} paints with this exporter's renderer
 
     @api.middleware("http")
     async def bind_renderer_origin(request: Request, call_next):

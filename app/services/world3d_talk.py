@@ -54,16 +54,32 @@ def _number(value: Any, label: str, low: float = 0.0, high: float = 600.0) -> fl
     return float(value)
 
 
+CUE_DOC = ("A cue is {start, end, value} in seconds from its line's start, as audio.mouth_cues returns it: value is a Rhubarb "
+           "letter A-H or X, or a phonetic name (rest, M, I, E, A, O, U, F, L). Anything else is refused.")
+
+
+def _sound(cue, label: str, mapping: dict | None) -> str:
+    """The cue's sound name; a cue that is not ``{start, end, value}`` or names no known sound is refused."""
+    if not isinstance(cue, dict):
+        raise TalkError("invalid_cue", f"{label} is not an object; {CUE_DOC}")
+    sound = cue.get("value", cue.get("shape", cue.get("viseme")))
+    if not isinstance(sound, str) or not (sound in RHUBARB or sound in PHONETIC or sound in (mapping or {})):
+        raise TalkError("invalid_cue", f"{label}.value {sound!r} is not a mouth sound; {CUE_DOC}")
+    return sound
+
+
 def _line_cues(line: dict, index: int, mapping: dict | None, mouths: dict[str, str]) -> list[dict]:
     start = _number(line.get("start", 0), f"lines[{index}].start")
     raw = line.get("cues") if isinstance(line.get("cues"), list) else (line.get("mouthCues") or [])
     cues = []
-    for cue in raw if isinstance(raw, list) else []:
-        if not isinstance(cue, dict):
-            continue
-        state = kit_state(str(cue.get("value") or cue.get("shape") or cue.get("viseme") or ""), mapping, mouths)
-        begin, end = _number(cue.get("start"), "cue start"), _number(cue.get("end"), "cue end")
-        if state and end > begin:
+    for number, cue in enumerate(raw if isinstance(raw, list) else []):
+        label = f"lines[{index}].cues[{number}]"
+        sound = _sound(cue, label, mapping)
+        begin, end = _number(cue.get("start"), f"{label}.start"), _number(cue.get("end"), f"{label}.end")
+        if end < begin:
+            raise TalkError("invalid_cue", f"{label} ends ({end:g} s) before it starts ({begin:g} s); {CUE_DOC}")
+        state = kit_state(sound, mapping, mouths)
+        if state and end > begin:          # a kit without that drawing, or a zero-length cue, shows the mouth before it
             cues.append({"start": round(start + begin, 3), "end": round(start + end, 3), "state": state})
     return cues
 

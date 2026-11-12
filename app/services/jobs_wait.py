@@ -88,7 +88,9 @@ def command_catalog() -> list[dict]:
             "including progress when the queue already has it. When timeout_s elapses "
             "first it returns the live status with timed_out: true (not an error); call "
             "again to keep waiting. Does not poll the GPU or start a model. An "
-            "interrupted job stays open because it can be resumed."
+            "interrupted job stays open because it can be resumed. Exports are tasks, "
+            "not generation jobs: poll scenes.world3d.export.receipt or "
+            "scenes.video2d.export.receipt with the export's intent_id instead."
         ),
         "inputSchema": {
             "type": "object",

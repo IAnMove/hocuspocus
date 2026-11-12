@@ -4083,6 +4083,17 @@
       "ordinal": 370
     },
     {
+      "method": "POST",
+      "path": "/api/v1/world3d/templates/arrange",
+      "endpoint": "arrange",
+      "source": "app/routers/world3d_templates.py",
+      "status_code": null,
+      "response_model": null,
+      "include_in_schema": true,
+      "operation_id": "arrange_api_v1_world3d_templates_arrange_post",
+      "ordinal": 371
+    },
+    {
       "method": "GET",
       "path": "/api/v1/world3d/templates/{template_id}/thumbnail",
       "endpoint": "template_thumbnail",
@@ -4091,7 +4102,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "template_thumbnail_api_v1_world3d_templates__template_id__thumbnail_get",
-      "ordinal": 371
+      "ordinal": 372
     },
     {
       "method": "GET",
@@ -4102,7 +4113,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "commands_api_v1_scenes_video2d_export_commands_get",
-      "ordinal": 372
+      "ordinal": 373
     },
     {
       "method": "GET",
@@ -4113,7 +4124,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "capabilities_api_v1_scenes_video2d_export_capabilities_get",
-      "ordinal": 373
+      "ordinal": 374
     },
     {
       "method": "POST",
@@ -4124,7 +4135,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "submit_api_v1_scenes_video2d_export_post",
-      "ordinal": 374
+      "ordinal": 375
     },
     {
       "method": "GET",
@@ -4135,7 +4146,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "receipt_api_v1_scenes_video2d_export_receipt_get",
-      "ordinal": 375
+      "ordinal": 376
     },
     {
       "method": "POST",
@@ -4146,7 +4157,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "cancel_api_v1_scenes_video2d_export_cancel_post",
-      "ordinal": 376
+      "ordinal": 377
     },
     {
       "method": "GET",
@@ -4157,7 +4168,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "catalog_api_v1_montages_commands_get",
-      "ordinal": 377
+      "ordinal": 378
     },
     {
       "method": "GET",
@@ -4168,7 +4179,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "list_montages_api_v1_montages_get",
-      "ordinal": 378
+      "ordinal": 379
     },
     {
       "method": "GET",
@@ -4179,7 +4190,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "get_montage_api_v1_montages__file__get",
-      "ordinal": 379
+      "ordinal": 380
     },
     {
       "method": "POST",
@@ -4190,7 +4201,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "save_montage_api_v1_montages_post",
-      "ordinal": 380
+      "ordinal": 381
     },
     {
       "method": "GET",
@@ -4201,7 +4212,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "montage_shots_api_v1_montages__file__shots_get",
-      "ordinal": 381
+      "ordinal": 382
     },
     {
       "method": "POST",
@@ -4212,7 +4223,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "regenerate_shot_api_v1_montages__file__shots__clip_id__regenerate_post",
-      "ordinal": 382
+      "ordinal": 383
     },
     {
       "method": "POST",
@@ -4223,7 +4234,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "select_take_api_v1_montages__file__shots__clip_id__select_post",
-      "ordinal": 383
+      "ordinal": 384
     },
     {
       "method": "POST",
@@ -4234,7 +4245,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "comic_panels_api_v1_montages__file__comic_panels_post",
-      "ordinal": 384
+      "ordinal": 385
     },
     {
       "method": "POST",
@@ -4245,7 +4256,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "export_montage_api_v1_montages__file__export_post",
-      "ordinal": 385
+      "ordinal": 386
     },
     {
       "method": "POST",
@@ -4256,7 +4267,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "derive_montage_api_v1_montages__file__derive_post",
-      "ordinal": 386
+      "ordinal": 387
     },
     {
       "method": "GET",
@@ -4267,7 +4278,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "catalog_api_v1_templates_commands_get",
-      "ordinal": 387
+      "ordinal": 388
     },
     {
       "method": "GET",
@@ -4278,7 +4289,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "list_templates_api_v1_templates_get",
-      "ordinal": 388
+      "ordinal": 389
     },
     {
       "method": "POST",
@@ -4289,7 +4300,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "save_template_api_v1_templates_post",
-      "ordinal": 389
+      "ordinal": 390
     },
     {
       "method": "POST",
@@ -4300,7 +4311,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "preflight_api_v1_templates_preflight_post",
-      "ordinal": 390
+      "ordinal": 391
     },
     {
       "method": "POST",
@@ -4311,7 +4322,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "import_template_api_v1_templates_import_post",
-      "ordinal": 391
+      "ordinal": 392
     },
     {
       "method": "GET",
@@ -4322,7 +4333,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "community_api_v1_templates_community_get",
-      "ordinal": 392
+      "ordinal": 393
     },
     {
       "method": "POST",
@@ -4333,7 +4344,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "community_install_api_v1_templates_community_install_post",
-      "ordinal": 393
+      "ordinal": 394
     },
     {
       "method": "GET",
@@ -4344,7 +4355,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "get_template_api_v1_templates__author___slug__get",
-      "ordinal": 394
+      "ordinal": 395
     },
     {
       "method": "DELETE",
@@ -4355,7 +4366,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "delete_template_api_v1_templates__author___slug__delete",
-      "ordinal": 395
+      "ordinal": 396
     },
     {
       "method": "POST",
@@ -4366,7 +4377,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "apply_template_api_v1_templates__author___slug__apply_post",
-      "ordinal": 396
+      "ordinal": 397
     },
     {
       "method": "GET",
@@ -4377,7 +4388,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "download_package_api_v1_templates__author___slug__package_get",
-      "ordinal": 397
+      "ordinal": 398
     },
     {
       "method": "GET",
@@ -4388,7 +4399,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "preview_api_v1_templates__author___slug__preview_get",
-      "ordinal": 398
+      "ordinal": 399
     },
     {
       "method": "GET",
@@ -4399,7 +4410,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "media_api_v1_templates__author___slug__media__name__get",
-      "ordinal": 399
+      "ordinal": 400
     },
     {
       "method": "GET",
@@ -4410,7 +4421,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "catalog_api_v1_scenes_catalog_get",
-      "ordinal": 400
+      "ordinal": 401
     },
     {
       "method": "POST",
@@ -4421,7 +4432,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "command_api_v1_scenes_templates_commands_post",
-      "ordinal": 401
+      "ordinal": 402
     },
     {
       "method": "GET",
@@ -4432,7 +4443,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "commands_api_v1_scenes_video2d_edit_commands_get",
-      "ordinal": 402
+      "ordinal": 403
     },
     {
       "method": "POST",
@@ -4443,7 +4454,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "submit_api_v1_scenes_video2d_edit_post",
-      "ordinal": 403
+      "ordinal": 404
     },
     {
       "method": "GET",
@@ -4454,7 +4465,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "status_api_v1_settings_mcp_get",
-      "ordinal": 404
+      "ordinal": 405
     },
     {
       "method": "PUT",
@@ -4465,7 +4476,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "update_api_v1_settings_mcp_put",
-      "ordinal": 405
+      "ordinal": 406
     },
     {
       "method": "GET",
@@ -4476,7 +4487,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "protected_resource__well_known_oauth_protected_resource__path__get",
-      "ordinal": 406
+      "ordinal": 407
     },
     {
       "method": "GET",
@@ -4487,7 +4498,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "protected_resource__well_known_oauth_protected_resource_get",
-      "ordinal": 407
+      "ordinal": 408
     },
     {
       "method": "GET",
@@ -4498,7 +4509,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "authorization_server__well_known_openid_configuration_get",
-      "ordinal": 408
+      "ordinal": 409
     },
     {
       "method": "GET",
@@ -4509,7 +4520,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "authorization_server__well_known_oauth_authorization_server__path__get",
-      "ordinal": 409
+      "ordinal": 410
     },
     {
       "method": "GET",
@@ -4520,7 +4531,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "authorization_server__well_known_oauth_authorization_server_get",
-      "ordinal": 410
+      "ordinal": 411
     },
     {
       "method": "POST",
@@ -4531,7 +4542,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "register_oauth_register_post",
-      "ordinal": 411
+      "ordinal": 412
     },
     {
       "method": "GET",
@@ -4542,7 +4553,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "authorize_page_oauth_authorize_get",
-      "ordinal": 412
+      "ordinal": 413
     },
     {
       "method": "POST",
@@ -4553,7 +4564,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "authorize_oauth_authorize_post",
-      "ordinal": 413
+      "ordinal": 414
     },
     {
       "method": "POST",
@@ -4564,7 +4575,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "token_oauth_token_post",
-      "ordinal": 414
+      "ordinal": 415
     },
     {
       "method": "GET",
@@ -4575,7 +4586,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "list_music_productions_api_v1_music_productions_get",
-      "ordinal": 415
+      "ordinal": 416
     },
     {
       "method": "GET",
@@ -4586,7 +4597,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "get_music_production_api_v1_music_productions__production_id__get",
-      "ordinal": 416
+      "ordinal": 417
     },
     {
       "method": "POST",
@@ -4597,7 +4608,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "post_use_take_api_v1_music_productions__production_id__shots__shot__use_take_post",
-      "ordinal": 417
+      "ordinal": 418
     },
     {
       "method": "POST",
@@ -4608,7 +4619,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "post_retake_api_v1_music_productions__production_id__shots__shot__retake_post",
-      "ordinal": 418
+      "ordinal": 419
     },
     {
       "method": "POST",
@@ -4619,7 +4630,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "post_update_api_v1_music_productions__production_id__shots__shot__post",
-      "ordinal": 419
+      "ordinal": 420
     },
     {
       "method": "POST",
@@ -4630,7 +4641,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "post_review_api_v1_music_productions__production_id__shots__shot__review_post",
-      "ordinal": 420
+      "ordinal": 421
     },
     {
       "method": "POST",
@@ -4641,7 +4652,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "post_lock_api_v1_music_productions__production_id__shots__shot__lock_post",
-      "ordinal": 421
+      "ordinal": 422
     },
     {
       "method": "POST",
@@ -4652,7 +4663,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "post_redo_api_v1_music_productions__production_id__shots__shot__redo_post",
-      "ordinal": 422
+      "ordinal": 423
     },
     {
       "method": "POST",
@@ -4663,7 +4674,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "post_request_api_v1_music_productions__production_id__shots__shot__request_post",
-      "ordinal": 423
+      "ordinal": 424
     },
     {
       "method": "POST",
@@ -4674,7 +4685,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "post_undo_api_v1_music_productions__production_id__shots__shot__undo_post",
-      "ordinal": 424
+      "ordinal": 425
     },
     {
       "method": "GET",
@@ -4685,7 +4696,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "catalog_api_v1_generation_commands_get",
-      "ordinal": 425
+      "ordinal": 426
     },
     {
       "method": "POST",
@@ -4696,7 +4707,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "submit_api_v1_generation_commands_post",
-      "ordinal": 426
+      "ordinal": 427
     },
     {
       "method": "GET",
@@ -4707,7 +4718,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "receipt_api_v1_generation_commands_receipt_get",
-      "ordinal": 427
+      "ordinal": 428
     },
     {
       "method": "POST",
@@ -4718,7 +4729,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "references_api_v1_generation_commands_references_post",
-      "ordinal": 428
+      "ordinal": 429
     },
     {
       "method": "GET",
@@ -4729,7 +4740,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "commands_api_v1_wizard_workflows_executor_commands_get",
-      "ordinal": 429
+      "ordinal": 430
     },
     {
       "method": "GET",
@@ -4740,7 +4751,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "list_workflows_api_v1_wizard_workflows_executor_get",
-      "ordinal": 430
+      "ordinal": 431
     },
     {
       "method": "GET",
@@ -4751,7 +4762,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "get_workflow_api_v1_wizard_workflows_executor__workflow_id__get",
-      "ordinal": 431
+      "ordinal": 432
     },
     {
       "method": "POST",
@@ -4762,7 +4773,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "start_api_v1_wizard_workflows_executor_post",
-      "ordinal": 432
+      "ordinal": 433
     },
     {
       "method": "POST",
@@ -4773,7 +4784,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "answer_api_v1_wizard_workflows_executor_answer_post",
-      "ordinal": 433
+      "ordinal": 434
     },
     {
       "method": "POST",
@@ -4784,7 +4795,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "resume_api_v1_wizard_workflows_executor_resume_post",
-      "ordinal": 434
+      "ordinal": 435
     },
     {
       "method": "POST",
@@ -4795,7 +4806,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "reconcile_api_v1_wizard_workflows_executor_reconcile_post",
-      "ordinal": 435
+      "ordinal": 436
     },
     {
       "method": "POST",
@@ -4806,7 +4817,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "shorten_audio_route_api_v1_audio_shorten_post",
-      "ordinal": 436
+      "ordinal": 437
     },
     {
       "method": "POST",
@@ -4817,7 +4828,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "publish_check_api_v1_video_editor_publish_check_post",
-      "ordinal": 437
+      "ordinal": 438
     },
     {
       "method": "POST",
@@ -4828,7 +4839,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "publish_video_api_v1_video_editor_publish_post",
-      "ordinal": 438
+      "ordinal": 439
     },
     {
       "method": "GET",
@@ -4839,7 +4850,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "catalog_api_v1_media_commands_get",
-      "ordinal": 439
+      "ordinal": 440
     },
     {
       "method": "POST",
@@ -4850,7 +4861,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "command_api_v1_media_commands_post",
-      "ordinal": 440
+      "ordinal": 441
     },
     {
       "method": "POST",
@@ -4861,7 +4872,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "key_image_api_v1_studio_key_post",
-      "ordinal": 441
+      "ordinal": 442
     },
     {
       "method": "POST",
@@ -4872,7 +4883,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "check_speech_api_v1_qa_speech_post",
-      "ordinal": 442
+      "ordinal": 443
     },
     {
       "method": "POST",
@@ -4883,7 +4894,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "check_accent_api_v1_qa_accent_post",
-      "ordinal": 443
+      "ordinal": 444
     },
     {
       "method": "POST",
@@ -4894,7 +4905,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "compose_api_v1_model3d_compose_post",
-      "ordinal": 444
+      "ordinal": 445
     },
     {
       "method": "POST",
@@ -4905,7 +4916,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "blob_make_api_v1_model3d_blob_post",
-      "ordinal": 445
+      "ordinal": 446
     },
     {
       "method": "POST",
@@ -4916,7 +4927,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "anime_make_api_v1_model3d_anime_post",
-      "ordinal": 446
+      "ordinal": 447
     },
     {
       "method": "POST",
@@ -4927,7 +4938,7 @@
       "response_model": null,
       "include_in_schema": true,
       "operation_id": "blob_presets_api_v1_model3d_blob_presets_post",
-      "ordinal": 447
+      "ordinal": 448
     },
     {
       "method": "POST",

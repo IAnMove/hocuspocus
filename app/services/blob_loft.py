@@ -629,7 +629,8 @@ def _legs(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
         if legs == "shorts":
             hem = top - (top - knee) * 0.42
             leg += [at(hem, 1.12, legs_color), at(hem - 0.001, 1.0, skin)]
-        leg += [at(knee + (top - knee) * 0.12, 0.9, upper), at(knee, 0.82, upper), at(knee - (knee - ankle) * 0.1, 0.84, upper),
+        above_knee = _under_skirt(L, knee, top, at, under, upper) if legs == "skirt" else [at(knee + (top - knee) * 0.12, 0.9, upper)]
+        leg += [*above_knee, at(knee, 0.82, upper), at(knee - (knee - ankle) * 0.1, 0.84, upper),
                 at(knee - (knee - ankle) * 0.1 - 0.0005, 0.84, low),
                 at(knee - (knee - ankle) * 0.35, 0.88, low), at(knee - (knee - ankle) * 0.7, 0.68, low), at(ankle, 0.55, low)]
         _tube(mesh, leg, "y")
@@ -642,6 +643,24 @@ def _legs(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
         sole = [_st((sign * x, sole_h * 0.3, -sole_d * 0.46), r * 1.04, sole_h * 0.3, sole_color), _st((sign * x, sole_h * 0.3, sole_d * 0.1), r * 1.18, sole_h * 0.3, sole_color),
                 _st((sign * x, sole_h * 0.28, sole_d * 0.62), r * 0.7, sole_h * 0.28, sole_color)]
         _tube(mesh, sole, "z")
+
+
+def skirt_hem_y(L: dict) -> float:
+    """The height of the skirt's hem (``_skirt``'s last ring)."""
+    return L["waist_y"] + 0.012 * L["h"] - max(L["waist_y"] - L["knee"], L["h"] * 0.12)
+
+
+def _under_skirt(L: dict, knee: float, top: float, at, under: str, upper: str) -> list[dict]:
+    """The thigh's rings above the knee under a skirt: the thigh keeps the cloth's colour down to just under the hem, so a
+    seated thigh that comes through the cloth reads as cloth, not skin; the skin starts there (a double ring, a colour
+    change without a blend across the thigh). Bodies in trousers or shorts never come here."""
+    ring, mid = knee + (top - knee) * 0.12, top - (top - knee) * 0.3
+    switch = min(max(skirt_hem_y(L) - 0.004 * L["h"], knee + 0.002), mid - 0.002)
+    if switch < ring:
+        k = 0.9 + (0.82 - 0.9) * (ring - switch) / (ring - knee)
+        return [at(ring, 0.9, under), at(switch, k, under), at(switch - 0.0005, k, upper)]
+    k = 0.9 + (1.1 - 0.9) * (switch - ring) / (mid - ring)
+    return [at(switch, k, under), at(switch - 0.0005, k, upper), at(ring, 0.9, upper)]
 
 
 def _skirt(mesh: Mesh, L: dict, color: str) -> None:
@@ -770,6 +789,10 @@ def loft_mesh(spec: dict, layout: dict) -> Mesh:
 
 
 def loft_glb(spec: dict, layout: dict, name: str = "blob", fit=None, relief=None) -> bytes:
+    """The GLB of a lofted body. A skirt is one open tube: seated, its hem tips toward the camera and the inside of the cloth
+    shows, so the body of a skirted outfit is drawn from both sides (``doubleSided``)."""
     from services.procedural_3d.compose import pack_parts
 
-    return pack_parts(name, [(part.vertices, part.normals, part.colors, material, uvs) for part, material, uvs in loft_parts(spec, layout, fit, relief)])
+    sides = {"doubleSided": True} if wear_of(spec, layout)["legs"] == "skirt" else None
+    return pack_parts(name, [(part.vertices, part.normals, part.colors, material, uvs, sides if material == "body" else None)
+                             for part, material, uvs in loft_parts(spec, layout, fit, relief)])

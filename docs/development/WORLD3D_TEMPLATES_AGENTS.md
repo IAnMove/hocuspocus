@@ -403,3 +403,7 @@ A film in one shot: `put` a blank stage, `instantiate`, `patch` the models in wi
 - Portrait has 123 cards: 18 of them (the vertical pack) are for speech, 12 with `dialogue`. The stages, the action, speed and title packs and most looks are landscape only, so a vertical plan at a place with a stage, or for those intents, still gets landscape cards reframed (`adapted`). The vertical pack is set in the generic `citadel`: give it a `world`, a painted `background` or a skin for a real place.
 - A Series `kind: "3d"` shot reads only `template` and `roomCamera` from a plan entry; its frame comes from the series. A vertical series must ask the plan for `format: "portrait"` to get the vertical cards.
 - `reference` is a still of the real technique from a film, never a frame of ours; `preview` is ours, and shows empty slots as placeholders, not your cast.
+
+## Seated people (`furniture`, `height`, `beside`, `rest`)
+
+A card whose cast sits (`vertical-dialogue-across`, `dialogue-table`) should not hold `sit_down` on its own: that clip knows no seat. Declare the furniture and the sitters instead (`docs/3d-video-compositor/HOWUSEIT.md`, "people seated at a table or on a bed"): `furniture: {kind: "table"}`, two `furniture: {kind: "chair"}` with `beside: {object: "table", side: "front" | "back"}`, and each subject `rest: {pose: "sit", on: <chair>, at: "table"}` at its real `height`. Inspect warns `seated_without_seat` for a held `sit_down` with nothing under the hips, with the bindings to add.

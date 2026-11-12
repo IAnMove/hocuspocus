@@ -57,7 +57,8 @@ def interaction_clip(rig, spec: dict) -> dict:
     kind = spec.get("kind")
     duration = spec.get("duration")
     if kind == "sit":
-        return sit_clip(rig, spec.get("seat"), duration or 3.0, bool(spec.get("stand_up")), spec.get("look"), str(spec.get("name") or "Sit"))
+        return sit_clip(rig, spec.get("seat"), duration or 3.0, bool(spec.get("stand_up")), spec.get("look"), str(spec.get("name") or "Sit"),
+                        spec.get("hands"))
     if kind == "reach":
         return reach_clip(rig, spec.get("target"), str(spec.get("hand") or "auto"), duration or 2.0, spec.get("hold", True) is not False,
                           spec.get("look", True) is not False, str(spec.get("name") or "Reach"))

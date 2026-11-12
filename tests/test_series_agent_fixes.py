@@ -168,7 +168,7 @@ def test_a_compact_episode_keeps_layout_lines_and_takes():
 
 def test_the_guide_names_the_production_lessons():
     """Lessons that cost hours, and the real series.update merge. Growth stays within 35% of 40364 bytes
-    (32% until the template-fit gate and the template plan added 0.8 KB between them: 54026 bytes; 30% until the round-headed body added one paragraph; 25% until the box room and the voice band each added a line: 50622 bytes together; 15% until the owner PRs #1003, #1004, #1006, #1007 and #1015 each added a few lines to the guide: 47626 bytes together;
+    (32% until the template-fit gate, the template plan and seated rest each added a paragraph; 30% until the round-headed body added one paragraph; 25% until the box room and the voice band each added a line: 50622 bytes together; 15% until the owner PRs #1003, #1004, #1006, #1007 and #1015 each added a few lines to the guide: 47626 bytes together;
     20% until the kit animations of a Series cast entry added 1.5 KB: 49374 bytes)."""
     guide = guide_text()
     assert len(guide.encode()) <= int(40364 * 1.35)

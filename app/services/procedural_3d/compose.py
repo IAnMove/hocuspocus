@@ -234,7 +234,8 @@ def pack_mesh(name, vertices, normals, colors) -> bytes:
 
 
 def pack_parts(name, parts) -> bytes:
-    """One mesh with a primitive per part ``(vertices, normals, colors, material_name)``: the body and its hair."""
+    """One mesh with a primitive per part ``(vertices, normals, colors, material_name, uvs?, material_fields?)``: the body
+    and its hair. ``material_fields`` (``{"doubleSided": True}``) join that part's material."""
     blobs, accessors, views, primitives, materials = [], [], [], [], []
     offset = 0
     for index, part in enumerate(parts):
@@ -259,7 +260,8 @@ def pack_parts(name, parts) -> bytes:
             blobs.append(packed)
             offset += len(packed)
         accessors[first].update(min=[min(v[i] for v in vertices) for i in range(3)], max=[max(v[i] for v in vertices) for i in range(3)])
-        materials.append({"name": material, "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0, "roughnessFactor": 1}})
+        materials.append({"name": material, "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0, "roughnessFactor": 1},
+                          **(part[5] if len(part) > 5 and part[5] else {})})
         primitives.append({"attributes": attributes, "material": index, "mode": 4})
     doc = {
         "asset": {"version": "2.0", "generator": "HocusPocus model3d.compose"},
