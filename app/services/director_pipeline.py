@@ -3094,15 +3094,16 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     clip_out_dir = os.path.dirname(pipeline_file) if pipeline_file else out_dir
 
     rerun_seed = _regenerate_seed(state, clip.get("seed"))
-    if image_model == "minimax:image-01":
-        new_filename = _generate_minimax_director_image(
+    from services.remote_image_generation import uses_minimax_image_api
+    if uses_minimax_image_api(image_model):
+        new_filename = _generate_remote_director_image(
+            model_type=image_model,
             prompt=prompt,
             resolution=image_params.get("resolution", "1280x720"),
             output_dir=clip_out_dir,
-            reference_paths=[
-                *(state.get("character_ref_paths") or []),
-                ref_path,
-            ],
+            reference_paths=all_refs,
+            character_paths=state.get("character_ref_paths") or [],
+            source_ref=ref_path,
         )
     else:
         gen_params = {
@@ -3151,7 +3152,8 @@ def _rerun_clip_image_impl(out_dir: str, pid: str, clip_index: int, prompt_overr
     # Update the saved pipeline state
     def _update(s):
         s["clips"][clip_index]["start_image_filename"] = new_filename
-        if image_model != "minimax:image-01":
+        from services.remote_image_generation import uses_minimax_image_api
+        if not uses_minimax_image_api(image_model):
             s["clips"][clip_index]["start_image_seed"] = rerun_seed
         # A video generated from the previous start image is still useful
         # history, but it no longer represents this clip's current inputs.
@@ -5857,6 +5859,8 @@ def _public_pipeline_model_name(model_type: str) -> str:
         return ""
     fallback = {
         "minimax:image-01": "MiniMax Image-01",
+        "minimax:h3-image": "MiniMax H3-Image",
+        "minimax:h3-image-highspeed": "MiniMax H3-Image Highspeed",
         "minimax_h3_legacy": "MiniMax H3 Legacy Quality — ConvRot",
     }.get(model_type, model_type)
     try:
@@ -10352,6 +10356,65 @@ def _generate_minimax_director_image(
     return str(generated.get("name") or "")
 
 
+def _generate_remote_director_image(
+    *,
+    model_type: str,
+    prompt: str,
+    resolution: str,
+    output_dir: str,
+    reference_paths: list[str],
+    character_paths: list[str],
+    source_ref: str,
+) -> str:
+    """Image-01 keeps its one character reference. H3-Image sends the ordered pictures, at most 16."""
+    from services.minimax_h3_image_service import is_h3_image_model
+
+    if not is_h3_image_model(model_type):
+        return _generate_minimax_director_image(
+            prompt=prompt,
+            resolution=resolution,
+            output_dir=output_dir,
+            reference_paths=[*[path for path in character_paths if path and os.path.isfile(path)], source_ref],
+        )
+    try:
+        from services import execution_mode, resource_scheduler
+    except ImportError:  # pragma: no cover - package import mode
+        from app.services import execution_mode, resource_scheduler
+    if execution_mode.policy().simulated:
+        lane = resource_scheduler.remote_lane("minimax", "https://api.minimax.io")
+        with resource_scheduler.coordinator.acquire(
+            lane,
+            task_id=f"simulated-minimax-h3-image-{threading.get_ident()}-{time.time_ns()}",
+            description="Simulated MiniMax H3-Image Director frame",
+        ):
+            simulated = execution_mode.create_artifact(
+                {"generation_mode": "image", "image_mode": 1, "prompt": prompt},
+                output_dir,
+                f"director-minimax-h3-{time.time_ns()}",
+            )
+        return os.path.basename(simulated)
+    from services.minimax_h3_image_service import MiniMaxImageError, generate_image
+    from services.provider_profile import resolve_minimax_key
+
+    api_key = resolve_minimax_key(_wgp.server_config.get("services") or {}, "image")
+    if not api_key:
+        raise RuntimeError("Set the MiniMax Image API key in Settings → Services")
+    pictures = [path for path in reference_paths if path and os.path.isfile(path)][:16]
+    try:
+        generated = generate_image(
+            api_key=api_key,
+            model_type=model_type,
+            prompt=prompt,
+            resolution=resolution,
+            output_dir=output_dir,
+            reference_paths=pictures,
+            filename_prefix="minimax-h3-director",
+        )
+    except MiniMaxImageError as exc:
+        raise RuntimeError(str(exc)) from exc
+    return str(generated.get("name") or "")
+
+
 _LOCATION_MATCH_STOP_WORDS = frozenset({
     "and", "at", "de", "del", "el", "en", "la", "las", "los", "of",
     "the", "un", "una", "y", "world", "scene", "location", "setting",
@@ -10556,7 +10619,8 @@ def _run_image_generation(
     character_ref_paths = params.get("character_ref_paths", []) or []
     location_ref_paths = params.get("location_ref_paths", []) or []
     image_model = params.get("image_model", "flux2_klein_9b")
-    use_minimax_image_api = image_model == "minimax:image-01"
+    from services.remote_image_generation import uses_minimax_image_api
+    use_minimax_image_api = uses_minimax_image_api(image_model)
     image_params = params.get("image_params", {})
     image_loras = params.get("image_loras", {})
     video_model = params.get("video_model") or "ltx2_22B_distilled_1_1"
@@ -10570,7 +10634,7 @@ def _run_image_generation(
     if _activated_in and use_minimax_image_api:
         print(
             f"[Pipeline {pid}] Ignoring {len(_activated_in)} local image LoRA(s): "
-            "MiniMax Image-01 runs through the external API."
+            "the external MiniMax image API does not take local LoRAs."
         )
         _activated_in = []
         _mults_in = ""
@@ -10763,17 +10827,14 @@ def _run_image_generation(
         )
         print(f"[Pipeline {pid}] _gen_image: {len(all_refs)} refs: {[os.path.basename(r) for r in all_refs]}")
         if use_minimax_image_api:
-            # Image-01 accepts one character identity reference. Prioritise the
-            # Story cast reference, then fall back to the current continuity
-            # frame. Location references are descriptive context, not identity.
-            filename = _generate_minimax_director_image(
+            filename = _generate_remote_director_image(
+                model_type=image_model,
                 prompt=prompt,
                 resolution=resolution,
                 output_dir=out_dir,
-                reference_paths=[
-                    *[p for p in character_ref_paths if p and os.path.isfile(p)],
-                    source_ref,
-                ],
+                reference_paths=all_refs,
+                character_paths=character_ref_paths,
+                source_ref=source_ref,
             )
             image_count += 1
             return filename

@@ -109,10 +109,11 @@ test('FastH3 offers dense attention by default while fused keeps SLA', () => {
 })
 
 test('FastH3 entries are added to existing installs once', async () => {
-  const { DEFAULT_ENABLED_MODELS, DEFAULTS_ADDED_IN, DEFAULTS_VERSION } = await import('../src/stores/modelVisibility.ts')
+  const { DEFAULT_ENABLED_MODELS, DEFAULTS_ADDED_IN } = await import('../src/stores/modelVisibility.ts')
   for (const modelType of ['minimax_h3_fasth3_v2', 'minimax_h3_fasth3_trim']) {
     assert.ok(DEFAULT_ENABLED_MODELS.has(modelType), modelType)
-    assert.ok(DEFAULTS_ADDED_IN[DEFAULTS_VERSION].includes(modelType), modelType)
+    const added = Object.values(DEFAULTS_ADDED_IN).flat()
+    assert.ok(added.includes(modelType), modelType)
   }
 })
 

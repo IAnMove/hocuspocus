@@ -23,7 +23,10 @@ const QWEN = {
 test('MiniMax Image-01 is on by default, and an existing install gets it once', async () => {
   const { DEFAULT_ENABLED_MODELS, DEFAULTS_ADDED_IN, DEFAULTS_VERSION } = await import('../src/stores/modelVisibility')
   assert.ok(DEFAULT_ENABLED_MODELS.has('minimax:image-01'))
-  assert.deepEqual(DEFAULTS_ADDED_IN[DEFAULTS_VERSION], ['minimax:image-01', 'minimax_h3_fasth3_v2', 'minimax_h3_fasth3_trim'])
+  assert.ok(DEFAULT_ENABLED_MODELS.has('minimax:h3-image'))
+  assert.ok(DEFAULT_ENABLED_MODELS.has('minimax:h3-image-highspeed'))
+  assert.deepEqual(DEFAULTS_ADDED_IN[18], ['minimax:image-01', 'minimax_h3_fasth3_v2', 'minimax_h3_fasth3_trim'])
+  assert.deepEqual(DEFAULTS_ADDED_IN[DEFAULTS_VERSION], ['minimax:h3-image', 'minimax:h3-image-highspeed'])
   // Every id a version adds is in the curated list, so a fresh install and an updated one end with the same set.
   for (const ids of Object.values(DEFAULTS_ADDED_IN)) for (const id of ids) assert.ok(DEFAULT_ENABLED_MODELS.has(id), id)
 })
@@ -38,7 +41,8 @@ test('a remote model is told apart by its tier and needs no VRAM', async () => {
 
 test('the external-API entry is not listed twice in a picker that already offers it', async () => {
   const { withoutExternalImageModel } = await import('../src/lib/externalModels')
-  assert.deepEqual(withoutExternalImageModel([MINIMAX, QWEN]).map(model => model.model_type), ['qwen_image_21_turbo'])
+  const h3 = { ...MINIMAX, model_type: 'minimax:h3-image', name: 'MiniMax H3-Image' }
+  assert.deepEqual(withoutExternalImageModel([MINIMAX, h3, QWEN]).map(model => model.model_type), ['qwen_image_21_turbo'])
 })
 
 test('the Studio picker marks the remote model, shows no VRAM for it and keeps Qwen as it was', async () => {

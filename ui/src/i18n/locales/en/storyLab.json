@@ -464,6 +464,7 @@
     "notUsedDirectVideo": "Not used in direct-video mode; the clip is generated from the text prompt alone.",
     "notUsedDirectRefs": "Not used in direct-reference mode; approved Story images go straight to H3 Ref2VA.",
     "minimaxImageReady": "MiniMax Image-01 runs through the external API and does not use local VRAM. It is independent from the local H3 video model.",
+    "minimaxH3ImageReady": "MiniMax H3-Image runs through the external API and does not use local VRAM. The default canvas is 2048×2048 and it can take up to 16 reference pictures. 4096×4096 costs more.",
     "minimaxImageMissing": "Add the MiniMax API key in Settings → Services before starting complete generation.",
     "localImageHint": "Generates every shot frame locally with the selected HocusPocus image model.",
     "videoModel": "Video model",

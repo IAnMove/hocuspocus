@@ -12,8 +12,9 @@ them into a sprite sheet and saves it on the kit as ``animations.<id>`` waiting 
   reports ``autoApproved`` and ``checks``, and a sheet that fails stays pending for a person with the list of what failed.
 * A job is a small file under ``.character-animation-jobs-v1`` of the workspace, so it can be followed after a reload and listed.
 * ``references`` are extra pictures (the picture of another direction of the same character) sent after the character's own as
-  ``image_refs``: a model that takes only one reference refuses them, and the job goes on with the character's picture alone
-  (``refsDropped``). ``services/character_animation_set_job.py`` makes several animations in turn with this.
+  ``image_refs``. Image-01 keeps only the character's picture (``refsDropped``). H3-Image keeps the extra pictures.
+  A model that refuses the extras is retried with the character's picture alone. ``services/character_animation_set_job.py``
+  makes several animations in turn with this.
 * The sheet of a twelve-pose cycle is a grid of six columns, and the entry saved on the kit carries ``motion`` and ``dir``
   (``services/character_animation_directions.py``); the checks of a direction also read the other directions of the kit.
 * ``method`` ``video`` (optional; the default is the pose-by-pose path above) makes a catalog walk from one LTX-2.3 clip
@@ -50,8 +51,6 @@ from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_imag
 from services.walk_puppet import WalkPuppetError
 from services.walk_puppet_method import PuppetMethodError, accept_puppet, fill_puppet_takes
 from services.walk_video_method import LTX_MODEL, NOT_INSTALLED, WalkVideoError, accept_walk_method, clip_fields, fill_video_takes, weights_present
-
-from services.remote_image_generation import is_remote_image_model
 
 JOBS_DIR = ".character-animation-jobs-v1"
 ACTIVE = ("queued", "running", "cancelling")
@@ -270,7 +269,7 @@ class CharacterAnimationJobs:
                "title": definition["title"]["en"], "model": model or DEFAULT_MODEL, "status": "queued", "stage": "poses", "takes": takes,
                "remake": pose, "createdAt": _now(), "updatedAt": _now(), "definition": definition, "reference": reference_of(kit),
                "description": _job_description(kit), "style": style_of(kit)}
-        if references and is_remote_image_model(job["model"]):
+        if references and job["model"] == "minimax:image-01":
             job["refsDropped"] = True  # Image-01 takes one reference: the character's own picture alone
         elif references:
             job["extraRefs"] = references

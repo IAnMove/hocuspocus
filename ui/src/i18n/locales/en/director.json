@@ -528,7 +528,7 @@
     "upscaleVideo": "Render then upscale the video. Adds time per shot.",
     "selfRefiner": "Self refiner",
     "selfRefinerHint": "Re-passes the rendered video through the refiner. May improve detail or introduce artifacts.",
-    "imageApiReady": "External Image-01 API ready · no local VRAM or image LoRAs.",
+    "imageApiReady": "External MiniMax image API ready · no local VRAM or image LoRAs.",
     "imageApiKey": "Add the MiniMax API key in Settings → Services before generating.",
     "imageLoras": "Image LoRAs",
     "videoLoras": "Video LoRAs",

@@ -14,7 +14,7 @@ import { generateImageAsset } from '../../lib/imageGeneration'
 import { fetchCharacterKitLibrary } from '../../api/characters'
 import { characterKitStillSource } from '../../lib/characterKit'
 import { seedTijeralCharacterKits } from '../cutPaper/characterKits.ts'
-import { MINIMAX_IMAGE_API_MODEL, withoutExternalImageModel } from '../../lib/externalModels'
+import { MINIMAX_IMAGE_API_MODEL, isExternalImageModel, withoutExternalImageModel } from '../../lib/externalModels'
 import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
 import { StoryLabNavigation } from './StoryLabNavigation'
 import { StoryRelationshipsTab } from './StoryRelationshipsTab'
@@ -673,7 +673,7 @@ export function StoryLabPanel() {
   )
   const selectedFilmImageModel = videoModels.find(model => model.model_type === filmImageModel)
   const selectedFilmVideoModel = videoModels.find(model => model.model_type === filmVideoModel)
-  const filmImageReady = filmImageModel !== MINIMAX_IMAGE_API_MODEL || Boolean(servicesConfig?.minimax_api_key_set)
+  const filmImageReady = !isExternalImageModel(filmImageModel) || Boolean(servicesConfig?.minimax_api_key_set)
   const visualMode = storyVisualGuidanceMode(project)
   const directVideo = visualMode === 'direct_video'
   const directMusicVideo = directVideo

@@ -437,6 +437,7 @@
         "tests/test_media_refs.py",
         "tests/test_merge_eligibility.py",
         "tests/test_minimax_h3.py",
+        "tests/test_minimax_h3_image_api.py",
         "tests/test_minimax_h3_service.py",
         "tests/test_minimax_h3_sol_engine.py",
         "tests/test_minimax_image_jobs.py",
@@ -3187,13 +3188,27 @@
       "prefix": "app/services/remote_image_generation.py",
       "paths": [
         "tests/test_remote_image_generation.py",
+        "tests/test_minimax_h3_image_api.py",
         "tests/characterization/test_remote_image.py"
       ]
     },
     {
       "prefix": "app/services/remote_image_worker.py",
       "paths": [
-        "tests/test_remote_image_generation.py"
+        "tests/test_remote_image_generation.py",
+        "tests/test_minimax_h3_image_api.py"
+      ]
+    },
+    {
+      "prefix": "app/services/minimax_h3_image_service.py",
+      "paths": [
+        "tests/test_minimax_h3_image_api.py"
+      ]
+    },
+    {
+      "prefix": "app/services/remote_h3_image.py",
+      "paths": [
+        "tests/test_minimax_h3_image_api.py"
       ]
     },
     {

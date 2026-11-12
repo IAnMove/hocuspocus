@@ -1,5 +1,5 @@
 import { DirectorModelPicker } from '../../components/Sidebar/DirectorModelPicker'
-import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
+import { EXTERNAL_IMAGE_MODELS, isExternalImageModel } from '../../lib/externalModels'
 import { useUiTranslation } from '../../i18n'
 import { input } from './storyLabChrome'
 import { StoryVideoFormatControls } from './StoryVideoFormatControls'
@@ -59,11 +59,13 @@ export function StoryMusicProductionModels(props: StoryProductionsTabProps & { r
         ) : (
           <label className="block text-[10px] text-text-muted">{t('trailer.imageModel')}
             <select aria-label={t('trailer.imageModel')} className={`${input} mt-1`} value={filmImageModel} onChange={event => selectDirectorImageModel(event.target.value)}>
-              {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
+              {!isExternalImageModel(filmImageModel) && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
                 <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
               )}
               <optgroup label={t('productions.externalApi')}>
-                <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
+                {EXTERNAL_IMAGE_MODELS.map(model => (
+                  <option key={model.model_type} value={model.model_type}>{model.label}</option>
+                ))}
               </optgroup>
               <optgroup label={t('productions.localModels')}>
                 {selectableImageModels.map(model => (

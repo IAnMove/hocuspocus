@@ -603,6 +603,11 @@ does not apply local image LoRAs. The credential is read only from
 Settings → Services; it is not accepted in pipeline payloads or persisted in
 output metadata.
 
+`minimax:h3-image` and `minimax:h3-image-highspeed` are the same kind of remote image choice for Studio
+and Director. They use `POST /v1/images/generations` and `POST /v1/images/edits` (up to 16 reference
+pictures, exact `WIDTHxHEIGHT`, default canvas 2048×2048). The open weights are not loaded. Comic
+`POST /api/v1/comics/generate/minimax` stays on Image-01.
+
 Comic recovery checkpoints are output-folder-scoped and durable. Create one with
 `POST /api/v1/comics/history`, list versions with
 `GET /api/v1/comics/history` (optionally `?comic_id=...`), and load a version

@@ -198,7 +198,7 @@ def list_models(detail: bool = True):
 
     # MiniMax Image-01 is a remote model: chosen like any image model, but it needs a key instead of files.
     services = wgp.server_config.get("services", {}) if isinstance(getattr(wgp, "server_config", None), dict) else {}
-    models.append(remote_image_generation.catalog_entry(bool(remote_image_generation.api_key(services))))
+    models.extend(remote_image_generation.catalog_entries(bool(remote_image_generation.api_key(services))))
 
     # UniRig is a generative ML model too (autoregressive skeleton + learned
     # skinning), so its weights are managed from the same catalog. tool_only
@@ -449,8 +449,8 @@ def get_defaults(model_type: str):
     """Get default settings for a model type."""
     if _is_legacy_h3_model(model_type):
         return dict(minimax_h3_service.DEFAULTS)
-    if model_type == remote_image_generation.MODEL_ID:
-        return remote_image_generation.defaults()
+    if remote_image_generation.uses_minimax_image_api(model_type):
+        return remote_image_generation.defaults(model_type)
     if wgp.get_model_def(model_type) is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
     defaults = wgp.get_default_settings(model_type)

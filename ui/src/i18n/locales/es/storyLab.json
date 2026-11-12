@@ -464,6 +464,7 @@
     "notUsedDirectVideo": "No se usa en el modo de vídeo directo; el clip se genera sólo a partir del prompt de texto.",
     "notUsedDirectRefs": "No se usa en el modo de referencias directas; las imágenes aprobadas de Story van directas a H3 Ref2VA.",
     "minimaxImageReady": "MiniMax Image-01 corre por la API externa y no usa VRAM local. Es independiente del modelo de vídeo H3 local.",
+    "minimaxH3ImageReady": "MiniMax H3-Image corre por la API externa y no usa VRAM local. El lienzo por defecto es 2048×2048 y admite hasta 16 imágenes de referencia. 4096×4096 cuesta más.",
     "minimaxImageMissing": "Añade la clave de MiniMax en Settings → Services antes de iniciar la generación completa.",
     "localImageHint": "Genera cada fotograma de plano en local con el modelo de imagen de HocusPocus seleccionado.",
     "videoModel": "Modelo de vídeo",

@@ -32,7 +32,9 @@ CLOUD = {
 }
 GUIDANCE = ("Choose with the user before creating: if more than one option fits (a local model and a cloud provider that is ready) "
             "and they have not said which, ask once, naming the options and what each costs (local = GPU time and no tokens; "
-            "cloud = provider tokens; a ready cloud image provider is a model too: MiniMax is model_type minimax:image-01, no GPU). "
+            "cloud = provider tokens; a ready cloud image provider is a model too: MiniMax Image-01 is minimax:image-01 "
+            "(one reference) and MiniMax H3-Image is minimax:h3-image or minimax:h3-image-highspeed "
+            "(up to 16 references), no GPU). "
             "If they already said, or only one fits, go. `profile` is what a request with no choice would use. "
             "Music is local only: paid MiniMax music is disabled for assistants.")
 

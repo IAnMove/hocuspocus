@@ -44,6 +44,7 @@ _IMAGE_PASS2_GUIDE_MAP = {
     "qwen_image_edit": "qwen_image_edit_reference.md",
     "qwen_image_layered": "qwen_image_edit_reference.md",
     "qwen_image": "qwen_image_edit_reference.md",
+    "minimax:h3-image": "minimax_h3_image_edit.md",
 }
 
 
@@ -201,9 +202,14 @@ matches them to the correct reference image.
             return f"{seamless_block}{extra_refs_block}\n{guide}{lighting_block}"
         return f"{seamless_block}{extra_refs_block}{lighting_block}"
     else:
-        # Text-to-image: all models share the Flux generation guide.
+        # Text-to-image shares the Flux generation guide, except H3-Image.
+        generation_guide = (
+            "minimax_h3_image_generation.md"
+            if str(image_model or "").lower().startswith("minimax:h3-image")
+            else "flux_image_generation.md"
+        )
         base = prepare_guide(
-            load_guide("flux_image_generation.md"),
+            load_guide(generation_guide),
             keep_wardrobe=keep_wardrobe,
             reference_free=reference_free,
         ) or "Describe one static frame with full scene details."

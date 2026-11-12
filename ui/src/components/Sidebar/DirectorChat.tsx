@@ -6,7 +6,7 @@ import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } fro
 import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen, Zap, Download } from 'lucide-react'
 import { useStore, resolveResolution } from '../../stores/useStore'
 import { fetchModelOptions } from '../../api/client'
-import { MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
+import { isExternalImageModel } from '../../lib/externalModels'
 import { DirectorLoraSelector } from '../SettingsDrawer/DirectorLoraSelector'
 import { DirectorSongSetup } from './DirectorSongSetup'
 import { InfoTooltip } from './InfoTooltip'
@@ -2856,7 +2856,7 @@ function DirectorLoraAccordion() {
         {generateShotImages && (
           <>
             <DirectorModelPicker mode="image" value={imageModel} onChange={selectDirectorImageModel} />
-            {imageModel === MINIMAX_IMAGE_API_MODEL && (
+            {isExternalImageModel(imageModel) && (
               <p className={`pl-[50px] text-[9px] leading-relaxed ${minimaxImageReady ? 'text-emerald-400' : 'text-amber-300'}`}>
                 {minimaxImageReady
                   ? t('chat.imageApiReady')
@@ -2868,7 +2868,7 @@ function DirectorLoraAccordion() {
         <DirectorModelPicker mode="video" value={videoModel} onChange={selectDirectorVideoModel} />
       </div>
       {/* Image LoRAs */}
-      {generateShotImages && imageModel && imageModel !== MINIMAX_IMAGE_API_MODEL && (
+      {generateShotImages && imageModel && !isExternalImageModel(imageModel) && (
         <div className="border border-border rounded-lg overflow-hidden">
           <button
             onClick={() => setImageOpen(!imageOpen)}

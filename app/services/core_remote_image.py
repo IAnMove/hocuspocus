@@ -1,6 +1,7 @@
 """MiniMax Image-01 jobs for Studio generate on the core/remote profile."""
 from __future__ import annotations
 
+import os
 import threading
 import time
 import uuid
@@ -63,7 +64,7 @@ def _public(job: dict[str, Any]) -> dict[str, Any]:
         "created_at": job.get("created_at"),
         "started_at": job.get("started_at"),
         "finished_at": job.get("finished_at"),
-        "generation_details": {"model_type": MODEL_ID, "generation_mode": "image"},
+        "generation_details": {"model_type": job.get("model_type") or MODEL_ID, "generation_mode": "image"},
     }
     payload.update(status_output_fields(
         payload["output_files"], workspace=workspace, workspace_dir=workspace_directory,
@@ -160,6 +161,72 @@ def encode_subject_reference(source: str, workspace: str) -> str:
     return local_image_data_uri(path)
 
 
+def _reference_paths(body: dict[str, Any], workspace: str) -> list[str]:
+    """File paths or data URIs for an H3-Image job. URLs are resolved like Image-01."""
+    raw = body.get("image_refs")
+    values = [str(item).strip() for item in raw if str(item or "").strip()] if isinstance(raw, list) else []
+    if not values:
+        subject = str(body.get("subject_reference") or "").strip()
+        values = [subject] if subject else []
+    paths: list[str] = []
+    for value in values[:16]:
+        if value.startswith("data:image/") or os.path.isfile(value):
+            paths.append(value)
+            continue
+        try:
+            paths.append(resolve_wangp_media(
+                value, workspace, uploads_dir=core.uploads_dir(), workspace_dir=core.workspace_dir(workspace),
+            ))
+        except ValueError as error:
+            raise MiniMaxImageError("MiniMax H3-Image reference is unavailable", 400) from error
+    return paths
+
+
+def _start_h3_job(
+    body: dict[str, Any],
+    *,
+    workspace: str,
+    job_id: str | None,
+    on_update,
+    output_name: str | None,
+) -> dict[str, Any]:
+    from services import execution_mode
+    from services.minimax_h3_image_service import output_size, prepare_prompt
+
+    model = str(body.get("model_type") or "")
+    prompt = prepare_prompt(str(body.get("prompt") or ""))
+    execution_mode.validate_remote_provider(workspace, "minimax-image")
+    if not remote_image_generation.api_key(core.services_raw()):
+        raise MiniMaxImageError(remote_image_generation.KEY_MISSING, 409)
+    job_id = str(job_id or "").strip() or uuid.uuid4().hex
+    now = time.time()
+    with _LOCK:
+        existing = _JOBS.get(job_id)
+        if existing is not None:
+            return _public(existing)
+        job = {
+            "id": job_id, "task_id": job_id, "root_task_id": job_id,
+            "status": "queued", "progress": 0, "step": 0, "total_steps": 1,
+            "phase": "queued", "message": "MiniMax image request queued",
+            "output_files": [], "error": None, "workspace": workspace,
+            "model_type": model,
+            "created_at": now, "started_at": None, "finished_at": None,
+            "_cancel_requested": False,
+            "_on_update": on_update,
+            "request": {
+                "prompt": prompt,
+                "resolution": output_size(str(body.get("resolution") or "")),
+                "image_refs": _reference_paths(body, workspace),
+                "disable_prompt_enhanced": bool(body.get("disable_prompt_enhanced")),
+                "output_name": output_name or None,
+            },
+        }
+        _JOBS[job_id] = job
+        initial = _public(job)
+    threading.Thread(target=_run, args=(job_id,), daemon=True, name=f"minimax-h3-image-{job_id[:8]}").start()
+    return initial
+
+
 def start_job(
     body: dict[str, Any],
     *,
@@ -169,7 +236,10 @@ def start_job(
     output_name: str | None = None,
 ) -> dict[str, Any]:
     from services import execution_mode
+    from services.minimax_h3_image_service import is_h3_image_model
 
+    if is_h3_image_model(body.get("model_type")):
+        return _start_h3_job(body, workspace=workspace, job_id=job_id, on_update=on_update, output_name=output_name)
     prompt = prepare_prompt(str(body.get("prompt") or ""))
     ratio = str(body.get("aspect_ratio") or "")
     if ratio not in SUPPORTED_ASPECT_RATIOS:
@@ -205,30 +275,67 @@ def start_job(
     return initial
 
 
+def _text(value: Any, fallback: str = "") -> str:
+    return str(value or fallback)
+
+
+def _generate_h3_saved(job: dict[str, Any], request: dict[str, Any], workspace: str, key: str) -> dict[str, Any]:
+    from services.minimax_h3_image_service import generate_image as generate_h3_image
+
+    job_id = _text(job.get("id"))
+    return generate_h3_image(
+        api_key=key,
+        model_type=_text(job.get("model_type")),
+        prompt=_text(request.get("prompt")),
+        resolution=_text(request.get("resolution")),
+        output_dir=core.workspace_dir(workspace),
+        reference_paths=list(request.get("image_refs") or []),
+        disable_prompt_enhanced=bool(request.get("disable_prompt_enhanced")),
+        task_id=job_id,
+        root_task_id=job_id,
+        output_name=request.get("output_name") or None,
+    )
+
+
+def _generate_image01_saved(job: dict[str, Any], request: dict[str, Any], workspace: str, key: str) -> dict[str, Any]:
+    job_id = _text(job.get("id"))
+    return generate_image(
+        api_key=key,
+        prompt=_text(request.get("prompt")),
+        aspect_ratio=_text(request.get("aspect_ratio"), "1:1"),
+        output_dir=core.workspace_dir(workspace),
+        subject_reference=_text(request.get("subject_reference")),
+        filename_prefix="minimax-image-01",
+        task_id=job_id,
+        root_task_id=job_id,
+        output_name=request.get("output_name") or None,
+    )
+
+
+def _generate_saved(job: dict[str, Any], request: dict[str, Any], workspace: str) -> dict[str, Any]:
+    from services.minimax_h3_image_service import is_h3_image_model
+
+    key = resolve_minimax_key(core.services_raw(), "image")
+    if is_h3_image_model(job.get("model_type")):
+        return _generate_h3_saved(job, request, workspace, key)
+    return _generate_image01_saved(job, request, workspace, key)
+
+
 def _run(job_id: str) -> None:
     with _LOCK:
         job = dict(_JOBS.get(job_id) or {})
     request = job.get("request") or {}
     workspace = str(job.get("workspace") or "default")
     try:
+        label = "MiniMax H3-Image" if job.get("model_type") else "MiniMax Image-01"
         _patch(job_id, status="running", phase="running", progress=10, started_at=time.time(),
-               message="Calling MiniMax Image-01")
+               message=f"Calling {label}")
         with _LOCK:
             cancelled = (_JOBS.get(job_id) or {}).get("_cancel_requested")
         if cancelled:
             _patch(job_id, status="cancelled", phase="cancelled", message="Cancelled", finished_at=time.time())
             return
-        result = generate_image(
-            api_key=resolve_minimax_key(core.services_raw(), "image"),
-            prompt=str(request.get("prompt") or ""),
-            aspect_ratio=str(request.get("aspect_ratio") or "1:1"),
-            output_dir=core.workspace_dir(workspace),
-            subject_reference=str(request.get("subject_reference") or ""),
-            filename_prefix="minimax-image-01",
-            task_id=job_id,
-            root_task_id=job_id,
-            output_name=request.get("output_name") or None,
-        )
+        result = _generate_saved(job, request, workspace)
         _patch(
             job_id, status="completed", phase="completed", progress=100, step=1,
             message="Image ready", output_files=[result["name"]], finished_at=time.time(),

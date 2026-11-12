@@ -22,6 +22,8 @@ _ARCHITECTURE_MAP = {
     # Flux image models — edit guide when reference image exists, gen guide otherwise
     "flux": ("flux_image_edit.md", "flux_image.md"),
     "z_image": ("flux_image_edit.md", "flux_image.md"),
+    # H3-Image API. The prefix also covers the highspeed id. Video H3 uses minimax_h3, not this colon.
+    "minimax:h3-image": ("minimax_h3_image_edit.md", "minimax_h3_image.md"),
 
     # Audio/TTS models
     "qwen3_tts": "audio_tts.md",

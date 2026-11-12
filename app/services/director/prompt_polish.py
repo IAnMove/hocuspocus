@@ -1038,6 +1038,7 @@ _IMAGE_ARCH_MAP = {
     "qwen_image": "qwen_image_edit",
     "flux": "flux_image",
     "z_image": "flux_image",
+    "minimax:h3-image": "minimax_h3_image",
 }
 
 

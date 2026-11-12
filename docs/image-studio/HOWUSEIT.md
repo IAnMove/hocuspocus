@@ -76,6 +76,11 @@ image-studio draft (`resetImageStudio`). It does not cancel a queued job.
    invented, the pose is ignored); extra references, a negative prompt and LoRAs are not sent
    and the receipt lists them in `notes`. Steps, guidance and seed do not apply. See
    `docs/development/IMAGE_COMMANDS.md`.
+   **MiniMax H3-Image** (`minimax:h3-image`, and `minimax:h3-image-highspeed` for the faster tier) is the
+   same kind of choice: the MiniMax image API, no local weights, no GPU queue. The default canvas is
+   2048×2048. It can take up to 16 reference pictures, in the order they are attached. 4096×4096 is a
+   larger bill. Prompt expansion stays on, which suits a short prompt. Comics and the style converter
+   stay on Image-01.
 8. **Fit-to-model is optional.** Edit → **Fit size to the model** crops,
    letterboxes, or stretches the source to a size the selected model admits.
    It writes another local-edit token; it does not generate.

@@ -41,8 +41,8 @@ def get_model_options(model_type: str):
     from services.model_selectors import selector_catalog
     if _is_legacy_h3_model(model_type):
         return dict(minimax_h3_service.MODEL_OPTIONS)
-    if model_type == remote_image_generation.MODEL_ID:
-        return remote_image_generation.model_options()
+    if remote_image_generation.uses_minimax_image_api(model_type):
+        return remote_image_generation.model_options(model_type)
     if model_type in model3d_service.MODEL_BY_ID:
         return {
             "model_type": model_type,

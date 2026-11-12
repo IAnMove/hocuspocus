@@ -102,6 +102,8 @@ export const DEFAULT_ENABLED_MODELS = new Set([
   'qwen_image_21_uncensored_gguf_q6_k',
   // MiniMax Image-01 runs on MiniMax's servers (no GPU), so it stays useful while the GPU is busy.
   'minimax:image-01',
+  'minimax:h3-image',
+  'minimax:h3-image-highspeed',
   // Video
   // Default to just the LTX-2.3 Distilled 1.1 22B checkpoint (newer /
   // better quality). The FP8 build and every other video model
@@ -158,8 +160,9 @@ export const DEFAULT_ENABLED_MODELS = new Set([
  * a user who then disables them stays disabled forever. (This is
  * deliberately narrower than auto-enabling every unknown model — only
  * the curated list's own additions are pushed.) */
-export const DEFAULTS_VERSION = 18
+export const DEFAULTS_VERSION = 19
 export const DEFAULTS_ADDED_IN: Record<number, string[]> = {
+  19: ['minimax:h3-image', 'minimax:h3-image-highspeed'],
   18: ['minimax:image-01', 'minimax_h3_fasth3_v2', 'minimax_h3_fasth3_trim'],
   17: ['voxcpm2_base', 'voxcpm2_voicedesign'],
   16: ['qwen_image_21_turbo'],

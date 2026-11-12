@@ -50,6 +50,8 @@ wgp = _EngineHandle()
 
 _PUBLIC_MODEL_LABELS = {
     "minimax:image-01": "MiniMax Image-01",
+    "minimax:h3-image": "MiniMax H3-Image",
+    "minimax:h3-image-highspeed": "MiniMax H3-Image Highspeed",
     "minimax_h3_legacy": "MiniMax H3 Legacy Quality — ConvRot",
     "post_processing": "Post-processing",
     "rembg-u2net": "rembg U2Net",

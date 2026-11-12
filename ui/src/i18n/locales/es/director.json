@@ -528,7 +528,7 @@
     "upscaleVideo": "Renderiza y luego amplía el vídeo. Añade tiempo por plano.",
     "selfRefiner": "Auto-refinador",
     "selfRefinerHint": "Vuelve a pasar el vídeo renderizado por el refinador. Puede mejorar el detalle o introducir artefactos.",
-    "imageApiReady": "API externa Image-01 lista · sin VRAM local ni LoRAs de imagen.",
+    "imageApiReady": "API externa de imagen de MiniMax lista · sin VRAM local ni LoRAs de imagen.",
     "imageApiKey": "Añade la clave API de MiniMax en Ajustes → Servicios antes de generar.",
     "imageLoras": "LoRAs de imagen",
     "videoLoras": "LoRAs de vídeo",

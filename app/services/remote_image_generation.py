@@ -58,6 +58,13 @@ def is_remote_image_params(params: Any) -> bool:
     return isinstance(params, Mapping) and is_remote_image_model(params.get("model_type"))
 
 
+def uses_minimax_image_api(model_type: Any) -> bool:
+    """Image-01 or a known H3-Image id. An unknown ``minimax:`` id is not this."""
+    from services.minimax_h3_image_service import is_h3_image_model
+
+    return model_type == MODEL_ID or is_h3_image_model(model_type)
+
+
 def lane_key() -> str:
     return resource_scheduler.remote_lane("minimax", API_URL).key
 
@@ -113,7 +120,20 @@ def catalog_entry(key_set: bool | None = None) -> dict[str, Any]:
     return entry
 
 
-def model_options() -> dict[str, Any]:
+def catalog_entries(key_set: bool | None = None) -> list[dict[str, Any]]:
+    """Image-01 first, then H3-Image. Callers that read ``models[0]`` keep Image-01."""
+    from services.remote_h3_image import catalog_entries as h3_entries
+
+    return [catalog_entry(key_set), *h3_entries(key_set)]
+
+
+def model_options(model_type: str | None = None) -> dict[str, Any]:
+    from services.minimax_h3_image_service import is_h3_image_model
+
+    if is_h3_image_model(model_type):
+        from services.remote_h3_image import model_options as h3_options
+
+        return h3_options(str(model_type))
     return {
         "model_type": MODEL_ID,
         "architecture": "minimax_image",
@@ -144,7 +164,13 @@ def model_options() -> dict[str, Any]:
     }
 
 
-def defaults() -> dict[str, Any]:
+def defaults(model_type: str | None = None) -> dict[str, Any]:
+    from services.minimax_h3_image_service import is_h3_image_model
+
+    if is_h3_image_model(model_type):
+        from services.remote_h3_image import defaults as h3_defaults
+
+        return h3_defaults(str(model_type))
     return {"prompt": "", "resolution": "1024x1024", "image_mode": 1, "generation_mode": "image", **NEUTRAL}
 
 
@@ -246,6 +272,12 @@ def prepare_remote_image(
     ``resolve(value)`` turns the first reference into ``(path, identity)``; a request without references needs none.
     Raises ``HTTPException`` (4xx) with a ``code`` and a message that says what to change.
     """
+    from services.minimax_h3_image_service import is_h3_image_model
+
+    if is_h3_image_model(params.get("model_type")):
+        from services.remote_h3_image import prepare_h3_image
+
+        return prepare_h3_image(params, services=services, resolve=resolve)
     workspace = str(params.get("workspace") or "default")
     try:
         execution_mode.validate_remote_provider(workspace, "minimax-image")

@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
-import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL, withoutExternalImageModel } from '../../lib/externalModels'
+import { EXTERNAL_IMAGE_MODELS, isExternalImageModel, withoutExternalImageModel } from '../../lib/externalModels'
 import type { DirectorPipelineType, ModelDef, ModelFamily } from '../../types'
 import { InfoTooltip } from './InfoTooltip'
 import { LicenceNotice } from '../common/LicenceNotice'
@@ -32,7 +32,7 @@ function directorModelGroups({ mode, families, models, enabledModels, nsfwMode, 
 function resolveDirectorModelSelection(
   compatibleModels: ModelDef[], mode: 'image' | 'video', value: string, preserveSelection: boolean,
 ) {
-  const externalKnown = mode === 'image' && value === MINIMAX_IMAGE_API_MODEL
+  const externalKnown = mode === 'image' && isExternalImageModel(value)
   const known = externalKnown || compatibleModels.some(model => model.model_type === value)
   const preferredId = mode === 'image' ? 'flux2_klein_9b' : 'ltx2_22B_distilled_1_1'
   const fallback = compatibleModels.find(model => model.model_type === preferredId)
@@ -119,7 +119,9 @@ export function DirectorModelPicker({ mode, value, onChange, pipeline, allowSeam
         )}
         {mode === 'image' && (
           <optgroup label={t('modelPicker.externalApi')}>
-            <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
+            {EXTERNAL_IMAGE_MODELS.map(model => (
+              <option key={model.model_type} value={model.model_type}>{model.label}</option>
+            ))}
           </optgroup>
         )}
         {groups.map(({ family, models: famModels }) => (

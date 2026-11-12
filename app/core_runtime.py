@@ -211,15 +211,21 @@ def system_preflight():
 
 @api.get("/api/v1/models")
 def list_models():
-    model = core_remote_image.catalog_entry()
+    from services.remote_image_generation import catalog_entries
+
     return {
         "families": [{"id": "minimax", "label": "MiniMax", "order": 10}],
-        "models": [model],
+        "models": catalog_entries(),
     }
 
 
 @api.get("/api/v1/defaults/{model_type}")
 def get_defaults(model_type: str):
+    from services.minimax_h3_image_service import is_h3_image_model
+    from services.remote_image_generation import defaults
+
+    if is_h3_image_model(model_type):
+        return defaults(model_type)
     if str(model_type).startswith("minimax:"):
         return core_remote_image.defaults()
     raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
@@ -227,6 +233,11 @@ def get_defaults(model_type: str):
 
 @api.get("/api/v1/model-options/{model_type}")
 def get_model_options(model_type: str):
+    from services.minimax_h3_image_service import is_h3_image_model
+    from services.remote_image_generation import model_options
+
+    if is_h3_image_model(model_type):
+        return model_options(model_type)
     if str(model_type).startswith("minimax:"):
         return core_remote_image.model_options()
     raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")

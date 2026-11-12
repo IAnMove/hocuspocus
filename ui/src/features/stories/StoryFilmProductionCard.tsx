@@ -1,6 +1,6 @@
 import { DirectorModelPicker } from '../../components/Sidebar/DirectorModelPicker'
 import { ChevronRight, Film, Loader2, Sparkles } from 'lucide-react'
-import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
+import { EXTERNAL_IMAGE_MODELS, MINIMAX_IMAGE_API_MODEL, isExternalImageModel } from '../../lib/externalModels'
 import { useUiTranslation } from '../../i18n'
 import { QuickVideoBatchPanel } from './QuickVideoBatchPanel'
 import { button, completeGenerationButton, input, panel } from './storyLabChrome'
@@ -65,11 +65,13 @@ export function StoryFilmProductionCard(props: StoryProductionsTabProps) {
       <label className="block text-[10px] text-text-muted">{t('productions.imageModel')}
         <select aria-label={t('productions.imageModel')} className={`${input} mt-1`} value={filmImageModel} disabled={directReferenceVideo || directVideo}
           onChange={event => selectDirectorImageModel(event.target.value)}>
-          {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
+          {!isExternalImageModel(filmImageModel) && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
             <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
           )}
           <optgroup label={t('productions.externalApi')}>
-            <option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option>
+            {EXTERNAL_IMAGE_MODELS.map(model => (
+              <option key={model.model_type} value={model.model_type}>{model.label}</option>
+            ))}
           </optgroup>
           <optgroup label={t('productions.localModels')}>
             {selectableImageModels.map(model => (
@@ -84,8 +86,10 @@ export function StoryFilmProductionCard(props: StoryProductionsTabProps) {
             ? t('productions.notUsedDirectVideo')
             : directReferenceVideo
               ? t('productions.notUsedDirectRefs')
-              : filmImageModel === MINIMAX_IMAGE_API_MODEL
-                ? filmImageReady ? t('productions.minimaxImageReady') : t('productions.minimaxImageMissing')
+              : isExternalImageModel(filmImageModel)
+                ? filmImageReady
+                  ? t(filmImageModel === MINIMAX_IMAGE_API_MODEL ? 'productions.minimaxImageReady' : 'productions.minimaxH3ImageReady')
+                  : t('productions.minimaxImageMissing')
                 : t('productions.localImageHint')}
         </span>
       </label>

@@ -158,6 +158,18 @@ def _subject_reference(params: dict[str, Any]) -> str:
     return ""
 
 
+def _prepare_remote_submission(params: dict[str, Any], workspace: str) -> tuple[dict[str, Any], list[str]]:
+    """Image-01 keeps its one-reference check. H3-Image keeps up to sixteen pictures and an exact size."""
+    from services.minimax_h3_image_service import is_h3_image_model
+    from services.remote_h3_image import prepare_core
+
+    if is_h3_image_model(params.get("model_type")):
+        return prepare_core(params, workspace, core.services_raw())
+    prepare_prompt(str(params.get("prompt") or ""))
+    core_remote_image.encode_subject_reference(_subject_reference(params), workspace)
+    return params, remote_image_generation.ignored_notes(params)
+
+
 def _task_fields(workspace: str, job_id: str, params: dict[str, Any]) -> dict[str, Any]:
     task_id = f"task-generation-{job_id}"
     return {
@@ -168,7 +180,7 @@ def _task_fields(workspace: str, job_id: str, params: dict[str, Any]) -> dict[st
         "status": "queued",
         "phase": "queued",
         "message": "MiniMax image request queued",
-        "title": "MiniMax Image-01",
+        "title": "MiniMax H3-Image" if str(params.get("model_type") or "").startswith("minimax:h3-image") else "MiniMax Image-01",
         "workspace": workspace,
         "backend_job_id": job_id,
         "provider": "minimax",
@@ -226,16 +238,20 @@ class CoreGenerationCommands:
     def _ensure_job(self, workspace: str, job_id: str, params: dict[str, Any], task_id: str) -> None:
         if core_remote_image.get_job(job_id) is not None:
             return
+        body = {
+            "model_type": params.get("model_type") or core_remote_image.MODEL_ID,
+            "generation_mode": "image",
+            "prompt": params.get("prompt") or "",
+            "resolution": params.get("resolution") or "1024x1024",
+            "aspect_ratio": params.get("aspect_ratio") or "",
+            "subject_reference": _subject_reference(params),
+            "workspace": workspace,
+        }
+        if str(body["model_type"]).startswith("minimax:h3-image"):
+            body["image_refs"] = list(params.get("image_refs") or [])
+            body["disable_prompt_enhanced"] = bool(params.get("disable_prompt_enhanced"))
         core_remote_image.start_job(
-            {
-                "model_type": params.get("model_type") or core_remote_image.MODEL_ID,
-                "generation_mode": "image",
-                "prompt": params.get("prompt") or "",
-                "resolution": params.get("resolution") or "1024x1024",
-                "aspect_ratio": params.get("aspect_ratio") or "",
-                "subject_reference": _subject_reference(params),
-                "workspace": workspace,
-            },
+            body,
             workspace=workspace,
             job_id=job_id,
             output_name=params.get("output_name"),
@@ -258,8 +274,7 @@ class CoreGenerationCommands:
             execution_mode.validate_remote_provider(workspace, "minimax-image")
             # Fail closed before admission so a transport retry can reuse intent_id.
             remote_image_generation.require_api_key(core.services_raw())
-            prepare_prompt(str(params.get("prompt") or ""))
-            core_remote_image.encode_subject_reference(_subject_reference(params), workspace)
+            params, notes = _prepare_remote_submission(params, workspace)
             registry = _registry(workspace)
             job_id = uuid.uuid4().hex
             admitted = registry.admit_command_task(
@@ -270,7 +285,7 @@ class CoreGenerationCommands:
                 effective=frozen["effective"],
                 task_fields=_task_fields(workspace, job_id, params),
                 fingerprint_version=frozen["fingerprint_version"],
-                notes=remote_image_generation.ignored_notes(params),
+                notes=notes,
             )
             result = admitted["receipt"]["result"]
             # A concurrent replay must not mistake claim → job creation for a

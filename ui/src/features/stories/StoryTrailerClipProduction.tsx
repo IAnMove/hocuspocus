@@ -1,6 +1,6 @@
 import { DirectorModelPicker } from '../../components/Sidebar/DirectorModelPicker'
 import { ChevronRight, Loader2, Sparkles } from 'lucide-react'
-import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
+import { EXTERNAL_IMAGE_MODELS, isExternalImageModel } from '../../lib/externalModels'
 import { useUiTranslation } from '../../i18n'
 import { button, completeGenerationButton, input, panel, requiredInput } from './storyLabChrome'
 import { StoryVideoFormatControls } from './StoryVideoFormatControls'
@@ -53,8 +53,8 @@ export function StoryTrailerClipProduction(props: StoryTrailerTabProps) {
         <div className="rounded-lg border border-border bg-bg-primary/30 p-3 space-y-2">
           <label className="block text-[10px] text-text-muted">{t('trailer.imageModel')}
             <select aria-label={t('trailer.imageModel')} className={`${input} mt-1`} value={filmImageModel} disabled={directVideo || directReferenceVideo} onChange={event => selectDirectorImageModel(event.target.value)}>
-              {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>}
-              <optgroup label={t('trailer.externalApi')}><option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option></optgroup>
+              {!isExternalImageModel(filmImageModel) && !selectableImageModels.some(model => model.model_type === filmImageModel) && <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>}
+              <optgroup label={t('trailer.externalApi')}>{EXTERNAL_IMAGE_MODELS.map(model => <option key={model.model_type} value={model.model_type}>{model.label}</option>)}</optgroup>
               <optgroup label={t('trailer.localModels')}>{selectableImageModels.map(model => <option key={model.model_type} value={model.model_type}>{model.name}{model.is_downloaded === false ? t('trailer.downloadsOnFirstUse') : ''}</option>)}</optgroup>
             </select>
           </label>

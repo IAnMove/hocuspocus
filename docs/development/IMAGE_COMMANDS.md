@@ -232,6 +232,28 @@ and the character animation job (`model: "minimax:image-01"`). The one definitio
   came back is deleted (the provider already counted the call). A restart during the call leaves the job as an
   interrupted leftover; resuming it asks MiniMax again.
 
+## Remote image model: MiniMax H3-Image
+
+`minimax:h3-image` and `minimax:h3-image-highspeed` use the same doors as Image-01 (catalog, `generation.image`
+version 1 and 2, `POST /api/v1/generate`, Director and Story image pickers). They call MiniMax's image API.
+The open weights are not installed and are not for local inference from the EU.
+
+* Text-to-image is `POST /v1/images/generations`. One to sixteen reference pictures is `POST /v1/images/edits`.
+  The order is the guide image, then `image_refs`, then the start image. A repeated path is sent once.
+  Picture 1 is the picture being changed. A mask, an end frame, a negative prompt and LoRAs are not sent, and
+  the receipt lists each one in `notes`. More than 16 pictures keeps the first 16 and notes the rest.
+* The request sends `size` as `WIDTHxHEIGHT` and does not send `aspect_ratio` with it. The default canvas is
+  `2048x2048`. A named ratio uses the published 2K size (`16:9` is `2720x1536`). A canvas outside 655360–20000000
+  pixels, or a ratio outside 1:3–3:1, is scaled to a legal size and the receipt says so. `4096x4096` is legal and
+  costs more; it is not the default.
+* Prompt expansion stays on for a short text-to-image prompt. Edits are always expanded by MiniMax. The returned
+  `revised_prompt` is stored on the sidecar. The key is the same MiniMax image key as Image-01 and is never stored.
+* Highspeed is the faster tier of the same API. It has the same limits. Comics and the Story style converter stay
+  on Image-01. Both models share the remote lane `remote:https://api.minimax.io`, so they do not run beside each
+  other or beside Image-01. They do not take a GPU slot.
+* The call is not retried. The read timeout is 600 seconds. A cancel during the call deletes the picture that
+  comes back. An unknown `minimax:` image id is refused; it is not sent to Image-01.
+
 ## Validation boundary
 
 Provider-free service, HTTP/MCP, SQLite concurrency/failure and browser client
