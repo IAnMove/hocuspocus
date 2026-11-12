@@ -12,8 +12,23 @@ from routers.llm import (
     _optional_lyria_warning,
     _parse_lyria_output,
     _parse_song_output,
+    _requested_language,
     _song_writer_payload,
 )
+
+
+class TestSongWriterLanguage(unittest.TestCase):
+    def test_a_caller_without_language_gets_the_language_of_its_description(self):
+        # The Director song writer and Music Simple send no language: Spanish descriptions got English lyrics.
+        spanish = "Una canción sobre la niña que robó la luna y se la llevó a su casa"
+        self.assertEqual(_requested_language({}, spanish), "Spanish")
+        self.assertEqual(_requested_language({}, "A song about the girl who stole the moon and took it home"), "English")
+        self.assertEqual(_requested_language({}, "la la la"), "English")
+        self.assertEqual(_requested_language({"language": "Français"}, spanish), "Français")
+
+    def test_the_minimax_brief_asks_for_lyrics_in_the_description_language(self):
+        prompt = _minimax_song_request_prompt({}, "Una nana para el faro que no quería dormir por las noches", False)
+        self.assertIn("Spanish", prompt)
 
 
 class TestMiniMaxSongWriterPrompt(unittest.TestCase):

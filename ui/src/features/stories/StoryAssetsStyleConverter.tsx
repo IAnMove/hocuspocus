@@ -61,7 +61,7 @@ export function StoryAssetsStyleConverter({
         </div>
         <div className="flex flex-col justify-end gap-2">
           <label className="block text-[10px] text-text-muted">{t('assets.styleModel')}
-            <select
+            <select aria-label={t('assets.styleModel')}
               className={`${input} mt-1`}
               value={styleConversionModel}
               disabled={styleConversionBusy || Boolean(styleModelDownloading)}

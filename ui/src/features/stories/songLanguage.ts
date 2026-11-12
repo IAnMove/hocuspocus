@@ -1,3 +1,4 @@
+import { contentLanguageForUi } from '../../lib/contentLanguage'
 import { explicitMusicLanguage } from '../../lib/labHelpers'
 import {
   mergeLanguageIntent,
@@ -11,7 +12,8 @@ import type { StoryMusicDraft, StoryProject, StoryWritingProvider } from './type
  * A song has two different language decisions: the language used to talk to
  * the Wizard and the language in which the lyrics are authored/sung.  Keep
  * the latter resolution in this module so callers do not accidentally fall
- * back to the UI locale or to an unrelated conversation language.
+ * back to the conversation language. When the request, the action, and the
+ * story language are all empty, the last resort is the current UI language.
  */
 const LANGUAGE_ALIASES: Record<string, string> = {
   ar: 'العربية', arabic: 'العربية', arabe: 'العربية',
@@ -76,14 +78,15 @@ export interface SongLanguageResolutionInput {
 /**
  * Explicit language in the user's request wins over model guesses.  The
  * action field is next, followed by the authored/spoken language contract,
- * and only then the story language/default.  Conversation language is
- * intentionally not consulted here.
+ * and only then the story language. Conversation language is
+ * intentionally not consulted. The last resort, when every one of those
+ * is empty, is the current UI language.
  */
 export function resolveSongLyricsLanguage({
   request = '',
   requestedLanguage = '',
   languageIntent,
-  fallback = 'Español',
+  fallback = contentLanguageForUi().language,
 }: SongLanguageResolutionInput): string {
   return canonicalLanguage(
     extractRequestedSongLanguage(request)
@@ -91,7 +94,7 @@ export function resolveSongLyricsLanguage({
       || languageIntent?.spokenLanguage
       || languageIntent?.contentLanguage
       || fallback,
-  ) || 'Español'
+  ) || contentLanguageForUi().language
 }
 
 export function resolveStorySongLanguage(

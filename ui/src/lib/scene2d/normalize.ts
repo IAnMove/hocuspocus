@@ -1,6 +1,7 @@
 // Pure Video 2D document normalization shared by the Scene Animator import and
 // the headless scene2d renderer. Character-kit synchronization stays in the editor.
 import { canonicalSceneFps } from '../sceneFps'
+import { holdFields } from '../../features/stopMotion'
 import { normalizeFaceBinding } from '../cutoutDialogue'
 import { parseFinish } from './finish'
 import { parseSceneFx } from '../../features/sceneFx/types'
@@ -163,6 +164,21 @@ function normalizeVisuals(raw: RawLayer, isCamera: boolean, isEffect: boolean) {
   }
 }
 
+/** ``parallaxZoom`` is kept only as ``true`` on a visual layer; anything else is dropped. */
+function parallaxZoomField(raw: RawLayer, isCamera: boolean): { parallaxZoom?: true } {
+  return !isCamera && raw.parallaxZoom === true ? { parallaxZoom: true } : {}
+}
+
+const VIDEO_LOOPS = ['loop', 'hold', 'pingpong'] as const
+
+/** ``playback`` is kept only on a video layer, bounded like ``series_layers`` (start 0–3600 s, speed 0.1–4). */
+function playbackField(raw: RawLayer): { playback?: AnimatorLayer['playback'] } {
+  const value = raw.playback
+  if (raw.type !== 'video' || !value || typeof value !== 'object') return {}
+  const loop = VIDEO_LOOPS.find(item => item === value.loop) ?? 'loop'
+  return { playback: { start: boundedNumber(value.start, 0, 0, 3600), loop, speed: boundedNumber(value.speed, 1, .1, 4) } }
+}
+
 function layerPath(rawLayer: RawLayer) {
   const path = parsePath(rawLayer.animation?.path)
   return path ? { path } : {}
@@ -177,9 +193,11 @@ function layerExtras(rawLayer: RawLayer) {
   return { ...(sequence ? { sequence } : {}), ...(beatPulse ? { beatPulse } : {}) }
 }
 
-function layerWithoutFocus(raw: RawLayer): Omit<RawLayer, 'focus'> {
+function layerWithoutFocus(raw: RawLayer): Omit<RawLayer, 'focus' | 'parallaxZoom' | 'playback'> {
   const rest = { ...raw }
   delete rest.focus
+  delete rest.parallaxZoom
+  delete rest.playback
   return rest
 }
 
@@ -205,6 +223,7 @@ function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLaye
     faceBinding: normalizeFaceBinding(rawLayer.faceBinding),
     relationship: normalizeRelationship(rawLayer, isCamera, context.visualIds),
     ...normalizeVisuals(rawLayer, isCamera, isEffect),
+    ...parallaxZoomField(rawLayer, isCamera),
     transform,
     animation: {
       ...rawLayer.animation,
@@ -220,6 +239,7 @@ function normalizeLayer(rawLayer: RawLayer, context: LayerContext): AnimatorLaye
     missingAsset: isCamera || isEffect ? false : Boolean(rawLayer.missingAsset || !source.trim() || context.isMissing(source)),
     ...layerExtras(rawLayer),
     ...focusFields(rawLayer),
+    ...playbackField(rawLayer),
   } as AnimatorLayer
   const timedLayer = withNormalizedSceneTiming(layer) as AnimatorLayer
   const keyframes = normalizeSceneKeyframes(rawLayer.animation?.keyframes, timedLayer)
@@ -257,5 +277,9 @@ export function normalizeScene2D(raw: unknown): AnimatorScene {
   // Same cue parser as the editor: catalog colour and bounded fields. Painters
   // call addColorStop(cue.color) and failed on cues saved without a colour.
   const sfx = parseSceneFx(incoming.sfx)
-  return { ...incoming, sfx: sfx.length ? sfx : undefined, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), ...(finish ? { finish } : {}), ...(rhythm ? { rhythm } : {}), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
+  const hold = holdFields(incoming.motionStep, incoming.stopMotionJitter)
+  const scene: AnimatorScene = { ...incoming, sfx: sfx.length ? sfx : undefined, texts: parseKineticTexts(incoming.texts), ...lyricFields(incoming.lyrics), ...(finish ? { finish } : {}), ...(rhythm ? { rhythm } : {}), ...hold, name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers }
+  if (!hold.motionStep) delete scene.motionStep
+  if (!hold.stopMotionJitter) delete scene.stopMotionJitter
+  return scene
 }

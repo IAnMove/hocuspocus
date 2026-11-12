@@ -24,19 +24,23 @@ import time
 import uuid
 from pathlib import Path
 
+from services.rigging import mia
 from services.runtime_environment import isolated_environment, python_path as managed_python_path
 from services.runtime_profiles import managed_ready
 from typing import Any
 
 from . import resource_scheduler
 from .asset_manifest import publish_generation_sidecar_best_effort
+from .generation_output_name import canonical_file_url
 
 APP_DIR = Path(__file__).resolve().parents[1]
 SERVICE_DIR = Path(__file__).resolve().parent / "hunyuan3d"
 ENV_DIR = SERVICE_DIR / "env"
 INSTALL_MARKER = ENV_DIR / ".maestro_hunyuan3d_v1.installed"
 WORKER_PATH = SERVICE_DIR / "rig_worker.py"
-JOBS_DIR = Path(__file__).resolve().parents[1] / "ckpts" / "rig" / "jobs"
+# Job control (request and pid files) belongs to THIS install: checkpoints may be shared by several installs
+# (worktrees, validation or lent instances), so the pid files cannot live next to them.
+JOBS_DIR = Path(__file__).resolve().parents[1] / "settings" / "rig-jobs"
 
 # Optional UniRig AI engine: separate Python 3.11 env installed on demand
 # through rigging_install.js ("Install AI Rigging (UniRig)" in the menu).
@@ -272,6 +276,24 @@ def has_active_jobs(engine: str | None = None) -> bool:
     return False
 
 
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Rig jobs that can still write into their workspace (``services.workspace_busy`` probe).
+
+    A registered subprocess keeps its job active while a cancellation unwinds, even when the
+    public status already says ``cancelled``; that job is reported as ``cancelling``.
+    """
+    with _lock:
+        return [
+            {
+                "jobId": job_id,
+                "status": job["status"] if str(job.get("status") or "").lower() in _ACTIVE_JOB_STATES else "cancelling",
+                "workspace": job.get("workspace"),
+            }
+            for job_id, job in _jobs.items()
+            if str(job.get("status") or "").lower() in _ACTIVE_JOB_STATES or job_id in _processes
+        ]
+
+
 def has_active_unirig_jobs() -> bool:
     """Return whether deleting the shared UniRig weights would be unsafe."""
     return has_active_jobs("unirig")
@@ -291,6 +313,7 @@ def capabilities() -> dict[str, Any]:
         active = sum(1 for job in _jobs.values() if job["status"] in _ACTIVE_JOB_STATES)
     status = installation_status()
     unirig_status = unirig_installation_status()
+    from . import meshy_rig_service
     return {
         "engines": [
             {
@@ -314,6 +337,8 @@ def capabilities() -> dict[str, Any]:
                 "installed": status["installed"],
                 "install_hint": status["install_hint"],
             },
+            mia.capability(),
+            meshy_rig_service.engine_entry(),
         ],
         "animations": ANIMATIONS,
         "humanoid_animations": _humanoid_animation_catalog(),
@@ -392,6 +417,8 @@ def _requested_profile(raw_profile: Any, engine: str) -> tuple[bool, str]:
     explicit = raw_profile is not None and str(raw_profile).strip() != ""
     if engine == "humanoid":
         return explicit, "humanoid"
+    if engine == mia.ENGINE and not explicit:
+        return False, "humanoid"
     return explicit, str(raw_profile).strip().lower() if explicit else DEFAULT_RIG_PROFILE
 
 
@@ -409,9 +436,16 @@ def start_job(
     source_path: str,
     output_dir: str,
     workspace: str = "default",
+    provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """``provenance`` (who asked: actor, tool, capability, command) reaches the task and the GLB sidecar."""
+    if str(body.get("engine") or "") == "meshy":
+        # A cloud job: a polling thread in this registry, with no CPU or GPU lane and no local runtime to gate on.
+        from . import meshy_rig_service
+        return meshy_rig_service.start_job(
+            body=body, source_path=source_path, output_dir=output_dir, workspace=workspace, provenance=provenance)
     # Each engine has its own runtime; gate on the one actually requested.
-    if str(body.get("engine") or "procedural") != "unirig":
+    if str(body.get("engine") or "procedural") not in {"unirig", mia.ENGINE}:
         runtime = installation_status()
         if not runtime["installed"]:
             raise RuntimeError(runtime["install_hint"])
@@ -423,12 +457,16 @@ def start_job(
         raise ValueError("Too many queued rig jobs; wait for the current ones to finish or cancel them")
 
     engine = str(body.get("engine") or "procedural")
-    if engine not in {"procedural", "unirig", "humanoid"}:
+    if engine not in {"procedural", "unirig", "humanoid", mia.ENGINE}:
         raise ValueError(f"Unknown rig engine: {engine}")
     if engine == "unirig":
         unirig_status = unirig_installation_status()
         if not unirig_status["installed"]:
             raise RuntimeError(unirig_status["install_hint"])
+    if engine == mia.ENGINE:
+        mia_status = mia.installation_status()
+        if not mia_status["installed"]:
+            raise RuntimeError(mia_status["install_hint"])
 
     profile_was_explicit, rig_profile = _requested_profile(body.get("rig_profile"), engine)
     profile = RIG_PROFILES_BY_ID.get(rig_profile)
@@ -526,11 +564,27 @@ def start_job(
         "updated_at": time.time(),
         "request": request_data,
     }
+    if isinstance(provenance, dict) and provenance:
+        job["provenance"] = dict(provenance)
     with _lock:
         _jobs[job_id] = job
         initial_response = _public_job(dict(job))
     threading.Thread(target=_run_job, args=(job_id, os.path.abspath(output_dir)), daemon=True).start()
     return initial_response
+
+
+def _sidecar_origin(job: dict[str, Any]) -> dict[str, Any]:
+    """Who asked for the rig, for the GLB sidecar; an agent's MCP call stays visible on the file."""
+    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    origin = {"tool": provenance.get("tool") or "rig", "actor": provenance.get("actor"), "capability": provenance.get("capability")}
+    return {key: value for key, value in origin.items() if value}
+
+
+def _command_id(job: dict[str, Any]) -> dict[str, Any]:
+    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    return {"command_id": command["command_id"]} if command.get("command_id") else {}
 
 
 def _update_job(job_id: str, **updates: Any) -> bool:
@@ -589,21 +643,24 @@ def _run_job(job_id: str, output_dir: str) -> None:
         request_data = (_jobs.get(job_id, {}).get("request") or {}).copy()
     if not request_data or cancelled():
         return
-    is_unirig = request_data.get("engine") == "unirig"
-    lane = (
-        resource_scheduler.local_gpu_lane(0)
-        if is_unirig else resource_scheduler.cpu_lane("rig")
-    )
+    gpu = mia.uses_gpu(str(request_data.get("engine") or ""))
+    lane = resource_scheduler.local_gpu_lane(0) if gpu else resource_scheduler.cpu_lane("rig")
+    if request_data.get("engine") == mia.ENGINE:
+        lane_description = "Make-It-Animatable rigging"
+    elif gpu:
+        lane_description = "UniRig AI rigging"
+    else:
+        lane_description = "Procedural rigging"
     _update_job(
         job_id,
         phase="waiting_resource",
-        message=("Waiting for local GPU 0" if is_unirig else "Waiting for rig CPU worker"),
+        message=("Waiting for local GPU 0" if gpu else "Waiting for rig CPU worker"),
     )
     try:
         with resource_scheduler.coordinator.acquire(
             lane,
             task_id=_canonical_task_id(job_id),
-            description=("UniRig AI rigging" if is_unirig else "Procedural rigging"),
+            description=lane_description,
             cancelled=cancelled,
         ):
             if cancelled():
@@ -668,6 +725,46 @@ def _spawn_worker_if_active(
         return process
 
 
+def _worker_launch(engine: str) -> tuple[Path | None, Path, Path, int, int]:
+    """Python, worker path, cwd, inactivity limit and time limit for one engine."""
+    if engine == "unirig":
+        # GPU inference plus a one-time weights download on first use.
+        return _unirig_python_path(), UNIRIG_WORKER_PATH, RIGGING_DIR, 15 * 60, 2 * 3600
+    if engine == mia.ENGINE:
+        return mia.python_path(), mia.WORKER_PATH, mia.CWD, 15 * 60, 2 * 3600
+    if engine == "humanoid":
+        return _python_path(), APP_DIR, APP_DIR, _WORKER_INACTIVITY_LIMIT_SECONDS, _WORKER_TIME_LIMIT_SECONDS
+    return _python_path(), WORKER_PATH, SERVICE_DIR, _WORKER_INACTIVITY_LIMIT_SECONDS, _WORKER_TIME_LIMIT_SECONDS
+
+
+def _prepare_worker_env(engine: str, python_path: Path) -> dict[str, str]:
+    env = isolated_environment(Path(python_path))
+    if mia.uses_gpu(engine):
+        # Public weights must not inherit Pinokio's HF credentials or proxy setup.
+        for env_var in (
+            "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HF_TOKEN_PATH",
+            "HF_ENDPOINT", "HF_INFERENCE_ENDPOINT", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE",
+            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+            "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+            "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "SSL_CERT_FILE",
+        ):
+            env.pop(env_var, None)
+    if engine == "unirig":
+        HF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        env.update({
+            "HF_HOME": str(HF_CACHE_DIR),
+            "HUGGINGFACE_HUB_CACHE": str(HF_CACHE_DIR / "hub"),
+            "HF_ENDPOINT": "https://huggingface.co",
+            "HF_HUB_DISABLE_IMPLICIT_TOKEN": "1",
+            "TOKENIZERS_PARALLELISM": "false",
+        })
+    if engine == mia.ENGINE:
+        # Weights are fetched at install time into the vendor tree, not during the job.
+        env["HF_HUB_OFFLINE"] = "1"
+    env["PYTHONUNBUFFERED"] = "1"
+    return env
+
+
 def _run_job_serialized(job_id: str, output_dir: str) -> None:
     with _lock:
         job = _jobs.get(job_id)
@@ -675,25 +772,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
     if not request_data:
         return
     engine = request_data.get("engine") or "procedural"
-    if engine == "unirig":
-        python_path = _unirig_python_path()
-        worker_path = UNIRIG_WORKER_PATH
-        worker_cwd = RIGGING_DIR
-        # GPU inference plus a one-time weights download on first use.
-        inactivity_limit = 15 * 60
-        time_limit = 2 * 3600
-    elif engine == "humanoid":
-        python_path = _python_path()
-        worker_path = APP_DIR
-        worker_cwd = APP_DIR
-        inactivity_limit = _WORKER_INACTIVITY_LIMIT_SECONDS
-        time_limit = _WORKER_TIME_LIMIT_SECONDS
-    else:
-        python_path = _python_path()
-        worker_path = WORKER_PATH
-        worker_cwd = SERVICE_DIR
-        inactivity_limit = _WORKER_INACTIVITY_LIMIT_SECONDS
-        time_limit = _WORKER_TIME_LIMIT_SECONDS
+    python_path, worker_path, worker_cwd, inactivity_limit, time_limit = _worker_launch(engine)
     if not python_path:
         _update_job(job_id, status="failed", phase="failed", error="Rig runtime is not installed")
         return
@@ -712,27 +791,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         command = [str(python_path), "-m", "services.humanoid_rig.worker", "--request", str(request_path), "--output", str(output_path)]
     else:
         command = [str(python_path), str(worker_path), "--request", str(request_path), "--output", str(output_path)]
-    env = isolated_environment(Path(python_path))
-    if engine == "unirig":
-        # Same network isolation as the Hunyuan3D worker: the public UniRig
-        # weights must not inherit Pinokio's HF credentials or proxy setup.
-        for env_var in (
-            "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HF_TOKEN_PATH",
-            "HF_ENDPOINT", "HF_INFERENCE_ENDPOINT", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE",
-            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
-            "http_proxy", "https_proxy", "all_proxy", "no_proxy",
-            "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "SSL_CERT_FILE",
-        ):
-            env.pop(env_var, None)
-        HF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        env.update({
-            "HF_HOME": str(HF_CACHE_DIR),
-            "HUGGINGFACE_HUB_CACHE": str(HF_CACHE_DIR / "hub"),
-            "HF_ENDPOINT": "https://huggingface.co",
-            "HF_HUB_DISABLE_IMPLICIT_TOKEN": "1",
-            "TOKENIZERS_PARALLELISM": "false",
-        })
-    env.update({"PYTHONUNBUFFERED": "1"})
+    env = _prepare_worker_env(engine, Path(python_path))
     lines: list[str] = []
     result_summary: dict[str, Any] = {}
     generation_committed = False
@@ -816,25 +875,14 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
 
         # The rigged GLB is on disk. Sidecar/status failures must not delete it.
         generation_committed = True
-        rig_metrics = (
-            {
-                "joint_count": result_summary.get("joint_count", 0),
-                "animation_chain_joints": result_summary.get("animation_chain_joints", 0),
-                **{key: result_summary[key] for key in (
-                    "animation_mode", "articulated_clips", "humanoid_joints", "animation_warnings", "animation_bpm",
-                ) if key in result_summary},
-            }
-            if engine == "unirig"
-            else _humanoid_metrics(result_summary)
-            if engine == "humanoid"
-            else {"spine_joints": result_summary.get("joints", request_data.get("spine_joints", 0))}
-        )
+        rig_metrics = _result_metrics(engine, result_summary, request_data)
         publish_generation_sidecar_best_effort(
             output_path,
             {
                 "generation_mode": "model3d",
                 "mode": "model3d",
                 "job_id": job_id,
+                **_command_id(current_job),
                 "task_id": _canonical_task_id(job_id),
                 "root_task_id": _canonical_task_id(job_id),
                 "created_at": time.time(),
@@ -853,7 +901,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
                 },
             },
             output_folder=_physical_output_folder(current_job.get("workspace")),
-            tool="rig",
+            **_sidecar_origin(current_job),
         )
         # Reuse the source's gallery preview for the rigged copy.
         source_preview = source.with_suffix(".preview.png")
@@ -869,7 +917,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             message="Rigged model saved",
             progress=1.0,
             filename=filename,
-            url=f"/api/v1/file/{filename}",
+            url=canonical_file_url(filename, job.get("workspace")),
             size=output_path.stat().st_size,
             animations=result_summary.get("animations") or request_data["animations"],
             rig_profile=result_summary.get("rig_profile", request_data.get("rig_profile", DEFAULT_RIG_PROFILE)),
@@ -881,8 +929,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         with _lock:
             cancelled = _jobs.get(job_id, {}).get("status") == "cancelled"
         if not cancelled:
-            refusal = exc.fields if isinstance(exc, _WorkerRefused) else {}
-            _update_job(job_id, status="failed", phase="failed", message="Rigging failed", error=str(exc), **refusal)
+            _update_job(job_id, status="failed", phase="failed", message="Rigging failed", **_failure_fields(engine, exc))
         if not generation_committed:
             _cleanup_partial_output(output_path)
     finally:
@@ -916,14 +963,41 @@ class _WorkerRefused(RuntimeError):
 
 _REFUSALS = {
     "hands_stuck": "not_humanoid: the arms touch the body or hang straight down. Use a T or A pose with a gap under each arm.",
-    "single_leg": "not_humanoid: no gap between the legs. Use a model standing with its legs apart.",
-    "legs_too_short": "not_humanoid: the legs are too short to rig (or hidden by a dress or robe).",
+    "single_leg": "not_humanoid: no gap between the legs. Use a model standing with its legs apart (a long robe is fine if the feet show under it).",
+    "legs_too_short": "not_humanoid: the legs are too short to rig (or hidden by a dress or robe with no feet showing).",
     "asymmetry": "not_humanoid: the left and right sides differ too much. Use a symmetric T or A pose.",
     "not_upright": "not_humanoid: the model does not stand upright (Y up).",
     "degenerate": "not_humanoid: the mesh is empty or broken.",
     "arms_raised": "not_humanoid: the arms are raised well above the shoulders. Use a T or A pose.",
     "turned": "not_humanoid: the model is turned at an angle. Use a model facing the camera straight on.",
 }
+
+
+def _result_metrics(engine: str, summary: dict[str, Any], request_data: dict[str, Any]) -> dict[str, Any]:
+    if engine in {"unirig", mia.ENGINE}:
+        return {
+            "joint_count": summary.get("joint_count", 0),
+            "animation_chain_joints": summary.get("animation_chain_joints", 0),
+            **{key: summary[key] for key in (
+                "animation_mode", "articulated_clips", "humanoid_joints", "animation_warnings", "animation_bpm",
+            ) if key in summary},
+        }
+    if engine == "humanoid":
+        return _humanoid_metrics(summary)
+    return {"spine_joints": summary.get("joints", request_data.get("spine_joints", 0))}
+
+
+def _failure_fields(engine: str, exc: Exception) -> dict[str, Any]:
+    """Public error fields. A suggestion is recorded only; the engine is not changed."""
+    if not isinstance(exc, _WorkerRefused):
+        return {"error": str(exc)}
+    fields = dict(exc.fields)
+    hint = mia.suggestion_hint(engine, fields.get("error_code"), fields.get("error_reason"))
+    error = str(exc)
+    if hint:
+        error = f"{error} {hint}"
+        fields["suggested_engine"] = mia.ENGINE
+    return {"error": error, **fields}
 
 
 def _humanoid_metrics(summary: dict[str, Any]) -> dict[str, Any]:
@@ -987,30 +1061,45 @@ def cancel_all_jobs() -> int:
     return len(active_ids)
 
 
-def _cmdline_is_rig_worker(cmdline: str) -> bool:
-    return (WORKER_PATH.name in cmdline and "hunyuan3d" in cmdline) or (
-        UNIRIG_WORKER_PATH.name in cmdline and "rigging" in cmdline
+def _cmdline_is_rig_worker(cmdline: str, request_path: Path) -> bool:
+    """A rig worker (any engine) started with THIS job's request file in THIS install's job folder.
+
+    The request path is on every engine's command line (``--request <JOBS_DIR>/<job>.json``), so it tells our
+    worker from another install's, which can also be listed in a shared folder or recycle a pid.
+    """
+    if os.path.normcase(str(request_path)) not in os.path.normcase(cmdline):
+        return False
+    return (
+        (WORKER_PATH.name in cmdline and "hunyuan3d" in cmdline)
+        or (UNIRIG_WORKER_PATH.name in cmdline and "rigging" in cmdline)
+        or (mia.WORKER_PATH.name in cmdline and "rigging" in cmdline)
+        or "services.humanoid_rig.worker" in cmdline
     )
 
 
-def _is_rig_worker(pid: int) -> bool:
+def _is_rig_worker(pid: int, request_path: Path) -> bool:
     proc_cmdline = Path("/proc") / str(pid) / "cmdline"
     try:
         if proc_cmdline.is_file():
             cmdline = proc_cmdline.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace")
-            return _cmdline_is_rig_worker(cmdline)
+            return _cmdline_is_rig_worker(cmdline, request_path)
     except OSError:
         return False
     try:
         import psutil
 
         cmdline = " ".join(psutil.Process(pid).cmdline())
-        return _cmdline_is_rig_worker(cmdline)
+        return _cmdline_is_rig_worker(cmdline, request_path)
     except Exception:
         return False
 
 
 def _reap_stale_jobs() -> None:
+    """End the workers a previous run of THIS install left behind, and forget their files.
+
+    Only ``JOBS_DIR`` is read. The old folder ``ckpts/rig/jobs`` is shared by every install that links the same
+    checkpoints, so what is listed there may be another install's live job: it is never signalled or cleaned.
+    """
     if not JOBS_DIR.is_dir():
         return
     for pid_path in JOBS_DIR.glob("*.pid"):
@@ -1018,7 +1107,7 @@ def _reap_stale_jobs() -> None:
             pid = int(pid_path.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
             pid = 0
-        if pid > 0 and _is_rig_worker(pid):
+        if pid > 0 and _is_rig_worker(pid, JOBS_DIR / f"{pid_path.stem}.json"):
             print(f"[Rig] Terminating orphaned rig worker from a previous run (pid {pid})")
             try:
                 os.kill(pid, signal.SIGTERM)

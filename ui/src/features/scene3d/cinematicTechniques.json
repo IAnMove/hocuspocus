@@ -3928,8 +3928,8 @@
     "slug": "three-shot",
     "name": "Three-Shot",
     "titleEs": "Plano de tres",
-    "descriptionEn": "Framing. Three figures in one frame.",
-    "descriptionEs": "Encuadre. Tres figuras en un solo cuadro.",
+    "descriptionEn": "Framing. Three figures in one frame: two cast slots and a third standing figure in the prop slot.",
+    "descriptionEs": "Encuadre. Tres figuras en un solo cuadro: dos huecos de reparto y una tercera figura de pie en el hueco de atrezo.",
     "sourceUrl": "https://melies.co/cinematic-techniques/framing/three-shot",
     "thumbUrl": "https://asset.melies.co/cinematic-techniques/thumb/three-shot.webp",
     "fov": 46.0,
@@ -3960,7 +3960,28 @@
       "subject_2",
       "prop",
       "background"
-    ]
+    ],
+    "layout": {
+      "subject_1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "subject_2": [
+        -1.3,
+        0.0,
+        -0.15
+      ],
+      "prop": [
+        1.3,
+        0.0,
+        -0.15
+      ]
+    },
+    "yaw": {
+      "subject_2": 0.25,
+      "prop": -0.25
+    }
   },
   {
     "id": "cine-group-shot",
@@ -3968,8 +3989,8 @@
     "slug": "group-shot",
     "name": "Group Shot",
     "titleEs": "Plano de grupo",
-    "descriptionEn": "Framing. A wider three-figure group, with air on both sides.",
-    "descriptionEs": "Encuadre. Un grupo de tres más abierto, con aire a los dos lados.",
+    "descriptionEn": "Framing. A wider three-figure group, with air on both sides: two cast slots and a third standing figure in the prop slot.",
+    "descriptionEs": "Encuadre. Un grupo de tres más abierto, con aire a los dos lados: dos huecos de reparto y una tercera figura de pie en el hueco de atrezo.",
     "sourceUrl": "https://melies.co/cinematic-techniques/framing/group-shot",
     "thumbUrl": "https://asset.melies.co/cinematic-techniques/thumb/group-shot.webp",
     "fov": 52.0,
@@ -4005,7 +4026,28 @@
       0.0,
       1.0,
       0.0
-    ]
+    ],
+    "layout": {
+      "subject_1": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "subject_2": [
+        -1.6,
+        0.0,
+        -0.3
+      ],
+      "prop": [
+        1.6,
+        0.0,
+        -0.3
+      ]
+    },
+    "yaw": {
+      "subject_2": 0.3,
+      "prop": -0.3
+    }
   },
   {
     "id": "cine-insert",
@@ -10232,8 +10274,8 @@
     "slug": "stop-motion",
     "name": "Stop Motion",
     "titleEs": "Stop motion",
-    "descriptionEn": "Time. A locked pose. The model is not stepped like a puppet.",
-    "descriptionEs": "Tiempo. Una pose fija. El modelo no avanza a saltos como una marioneta.",
+    "descriptionEn": "Time. A locked pose stepped like a puppet: the picture holds every three frames.",
+    "descriptionEs": "Tiempo. Una pose fija que avanza a saltos como una marioneta: la imagen se sostiene cada tres fotogramas.",
     "sourceUrl": "https://melies.co/cinematic-techniques/time-and-motion/stop-motion",
     "thumbUrl": "https://asset.melies.co/cinematic-techniques/thumb/stop-motion-150-stop-motion-animation-mini.webp",
     "fov": 38.0,
@@ -10262,7 +10304,8 @@
     "slots": [
       "subject_1",
       "background"
-    ]
+    ],
+    "motionStep": 3
   },
   {
     "id": "cine-low-shutter",
@@ -10524,8 +10567,8 @@
     "slug": "lens-flare",
     "name": "Lens Flare",
     "titleEs": "Destello de lente",
-    "descriptionEn": "Effect. A low sun-style key aimed into the lens. There is no flare pass.",
-    "descriptionEs": "Efecto. Una luz baja, de sol, apuntada hacia el objetivo. No hay una pasada de destello.",
+    "descriptionEn": "Effect. A low sun-style key aimed into the lens, with light rays streaming across the frame.",
+    "descriptionEs": "Efecto. Una luz baja, de sol, apuntada hacia el objetivo, con rayos de luz que cruzan el cuadro.",
     "sourceUrl": "https://melies.co/cinematic-techniques/effects/lens-flare",
     "thumbUrl": "https://asset.melies.co/cinematic-techniques/thumb/lens-flare-060-expressive-lens-flare-mini.webp",
     "fov": 46.0,
@@ -10559,6 +10602,12 @@
       0.0,
       1.1,
       0.0
+    ],
+    "sfx": [
+      {
+        "kind": "light_rays",
+        "intensity": 1.0
+      }
     ]
   },
   {
@@ -10567,8 +10616,8 @@
     "slug": "anamorphic-flare",
     "name": "Anamorphic Flare",
     "titleEs": "Destello anamórfico",
-    "descriptionEn": "Effect. A wide, low, bright frame. Streaks are not drawn.",
-    "descriptionEs": "Efecto. Un cuadro amplio, bajo y brillante. No se dibujan las rayas.",
+    "descriptionEn": "Effect. A wide, low, bright frame with light rays drawn over it.",
+    "descriptionEs": "Efecto. Un cuadro amplio, bajo y brillante, con rayos de luz dibujados encima.",
     "sourceUrl": "https://melies.co/cinematic-techniques/effects/anamorphic-flare",
     "thumbUrl": "https://asset.melies.co/cinematic-techniques/thumb/anamorphic-flare.webp",
     "fov": 58.0,
@@ -10597,6 +10646,12 @@
     "slots": [
       "subject_1",
       "background"
+    ],
+    "sfx": [
+      {
+        "kind": "light_rays",
+        "intensity": 1.2
+      }
     ]
   },
   {
@@ -10643,8 +10698,8 @@
     "slug": "film-grain",
     "name": "Film Grain",
     "titleEs": "Grano de película",
-    "descriptionEn": "Effect. A contrasty close frame. Grain is not applied.",
-    "descriptionEs": "Efecto. Un encuadre cercano y contrastado. No se aplica grano.",
+    "descriptionEn": "Effect. A contrasty close frame under film grain over the whole shot.",
+    "descriptionEs": "Efecto. Un encuadre cercano y contrastado, con grano de película sobre todo el plano.",
     "sourceUrl": "https://melies.co/cinematic-techniques/effects/film-grain",
     "thumbUrl": "https://asset.melies.co/cinematic-techniques/thumb/film-grain-076-archival-or-damaged-medium-texture-mini.webp",
     "fov": 36.0,
@@ -10673,6 +10728,12 @@
     "slots": [
       "subject_1",
       "background"
+    ],
+    "sfx": [
+      {
+        "kind": "film_grain",
+        "intensity": 0.8
+      }
     ]
   },
   {
@@ -10970,8 +11031,8 @@
     "slug": "light-leak",
     "name": "Light Leak",
     "titleEs": "Fuga de luz",
-    "descriptionEn": "Effect. A hot edge light from the side, standing in for a leak.",
-    "descriptionEs": "Efecto. Una luz de borde muy alta desde un lado, en lugar de una fuga.",
+    "descriptionEn": "Effect. A hot edge light from the side and light rays leaking across the frame.",
+    "descriptionEs": "Efecto. Una luz de borde muy alta desde un lado y rayos de luz que se cuelan por el cuadro.",
     "sourceUrl": "https://melies.co/cinematic-techniques/effects/light-leak",
     "thumbUrl": "https://asset.melies.co/cinematic-techniques/thumb/light-leak.webp",
     "fov": 44.0,
@@ -11000,6 +11061,12 @@
     "slots": [
       "subject_1",
       "background"
+    ],
+    "sfx": [
+      {
+        "kind": "light_rays",
+        "intensity": 0.7
+      }
     ]
   },
   {
@@ -11008,8 +11075,8 @@
     "slug": "vignette",
     "name": "Vignette",
     "titleEs": "Viñeta",
-    "descriptionEn": "Effect. A pool of light in the center and a darker grade around it.",
-    "descriptionEs": "Efecto. Un charco de luz en el centro y un grado más oscuro alrededor.",
+    "descriptionEn": "Effect. A pool of light in the center and a vignette that darkens the edges.",
+    "descriptionEs": "Efecto. Un charco de luz en el centro y una viñeta que oscurece los bordes.",
     "sourceUrl": "https://melies.co/cinematic-techniques/effects/vignette",
     "thumbUrl": "https://asset.melies.co/cinematic-techniques/thumb/vignette.webp",
     "fov": 40.0,
@@ -11038,6 +11105,12 @@
     "slots": [
       "subject_1",
       "background"
+    ],
+    "sfx": [
+      {
+        "kind": "vignette",
+        "intensity": 1.0
+      }
     ]
   },
   {
@@ -11046,8 +11119,8 @@
     "slug": "chromatic-aberration",
     "name": "Chromatic Aberration",
     "titleEs": "Aberración cromática",
-    "descriptionEn": "Effect. A wide lens close to the figure, where color fringes would show. Fringes are not drawn.",
-    "descriptionEs": "Efecto. Un angular cerca de la figura, donde se verían los flecos de color. Los flecos no se dibujan.",
+    "descriptionEn": "Effect. A wide lens close to the figure, with a low glitch that fringes the edges.",
+    "descriptionEs": "Efecto. Un angular cerca de la figura, con un glitch leve que desdobla los bordes.",
     "sourceUrl": "https://melies.co/cinematic-techniques/effects/chromatic-aberration",
     "thumbUrl": "https://asset.melies.co/cinematic-techniques/thumb/chromatic-aberration.webp",
     "fov": 78.0,
@@ -11076,6 +11149,12 @@
     "slots": [
       "subject_1",
       "background"
+    ],
+    "sfx": [
+      {
+        "kind": "glitch",
+        "intensity": 0.3
+      }
     ]
   },
   {
@@ -11565,8 +11644,8 @@
     "slug": "datamosh",
     "name": "Datamosh",
     "titleEs": "Datamosh",
-    "descriptionEn": "Effect. A fast broken push with roll. Pixels are not melted.",
-    "descriptionEs": "Efecto. Un avance rápido y roto, con giro. Los píxeles no se derriten.",
+    "descriptionEn": "Effect. A fast broken push with roll, under a glitch that tears the picture.",
+    "descriptionEs": "Efecto. Un avance rápido y roto, con giro, bajo un glitch que rasga la imagen.",
     "sourceUrl": "https://melies.co/cinematic-techniques/effects/datamosh",
     "thumbUrl": "https://asset.melies.co/cinematic-techniques/thumb/datamosh-datamosh-mini.webp",
     "fov": 50.0,
@@ -11597,7 +11676,13 @@
       "background"
     ],
     "rollFrom": -6.0,
-    "rollTo": 12.0
+    "rollTo": 12.0,
+    "sfx": [
+      {
+        "kind": "glitch",
+        "intensity": 1.0
+      }
+    ]
   },
   {
     "id": "cine-diorama",

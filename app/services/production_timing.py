@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-STAGES = ("song", "analyze", "cast", "frames", "clips", "scenes", "montage")
+STAGES = ("song", "analyze", "cast", "models", "frames", "clips", "scenes", "montage")
 
 
 def _seconds(value: Any) -> int:

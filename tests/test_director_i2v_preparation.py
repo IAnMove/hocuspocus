@@ -543,20 +543,25 @@ def test_story_style_lock_covers_images_windows_and_keyframes():
     assert all("VISUAL STYLE LOCK:" in item for item in plans[0]["keyframe_prompts"])
 
 
-def test_story_image_style_lock_respects_minimax_prompt_limit():
+def test_story_image_style_lock_keeps_the_whole_prompt_and_minimax_cuts_its_own():
+    from services.minimax_image_service import prepare_prompt
+    body = "Detailed opening-frame instruction " * 100
     prompt = apply_visual_style_lock(
-        "Detailed opening-frame instruction " * 100,
+        body,
         "2D anime, clean cel shading, watercolor backgrounds",
         mode="image",
         preserve=True,
         has_reference=True,
     )
 
-    assert len(prompt) < 1500
-    assert prompt.startswith("VISUAL STYLE LOCK:")
+    assert prompt.startswith("VISUAL STYLE LOCK:") and prompt.endswith(body.strip())
+    sent = prepare_prompt(prompt)
+    assert len(sent) < 1500 and sent.startswith("VISUAL STYLE LOCK:")
 
 
-def test_story_prompt_contract_forces_character_medium_and_removes_lyric_lettering():
+def test_sung_prompt_contract_forces_character_medium_and_removes_lyric_lettering():
+    # allow_clip_text=False is what the Director passes for a sung project
+    # (a music video); stories pass True and get no text lock.
     plans = [{
         "image_prompt": "A low-poly singer stands under cyan light.",
         "video_prompt": (

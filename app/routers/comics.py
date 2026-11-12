@@ -25,7 +25,7 @@ from urllib.parse import unquote, urlparse
 
 from fastapi import APIRouter, HTTPException
 
-from services import execution_mode, minimax_image_service, resource_scheduler
+from services import execution_mode, minimax_image_service, resource_scheduler, workspace_busy
 from services.provider_profile import resolve_minimax_key
 
 
@@ -238,6 +238,16 @@ def list_minimax_image_jobs() -> list[dict]:
         return [copy.deepcopy(job) for job in _minimax_image_jobs.values()]
 
 
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """MiniMax Image-01 requests that still write panels into their workspace (``services.workspace_busy`` probe)."""
+    with _minimax_image_jobs_lock:
+        return [
+            {"jobId": job_id, "status": job.get("status"), "workspace": job.get("workspace")}
+            for job_id, job in _minimax_image_jobs.items()
+            if workspace_busy.is_active(job.get("status"))
+        ]
+
+
 def _cancel_comic_minimax_job(job_id: str) -> dict:
     """Cancel a MiniMax image job. Used by Activity adapters and the HTTP route."""
     with _minimax_image_jobs_lock:
@@ -315,6 +325,9 @@ def create_comics_router(
                 except OSError:
                     pass
             raise HTTPException(status_code=500, detail=f"Failed to save comic: {exc}") from exc
+        from pathlib import Path
+        from services.document_origin import write_document_origin
+        write_document_origin(Path(project_path), "comics.save")
         return _comic_output_response(name)
 
     def _run_minimax_image_job(job_id: str) -> None:

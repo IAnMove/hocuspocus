@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { checkPublishPreset, formatPublishNumber, publishMediaSource, publishVideo, type PublishPreset, type PublishWarning } from '../../api/publish'
@@ -53,13 +54,13 @@ export function PublishPresetBar({
         {PRESETS.map(value => <option key={value} value={value}>{t(`toolbar.publish_${value}`)}</option>)}
       </select>
       <label className="flex items-center gap-1 text-[10px] text-text-muted">
-        <input type="checkbox" checked={premium} onChange={event => { setPremium(event.target.checked); review(preset, event.target.checked) }} />
+        <input aria-label={t('toolbar.publishPremium')} type="checkbox" checked={premium} onChange={event => { setPremium(event.target.checked); review(preset, event.target.checked) }} />
         {t('toolbar.publishPremium')}
       </label>
       {source && (
         <button
           type="button"
-          disabled={busy}
+          disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
           onClick={() => {
             setBusy(true)
             publish({ workspace, source: publishMediaSource(source, workspace), preset, premium, width, height, duration, overlays, loudnorm: preset !== 'archive' })

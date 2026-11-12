@@ -41,6 +41,7 @@ class TestDirectorCancellation(unittest.TestCase):
             "child_jobs": pipeline._pipeline_child_jobs,
             "starting": pipeline._pipeline_starting,
             "operations": pipeline._pipeline_operations,
+            "operation_labels": pipeline._pipeline_operation_labels,
             "deleting": pipeline._pipeline_deleting,
             "repairs": pipeline._pipeline_repairs,
             "run_generation": pipeline._run_generation,
@@ -55,6 +56,7 @@ class TestDirectorCancellation(unittest.TestCase):
         pipeline._pipeline_child_jobs = {}
         pipeline._pipeline_starting = set()
         pipeline._pipeline_operations = set()
+        pipeline._pipeline_operation_labels = {}
         pipeline._pipeline_deleting = set()
         pipeline._pipeline_repairs = {}
         pipeline._run_generation = None
@@ -69,6 +71,7 @@ class TestDirectorCancellation(unittest.TestCase):
         pipeline._pipeline_child_jobs = self.originals["child_jobs"]
         pipeline._pipeline_starting = self.originals["starting"]
         pipeline._pipeline_operations = self.originals["operations"]
+        pipeline._pipeline_operation_labels = self.originals["operation_labels"]
         pipeline._pipeline_deleting = self.originals["deleting"]
         pipeline._pipeline_repairs = self.originals["repairs"]
         pipeline._run_generation = self.originals["run_generation"]
@@ -564,7 +567,9 @@ class TestDirectorCancellation(unittest.TestCase):
         self.assertEqual(len(submitted), 3)
         self.assertEqual(submitted[0]["image_refs"], [])
         self.assertEqual(submitted[0]["video_prompt_type"], "")
-        self.assertIn("definitive cinematic character anchor", submitted[0]["prompt"])
+        # The shared reference has no fixed style word (glass walls 8.4).
+        self.assertIn("Create a character reference for visual continuity", submitted[0]["prompt"])
+        self.assertNotIn("cinematic", submitted[0]["prompt"].lower())
         for request in submitted[1:]:
             self.assertEqual(request["image_refs"], [anchor_path])
             self.assertEqual(request["video_prompt_type"], "KI")
@@ -2981,6 +2986,396 @@ class TestDirectorCancellation(unittest.TestCase):
             "generated_reference_image_filename",
             pipeline._pipelines[pid]["params"],
         )
+
+    def _h3_resumable_state(self, pid: str) -> None:
+        """Save a 2-shot, plan-and-images-done Director run for a resume."""
+        plans = [
+            {"image_prompt": f"image {i}", "video_prompt": f"video {i}",
+             "_director_duration_sec": 5.17}
+            for i in range(2)
+        ]
+        planned = [
+            {"start": 0, "end": 5.167, "duration_sec": 5.167,
+             "duration_frames": 124},
+            {"start": 5.167, "end": 10.333, "duration_sec": 5.167,
+             "duration_frames": 124},
+        ]
+        clips = []
+        for index, plan in enumerate(plans):
+            name = f"h3-start-{index}.png"
+            self._write_media(name, b"image")
+            clips.append({
+                "index": index, "planned_clip": planned[index],
+                "image_prompt": plan["image_prompt"],
+                "video_prompt": plan["video_prompt"],
+                "start_image_filename": name, "end_image_filename": None,
+                "video_filename": None,
+            })
+        state = {
+            "version": 2, "pipeline_id": pid, "status": "failed",
+            "phase": "failed", "created_at": 1.0, "output_files": [],
+            "pipeline_type": "short_film_story", "video_model": "minimax_h3",
+            "clip_plans": plans, "planned_clips": planned, "clips": clips,
+            "_params_snapshot": {
+                "pipeline_type": "short_film_story", "auto_mode": True,
+                "scene_description": "A keeper climbs the lighthouse.",
+                "image_model": "qwen_image_21_turbo",
+                "video_model": "minimax_h3",
+                "provided_clip_plans": plans, "planned_clips": planned,
+            },
+        }
+        path = os.path.join(self.temp_dir.name, f"_director_pipeline_{pid}.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(state, handle)
+
+    def test_finished_run_accepts_edits_and_delete_during_h3_unload(self):
+        # PG20/PG21 (final unattended GPU pass): a run says ``completed`` while
+        # its worker still unloads the H3 model (1-6 s on real hardware), and
+        # every edit answered 409 and DELETE "still running" until it ended.
+        pid = "pipe-h3-unload"
+        self._h3_resumable_state(pid)
+        in_teardown = threading.Event()
+        finish_teardown = threading.Event()
+
+        def release_model():
+            in_teardown.set()
+            finish_teardown.wait(timeout=10)
+
+        def fake_video(pipeline_id, params, clip_plans, *args, **kwargs):
+            names = [f"h3-clip-{i}.mp4" for i in range(len(clip_plans))]
+            for name in names:
+                self._write_media(name, b"video")
+            return pipeline._DirectorOutputs(names, dict(enumerate(names)))
+
+        pipeline._wgp = SimpleNamespace(
+            save_path=self.temp_dir.name, image_save_path=self.temp_dir.name,
+            server_config={"save_path": self.temp_dir.name},
+            wan_model=object(), release_model=release_model,
+            get_model_def=lambda model: {"architecture": "minimax_h3"},
+        )
+        gen_lock = threading.Lock()
+        try:
+            with (
+                patch.object(pipeline, "_gen_lock", gen_lock),
+                patch.object(pipeline, "_validate_director_models"),
+                patch.object(
+                    pipeline, "_create_director_video_execution_profile",
+                    return_value={},
+                ),
+                patch.object(
+                    pipeline, "_run_video_generation", side_effect=fake_video,
+                ),
+            ):
+                try:
+                    ok, _message = pipeline.resume_pipeline(
+                        pid, self.temp_dir.name,
+                    )
+                    self.assertTrue(ok)
+                    self.assertTrue(in_teardown.wait(timeout=10))
+                    # Only the model is still unloading, under the GPU lock.
+                    self.assertFalse(gen_lock.acquire(blocking=False))
+                    self.assertEqual(
+                        pipeline.get_pipeline(pid)["status"], "completed",
+                    )
+                    pipeline.update_clip_tag(
+                        self.temp_dir.name, pid, 0, "good",
+                    )
+                    self.assertTrue(
+                        pipeline.delete_pipeline(self.temp_dir.name, pid)["ok"],
+                    )
+                finally:
+                    finish_teardown.set()
+                    deadline = time.time() + 5
+                    while (
+                        gen_lock.locked() and time.time() < deadline
+                    ):
+                        time.sleep(0.005)
+        finally:
+            finish_teardown.set()
+
+    def test_resume_during_h3_unload_starts_one_worker_and_waits_for_the_lock(self):
+        # The unload no longer keeps a finished run "busy", so a Resume sent
+        # inside that window is accepted: it must register exactly ONE worker
+        # (the finishing thread must not drop or duplicate it) and its video
+        # job must still wait for the unload that holds the shared GPU lock.
+        pid = "pipe-h3-resume-in-unload"
+        self._h3_resumable_state(pid)
+        in_teardown = threading.Event()
+        finish_teardown = threading.Event()
+        teardown_done = threading.Event()
+        lock_taken_after_teardown = []
+
+        def release_model():
+            in_teardown.set()
+            finish_teardown.wait(timeout=10)
+            teardown_done.set()
+
+        gen_lock = threading.Lock()
+        calls = []
+
+        def fake_video(pipeline_id, params, clip_plans, *args, **kwargs):
+            calls.append(pipeline_id)
+            # What the generation worker does for every child job.
+            with gen_lock:
+                lock_taken_after_teardown.append(teardown_done.is_set())
+            names = [f"h3-clip-{i}.mp4" for i in range(len(clip_plans))]
+            for name in names:
+                self._write_media(name, b"video")
+            return pipeline._DirectorOutputs(names, dict(enumerate(names)))
+
+        pipeline._wgp = SimpleNamespace(
+            save_path=self.temp_dir.name, image_save_path=self.temp_dir.name,
+            server_config={"save_path": self.temp_dir.name},
+            wan_model=object(), release_model=release_model,
+            get_model_def=lambda model: {"architecture": "minimax_h3"},
+        )
+        try:
+            with (
+                patch.object(pipeline, "_gen_lock", gen_lock),
+                patch.object(pipeline, "_validate_director_models"),
+                patch.object(
+                    pipeline, "_create_director_video_execution_profile",
+                    return_value={},
+                ),
+                patch.object(
+                    pipeline, "_run_video_generation", side_effect=fake_video,
+                ),
+            ):
+                try:
+                    ok, _message = pipeline.resume_pipeline(
+                        pid, self.temp_dir.name,
+                    )
+                    self.assertTrue(ok)
+                    self.assertTrue(in_teardown.wait(timeout=10))
+                    self.assertNotIn(pid, pipeline._pipeline_threads)
+                    # The first run's own video call is over: only the
+                    # Resume's child job is counted from here on.
+                    del lock_taken_after_teardown[:]
+                    # A video is missing again (rerun-style Resume).
+                    state_path = os.path.join(
+                        self.temp_dir.name,
+                        f"_director_pipeline_{pid}.json",
+                    )
+                    with open(state_path, "r", encoding="utf-8") as handle:
+                        saved = json.load(handle)
+                    for clip in saved["clips"]:
+                        clip["video_filename"] = None
+                    saved["status"] = "failed"
+                    with open(state_path, "w", encoding="utf-8") as handle:
+                        json.dump(saved, handle)
+                    ok2, _message2 = pipeline.resume_pipeline(
+                        pid, self.temp_dir.name,
+                    )
+                    self.assertTrue(ok2)
+                    self.assertEqual(
+                        [p for p in pipeline._pipeline_threads if p == pid],
+                        [pid],
+                    )
+                    # Still inside the unload: the child job is waiting.
+                    time.sleep(0.3)
+                    self.assertEqual(lock_taken_after_teardown, [])
+                finally:
+                    finish_teardown.set()
+                deadline = time.time() + 10
+                while time.time() < deadline and (
+                    pid in pipeline._pipeline_threads
+                    or any(
+                        thread.name.endswith("(_run_pipeline_worker)")
+                        for thread in threading.enumerate()
+                    )
+                ):
+                    time.sleep(0.01)
+                self.assertNotIn(pid, pipeline._pipeline_threads)
+                self.assertEqual(lock_taken_after_teardown, [True])
+        finally:
+            finish_teardown.set()
+
+    def _completed_clip(self, pid: str) -> None:
+        record = self._add_pipeline(pid, "completed")
+        record["phase"] = "completed"
+        record["clip_plans"] = [{
+            "image_prompt": "shore",
+            "video_prompt": 'The keeper walks past a sign reading "OPEN".',
+        }]
+        self.assertTrue(pipeline._save_pipeline_state(pid))
+
+    def test_terminal_pipeline_with_no_live_job_accepts_an_edit(self):
+        # PG20: the saved run is completed, but a finished child (or a worker
+        # thread that has already exited) still made every later edit 409.
+        pid = "pipe-terminal-stale"
+        self._completed_clip(pid)
+        pipeline._jobs["jobdone"] = {
+            "id": "jobdone",
+            "status": "completed",
+            "phase": "completed",
+            "message": "Done!",
+        }
+        pipeline._pipeline_child_jobs[pid] = {"jobdone"}
+        dead = threading.Thread(target=lambda: None)
+        dead.start()
+        dead.join()
+        pipeline._pipeline_threads[pid] = dead
+
+        self.assertFalse(pipeline.any_pipeline_active())
+        self.assertTrue(
+            pipeline.update_clip_tag(self.temp_dir.name, pid, 0, "good"),
+        )
+        self.assertNotIn(pid, pipeline._pipeline_child_jobs)
+        self.assertNotIn(pid, pipeline._pipeline_threads)
+        saved = pipeline.load_pipeline_state(self.temp_dir.name, pid)
+        self.assertEqual(saved["clips"][0]["tag"], "good")
+
+    def test_a_running_job_on_a_finished_pipeline_names_itself(self):
+        pid = "pipe-live-job"
+        self._completed_clip(pid)
+        pipeline._jobs["joblive"] = {
+            "id": "joblive",
+            "status": "running",
+            "phase": "generating_video",
+            "message": "Generating video...",
+        }
+        pipeline._pipeline_child_jobs[pid] = {"joblive"}
+
+        with self.assertRaises(pipeline.PipelineBusyError) as raised:
+            pipeline.update_clip_tag(self.temp_dir.name, pid, 0, "good")
+
+        message = str(raised.exception)
+        self.assertIn("joblive", message)
+        self.assertIn("generating_video", message)
+        self.assertIn(pid, pipeline._pipeline_child_jobs)
+        saved = pipeline.load_pipeline_state(self.temp_dir.name, pid)
+        self.assertIsNone(saved["clips"][0].get("tag"))
+
+    def test_two_edits_at_once_one_is_rejected(self):
+        pid = "pipe-two-edits"
+        self._completed_clip(pid)
+        started = threading.Event()
+        release = threading.Event()
+
+        def slow_tag(*_args, **_kwargs):
+            started.set()
+            self.assertTrue(release.wait(timeout=5))
+            return True
+
+        def first():
+            pipeline.update_clip_tag(self.temp_dir.name, pid, 0, "good")
+
+        with patch.object(pipeline, "_update_clip_tag_locked", side_effect=slow_tag):
+            worker = threading.Thread(target=first)
+            worker.start()
+            try:
+                self.assertTrue(started.wait(timeout=2))
+                with self.assertRaises(pipeline.PipelineBusyError) as raised:
+                    pipeline.update_clip_tag(
+                        self.temp_dir.name, pid, 0, "needs_work",
+                    )
+                self.assertIn("tag clip 0", str(raised.exception))
+            finally:
+                release.set()
+                worker.join(timeout=3)
+        self.assertFalse(worker.is_alive())
+
+    def test_repeat_waits_for_the_clip_unless_the_caller_asks_not_to(self):
+        # The Studio review reads the new take from this reply: the default stays synchronous.
+        pid = "pipe-repeat-sync"
+        self._completed_clip(pid)
+        with patch.object(
+            pipeline, "_rerun_clip_video_impl", return_value={"filename": "new.mp4", "clip_index": 0},
+        ):
+            result = pipeline.rerun_clip_video(self.temp_dir.name, pid, 0)
+        self.assertEqual(result.get("filename"), "new.mp4")
+
+    def test_repeat_returns_before_the_worker_finishes(self):
+        # The validation client gives up after 60s (status 0, empty body)
+        # because rerun-video blocks until the clip is done.
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from routers import director as director_routes
+
+        pid = "pipe-repeat"
+        self._completed_clip(pid)
+        started = threading.Event()
+        release = threading.Event()
+
+        def slow_video(*_args, **_kwargs):
+            started.set()
+            self.assertTrue(release.wait(timeout=5))
+            return {"filename": "new.mp4", "clip_index": 0}
+
+        app = FastAPI()
+        app.include_router(director_routes.create_director_pipeline_edit_router())
+        previous_init = director_routes._pipeline_init_state.initialized
+        previous_wgp = director_routes.wgp
+        wgp = SimpleNamespace(
+            save_path=self.temp_dir.name,
+            server_config={"save_path": self.temp_dir.name},
+        )
+        director_routes.wgp = wgp
+        director_routes._jobs = pipeline._jobs
+        director_routes._run_generation = lambda job_id: None
+        director_routes._gen_lock = threading.Lock()
+        director_routes._request_generation_cancel = lambda job_id: None
+        director_routes._active_gen_states = {}
+        director_routes._publish_director_task = None
+        director_routes._get_cached_hardware = lambda: {"cuda_available": False}
+        director_routes._pipeline_init_state.initialized = False
+        box: dict = {}
+
+        def post() -> None:
+            try:
+                box["response"] = client.post(
+                    f"/api/v1/director/pipelines/{pid}/clips/0/rerun-video",
+                    json={"wait": False},
+                )
+            except Exception as exc:  # pragma: no cover - surfaced below
+                box["error"] = exc
+
+        try:
+            with (
+                patch.object(
+                    pipeline, "_rerun_clip_video_impl", side_effect=slow_video,
+                ),
+                TestClient(app) as client,
+            ):
+                poster = threading.Thread(target=post)
+                poster.start()
+                try:
+                    self.assertTrue(started.wait(timeout=2))
+                    poster.join(timeout=1)
+                    self.assertFalse(
+                        poster.is_alive(),
+                        "rerun-video blocked until the worker finished",
+                    )
+                    self.assertNotIn("error", box)
+                    response = box["response"]
+                    self.assertEqual(response.status_code, 202)
+                    body = response.json()
+                    self.assertEqual(body.get("clip_index"), 0)
+                    self.assertIn("filename", body)
+                    refused = client.put(
+                        f"/api/v1/director/pipelines/{pid}/clips/0/tag",
+                        json={"tag": "good"},
+                    )
+                    self.assertEqual(refused.status_code, 409)
+                    self.assertIn("rerun-video", refused.json().get("error", ""))
+                finally:
+                    release.set()
+                    poster.join(timeout=5)
+                self.assertFalse(poster.is_alive())
+                deadline = time.time() + 3
+                while (
+                    pid in pipeline._pipeline_operations
+                    and time.time() < deadline
+                ):
+                    time.sleep(0.01)
+                allowed = client.put(
+                    f"/api/v1/director/pipelines/{pid}/clips/0/tag",
+                    json={"tag": "good"},
+                )
+                self.assertEqual(allowed.status_code, 200, allowed.text)
+        finally:
+            director_routes._pipeline_init_state.initialized = previous_init
+            director_routes.wgp = previous_wgp
 
 
 if __name__ == "__main__":

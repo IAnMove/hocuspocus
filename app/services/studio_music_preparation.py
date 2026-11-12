@@ -21,6 +21,8 @@ from services.music_model_contract import (
     YUE2_LOCAL,
     MusicModelError,
     assert_enqueue_guard,
+    is_paid_music_model,
+    paid_music_disabled_message,
     require_catalog_entry,
 )
 from services.lyrics_language import validate_lyrics_language
@@ -90,6 +92,8 @@ def _choice_values(choices: Any) -> list[Any]:
 
 
 def _validate_model(model_type: str, definition: dict[str, Any], model_downloaded) -> None:
+    if is_paid_music_model(model_type):
+        raise ValueError(paid_music_disabled_message(model_type))
     if model_type not in STUDIO_MUSIC_MODEL_TYPES:
         raise ValueError("Choose a registered local music model; remote models use another operation")
     if definition.get("audio_only") is not True or definition.get("image_outputs"):

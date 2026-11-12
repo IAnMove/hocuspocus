@@ -1,13 +1,25 @@
 import { useUiTranslation } from '../../i18n'
 import type { Scene3DSlot } from './types'
 
-export function Scene3DObjectList({ slots, selectedId, onSelect }: { slots: readonly Scene3DSlot[]; selectedId?: string; onSelect: (id: string) => void }) {
+export function Scene3DObjectList({ slots, selectedId, onSelect, sceneLabel, sceneSelected = false }: {
+  slots: readonly Scene3DSlot[]
+  selectedId?: string
+  onSelect: (id: string) => void
+  sceneLabel?: string
+  sceneSelected?: boolean
+}) {
   const { t } = useUiTranslation('scene3dEditor')
   const { t: sceneT } = useUiTranslation('scene3d')
   return <section className="space-y-2 rounded-xl border border-border bg-bg-secondary p-3" aria-label={t('objects.title')}>
     <h3 className="text-sm font-semibold">{t('objects.title')} ({slots.length})</h3>
     <p className="text-sm text-text-muted">{t('objects.hint')}</p>
     <ul className="max-h-64 space-y-1 overflow-y-auto" data-testid="scene3d-object-list">
+      {sceneLabel && <li>
+        <button type="button" data-testid="scene3d-desk-scene" aria-pressed={sceneSelected} onClick={() => onSelect('')}
+          className={`flex min-h-11 w-full rounded-lg border px-3 py-2 text-left text-sm font-medium ${sceneSelected ? 'border-cyan-300 bg-cyan-300/15 text-cyan-50' : 'border-border text-text-primary'}`}>
+          {sceneLabel}
+        </button>
+      </li>}
       {slots.map(slot => <li key={slot.id}>
         <button type="button" onClick={() => onSelect(slot.id)} aria-pressed={selectedId === slot.id} data-slot-id={slot.id}
           className={`flex min-h-11 w-full flex-col rounded-lg border px-3 py-2 text-left text-sm ${selectedId === slot.id ? 'border-cyan-300 bg-cyan-300/15 text-cyan-50' : 'border-border text-text-primary'}`}>

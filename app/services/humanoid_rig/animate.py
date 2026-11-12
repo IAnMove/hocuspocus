@@ -20,7 +20,7 @@ def animate_humanoid(
     path: dict | None = None,
     interactions: list[dict] | None = None,
 ) -> tuple[bytes, list[dict], list[str]]:
-    """Return ``(glb, clips, warnings)``. ``clips`` is ``[{index, name, duration, contacts}]``.
+    """Return ``(glb, clips, warnings)``. ``clips`` is ``[{index, name, duration, contacts}]``, plus ``loop`` for library clips.
 
     ``path`` (``{points: [[x, z], ...], duration, name?}``, model-space metres) adds one walk along it
     with the feet planted in the world; the clip moves the hips, so the slot itself stays still.
@@ -44,7 +44,7 @@ def animate_humanoid(
     data, start = append_animation_clips(bytes(source), clips)
     listed = [
         {"index": start + index, "name": str(clip["name"]), "duration": float(clip["duration"]),
-         "contacts": list(clip.get("contacts", []))}
+         **({"loop": bool(clip["loop"])} if "loop" in clip else {}), "contacts": list(clip.get("contacts", []))}
         for index, clip in enumerate(clips)
     ]
     return data, listed, warnings
@@ -57,7 +57,8 @@ def interaction_clip(rig, spec: dict) -> dict:
     kind = spec.get("kind")
     duration = spec.get("duration")
     if kind == "sit":
-        return sit_clip(rig, spec.get("seat"), duration or 3.0, bool(spec.get("stand_up")), spec.get("look"), str(spec.get("name") or "Sit"))
+        return sit_clip(rig, spec.get("seat"), duration or 3.0, bool(spec.get("stand_up")), spec.get("look"), str(spec.get("name") or "Sit"),
+                        spec.get("hands"))
     if kind == "reach":
         return reach_clip(rig, spec.get("target"), str(spec.get("hand") or "auto"), duration or 2.0, spec.get("hold", True) is not False,
                           spec.get("look", True) is not False, str(spec.get("name") or "Reach"))

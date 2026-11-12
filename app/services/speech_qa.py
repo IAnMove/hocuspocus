@@ -22,7 +22,10 @@ from typing import Any
 
 import numpy as np
 
-from services.speech_language import speech_language_code
+from services.speech_language import spoken_language_code
+from services.speech_text_es import merge_names, token_error_rate, wer_threshold
+from services.voice_cleanliness import describe, measure_cleanliness
+from services.voice_pitch import pitch_notice
 
 OPERATION = "qa.speech"
 CKPTS = Path(__file__).resolve().parents[1] / "ckpts"
@@ -107,9 +110,27 @@ def _edges(audio: np.ndarray, rate: int) -> tuple[float, float]:
     return round(loud[0] / rate, 2), round((len(audio) - loud[-1]) / rate, 2)
 
 
+def _spectrum(audio: np.ndarray, rate: int) -> tuple[float, float]:
+    """``(centroidHz, highRatio)`` from one numpy rfft of the whole signal.
+
+    ``highRatio`` is the share of power at or above 3000 Hz. A silent or DC take is (0, 0).
+    Librosa is not used: the CI image does not install it.
+    """
+    if audio.size == 0 or rate <= 0:
+        return 0.0, 0.0
+    power = np.abs(np.fft.rfft(np.asarray(audio, dtype=np.float64))) ** 2
+    total = float(power.sum())
+    if total <= 0:
+        return 0.0, 0.0
+    freqs = np.fft.rfftfreq(audio.shape[0], d=1.0 / rate)
+    centroid = float((freqs * power).sum() / total)
+    high = float(power[freqs >= 3000].sum() / total)
+    return round(centroid, 1), round(high, 4)
+
+
 def _warnings(result: dict[str, Any], pitch_range: list[float] | None) -> list[str]:
     found = []
-    if result["wer"] > MAX_WER:
+    if result["wer"] > result["wer_threshold"]:
         found.append(f"The transcript differs from the text (word error rate {result['wer']:.2f})")
     pitch = result["medianPitchHz"]
     if pitch_range and pitch is not None and not pitch_range[0] <= pitch <= pitch_range[1]:
@@ -118,26 +139,49 @@ def _warnings(result: dict[str, Any], pitch_range: list[float] | None) -> list[s
         found.append(f"Pace {result['wordsPerSecond']:.1f} words/s is outside {PACE_RANGE[0]}–{PACE_RANGE[1]}")
     if max(result["leadSilence"], result["trailSilence"]) > MAX_EDGE_SILENCE:
         found.append("More than 0.6 s of silence at the start or end")
+    if (result.get("cleanliness") or {}).get("verdict") == "unclean":
+        found.append(describe(result["cleanliness"]))
     return found
 
 
+def _compared(text: str, transcript: str, code: str, names: list[str] | None) -> tuple[float, float, float]:
+    """``(wer, wer_raw, wer_threshold)``. Spanish compares sounds and proper names."""
+    raw = word_error_rate(text, transcript, code or "en")
+    spanish = code == "es"
+    if not spanish:
+        return raw, raw, MAX_WER
+    reference = words(text, "es")
+    heard = words(transcript, "es")
+    wer = token_error_rate(merge_names(reference, names), merge_names(heard, names))
+    return wer, raw, wer_threshold(len(reference), spanish=True, floor=MAX_WER)
+
+
 def measure_speech(path: str, text: str, language: str = "", *, pitch_range: list[float] | None = None,
-                   load: Callable = _load, transcribe: Callable = _transcribe,
-                   pitch: Callable = _median_pitch) -> dict[str, Any]:
-    """Transcript, word error rate, median pitch, pace and edge silence for one take."""
-    code = str(speech_language_code(language or "") or "").split("-")[0].lower()
+                   names: list[str] | None = None, load: Callable = _load, transcribe: Callable = _transcribe,
+                   pitch: Callable = _median_pitch, brightness: Callable = _spectrum,
+                   cleanliness: Callable = measure_cleanliness) -> dict[str, Any]:
+    """Transcript, word error rate, median pitch, brightness, pace, edge silence and cleanliness for one take."""
+    # No language: the expected text tells es/en, so numbers are spelled and heard in that language.
+    code = str(spoken_language_code(language or "", text) or "").split("-")[0].lower()
     audio, rate = load(path)
     duration = len(audio) / rate
     lead, trail = _edges(audio, rate)
     transcript = transcribe(audio, code)
     spoken = max(0.1, duration - lead - trail)
+    wer, raw, threshold = _compared(text, transcript, code, names)
+    centroid, high_ratio = brightness(audio, rate)
     result = {
-        "transcript": transcript, "wer": round(word_error_rate(text, transcript, code or "en"), 3),
-        "medianPitchHz": pitch(audio, rate), "duration": round(duration, 2),
+        "transcript": transcript, "wer": round(wer, 3), "wer_raw": round(raw, 3),
+        "wer_threshold": round(threshold, 3),
+        "medianPitchHz": pitch(audio, rate), "centroidHz": centroid, "brightness": high_ratio,
+        "duration": round(duration, 2),
         "wordsPerSecond": round(len(words(text, code or "en")) / spoken, 2),
-        "leadSilence": lead, "trailSilence": trail,
+        "leadSilence": lead, "trailSilence": trail, "cleanliness": cleanliness(audio, rate),
     }
     result["warnings"] = _warnings(result, pitch_range)
+    notice = pitch_notice(result["medianPitchHz"], pitch_range)
+    if notice:
+        result["pitch_out_of_range"] = notice
     return result
 
 
@@ -147,7 +191,12 @@ def command_catalog() -> list[dict[str, Any]]:
         "mutation": False,
         "description": ("Check a spoken take against its text without listening: Whisper transcript, word error rate "
                         "(numbers and percentages compared spelled out), median pitch in Hz, words per second and silence "
-                        "at both ends, plus warnings. file is a workspace audio file; language a code or label "
+                        "at both ends, plus warnings. cleanliness reports the noise floor in dBFS, the SNR in dB, the share "
+                        "of energy under 100 Hz (lowEndPct) and between 40 and 100 Hz (bassPct), clipping and a verdict "
+                        "(clean, unclean or inconclusive for a short clip or one without pauses); a clean voice has a noise "
+                        "floor at or under -60 dBFS, SNR of 45 dB or more and under 35% bass. Spanish equates b/v, seseo and close proper names and raises "
+                        "wer_threshold for up to four words; wer_raw keeps the older count. names lists people, places "
+                        "and pronunciation keys. file is a workspace audio file; language a code or label "
                         "(es, English, Español). pitch_range [min, max] Hz warns when the median falls outside, for "
                         "example [85, 165] for a low male voice. CPU lane; measures only, never blocks."),
         "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "input"], "properties": {
@@ -157,11 +206,19 @@ def command_catalog() -> list[dict[str, Any]]:
                 "file": {"type": "string", "minLength": 1, "maxLength": 300},
                 "text": {"type": "string", "minLength": 1, "maxLength": 4000},
                 "language": {"type": "string", "maxLength": 40},
+                "names": {"type": "array", "maxItems": 80, "items": {"type": "string", "minLength": 1, "maxLength": 80}},
                 "pitch_range": {"type": "array", "minItems": 2, "maxItems": 2,
                                 "items": {"type": "number", "minimum": 40, "maximum": 600}},
             }},
         }},
     }]
+
+
+def _name_list(value: Any) -> list[str]:
+    from fastapi import HTTPException
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
+        raise HTTPException(422, {"code": "invalid_command", "message": "names must be a list of strings", "retryable": False})
+    return [item.strip() for item in value]
 
 
 def _workspace_file(root: Path, name: str) -> Path:
@@ -184,11 +241,13 @@ def command_handlers(workspace_dir: Callable[[str], str]) -> dict[str, Callable[
             raise HTTPException(422, {"code": "invalid_command", "message": "Use version 1 with input.workspace, file and text", "retryable": False})
         path = _workspace_file(Path(workspace_dir(data["workspace"])).resolve(), data["file"])
         pitch_range = data.get("pitch_range") if isinstance(data.get("pitch_range"), list) else None
+        names = _name_list(data.get("names")) if "names" in data else None
 
         def run() -> dict[str, Any]:
             with resource_scheduler.coordinator.acquire(resource_scheduler.cpu_lane("audio-analysis"),
                                                         task_id=f"speech-qa-{uuid.uuid4().hex}", description="Speech check"):
-                return measure_speech(str(path), data["text"], str(data.get("language") or ""), pitch_range=pitch_range)
+                return measure_speech(str(path), data["text"], str(data.get("language") or ""),
+                                      pitch_range=pitch_range, names=names)
         return {"version": 1, "status": "completed", "operation": OPERATION, "result": await run_in_threadpool(run)}
 
     return {OPERATION: handle}

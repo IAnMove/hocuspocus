@@ -12,9 +12,10 @@ import { mixFxAudio } from '../sceneFx/mix'
 import { sceneAudioWavDataUrl } from '../sceneFx/audioExport'
 import { paintScene2D, type SceneMedia } from '../../lib/scene2d/paint'
 import type { AnimatorLayer, AnimatorScene } from '../../lib/scene2d/types'
-import { sceneProgressFromSeconds, sceneTimeToLayerTime } from '../../lib/sceneTimeline'
+import { sceneProgressFromSeconds, sceneVideoTime } from '../../lib/sceneTimeline'
 import { FrameAccumulator } from '../scene3d/exportQuality.ts'
-import { qualityPaintSize, qualitySampleTimes, type QualityPlan } from './qualityFrame.ts'
+import { heldFrameTime, holdBlock, motionStepOf, shiftHeldFrame, stopMotionJitterOf, stopMotionOffset } from '../stopMotion.ts'
+import { paintVisibleFrame, qualityPaintSize, qualitySampleTimes, type QualityPlan } from './qualityFrame.ts'
 
 type Size = QualityPlan
 type Renderer = { load: (raw: unknown, size: Size) => Promise<void>; frame: (seconds: number) => Promise<string>; audio: () => Promise<string>; dispose: () => void }
@@ -64,9 +65,7 @@ async function syncVideos(current: AnimatorScene, seconds: number) {
   for (const layer of current.layers) {
     const element = media.get(layer.id)
     if (layer.type !== 'video' || !(element instanceof HTMLVideoElement) || !(element.duration > 0)) continue
-    const layerTime = sceneTimeToLayerTime(layer, seconds)
-    const finalFrame = Math.max(0, element.duration - 1 / fps)
-    await seek(element, layer.animation.loop ? layerTime % element.duration : Math.min(finalFrame, layerTime))
+    await seek(element, sceneVideoTime(layer, seconds, element.duration, fps))
   }
 }
 
@@ -80,9 +79,29 @@ function assertRenderable(layer: AnimatorLayer) {
   if (layer.visible && isVisualLayer(layer) && layer.type !== 'effect' && !layer.source.trim() && !hasSequence(layer)) throw new Error(`Layer ${layer.name} has no media source.`)
 }
 
+/** Picture time. A hold repeats one frame; without motionStep the clock is the one the caller asked for. */
+function pictureSeconds(seconds: number): number {
+  if (!scene) return seconds
+  const step = motionStepOf(scene.motionStep)
+  const played = step ? heldFrameTime(seconds, fps, step) : seconds
+  return Math.min(scene.duration, Math.max(0, played))
+}
+
+/** Shake the finished canvas once per hold. Jitter 0 does not read the pixels back. */
+function shiftOutput(seconds: number) {
+  if (!scene) return
+  const step = motionStepOf(scene.motionStep)
+  const jitter = stopMotionJitterOf(scene.stopMotionJitter)
+  if (!step || !(jitter > 0)) return
+  const context = canvas.getContext('2d')
+  if (!context) return
+  const held = pictureSeconds(seconds)
+  shiftHeldFrame(context, canvas.width, canvas.height, stopMotionOffset(holdBlock(held, fps, step), jitter))
+}
+
 async function paintAt(seconds: number, target: HTMLCanvasElement) {
   if (!scene) throw new Error('Load a Video 2D snapshot first')
-  const time = Math.min(scene.duration, Math.max(0, seconds))
+  const time = pictureSeconds(seconds)
   for (const layer of scene.layers) {
     if (layer.sequence?.kind === 'frames') {
       const image = sequenceImages.get(`${layer.id}:${sequenceFrame(layer.sequence, time)}`)
@@ -98,6 +117,67 @@ async function paintAt(seconds: number, target: HTMLCanvasElement) {
   if (!painted) throw new Error('Could not paint the Video 2D frame')
 }
 
+type Scratch = { work: HTMLCanvasElement; sample: HTMLCanvasElement; sampleContext: CanvasRenderingContext2D }
+let scratch: Scratch | null = null
+
+/** The supersample canvases are made once and reused. Two new ones per frame (about 27 MB at 1.5x) waited for the
+ * garbage collector, and a canvas that could not be allocated read back as transparent black without an error. */
+function scratchCanvases(paintSize: { width: number; height: number }): Scratch {
+  if (scratch && scratch.work.width === paintSize.width && scratch.work.height === paintSize.height) return scratch
+  releaseScratch()
+  const work = document.createElement('canvas')
+  work.width = paintSize.width
+  work.height = paintSize.height
+  const sample = document.createElement('canvas')
+  sample.width = canvas.width
+  sample.height = canvas.height
+  const sampleContext = sample.getContext('2d')
+  if (!sampleContext) throw new Error('Could not paint the Video 2D frame')
+  scratch = { work, sample, sampleContext }
+  return scratch
+}
+
+function releaseScratch() {
+  if (!scratch) return
+  scratch.work.width = scratch.work.height = scratch.sample.width = scratch.sample.height = 0
+  scratch = null
+}
+
+/** Before a repaint: drop the supersample canvases and reallocate the output one, in case one of them was lost. */
+function resetCanvases() {
+  releaseScratch()
+  canvas.width = plan.width
+  canvas.height = plan.height
+}
+
+/** One output frame as a PNG data URL, plus the pixels that were read back, so a blank frame can be told. */
+async function renderFrame(seconds: number): Promise<{ frame: string; pixels: ArrayLike<number> }> {
+  if (!scene) throw new Error('Load a Video 2D snapshot first')
+  const times = qualitySampleTimes(plan, seconds, scene.duration)
+  const paintSize = qualityPaintSize(plan)
+  const output = canvas.getContext('2d')
+  if (!output) throw new Error('Could not paint the Video 2D frame')
+  if (times.length === 1 && paintSize.width === canvas.width && paintSize.height === canvas.height) {
+    await paintAt(times[0], canvas)
+    shiftOutput(times[0])
+    return { frame: canvas.toDataURL('image/png'), pixels: output.getImageData(0, 0, canvas.width, canvas.height).data }
+  }
+  const { work, sample, sampleContext } = scratchCanvases(paintSize)
+  const accumulator = new FrameAccumulator(canvas.width * canvas.height * 4)
+  for (const time of times) {
+    await paintAt(time, work)
+    sampleContext.imageSmoothingQuality = 'high'
+    sampleContext.clearRect(0, 0, sample.width, sample.height)
+    sampleContext.drawImage(work, 0, 0, sample.width, sample.height)
+    accumulator.add(sampleContext.getImageData(0, 0, sample.width, sample.height).data)
+  }
+  const image = new ImageData(canvas.width, canvas.height)
+  image.data.set(accumulator.result())
+  output.putImageData(image, 0, 0)
+  shiftOutput(times[0] ?? seconds)
+  return { frame: canvas.toDataURL('image/png'), pixels: image.data }
+}
+
 window.__scene2dExport = {
   async load(raw, size) {
     const next = normalizeScene2D(raw)
@@ -106,6 +186,7 @@ window.__scene2dExport = {
     plan = size
     canvas.width = size.width
     canvas.height = size.height
+    releaseScratch()
     media.clear()
     await Promise.all(next.layers.filter(layer => layer.visible && (layer.type === 'image' || layer.type === 'overlay' || layer.type === 'video') && layer.source.trim()).map(async layer => {
       media.set(layer.id, layer.type === 'video' ? await loadVideo(layer.source) : await loadImage(layer.source))
@@ -121,33 +202,10 @@ window.__scene2dExport = {
   },
   async frame(seconds) {
     if (!scene) throw new Error('Load a Video 2D snapshot first')
-    const times = qualitySampleTimes(plan, seconds, scene.duration)
-    const paintSize = qualityPaintSize(plan)
-    if (times.length === 1 && paintSize.width === canvas.width && paintSize.height === canvas.height) {
-      await paintAt(times[0], canvas)
-      return canvas.toDataURL('image/png')
-    }
-    const work = document.createElement('canvas')
-    work.width = paintSize.width
-    work.height = paintSize.height
-    const sample = document.createElement('canvas')
-    sample.width = canvas.width
-    sample.height = canvas.height
-    const sampleContext = sample.getContext('2d')
-    const output = canvas.getContext('2d')
-    if (!sampleContext || !output) throw new Error('Could not paint the Video 2D frame')
-    const accumulator = new FrameAccumulator(canvas.width * canvas.height * 4)
-    for (const time of times) {
-      await paintAt(time, work)
-      sampleContext.imageSmoothingQuality = 'high'
-      sampleContext.clearRect(0, 0, sample.width, sample.height)
-      sampleContext.drawImage(work, 0, 0, sample.width, sample.height)
-      accumulator.add(sampleContext.getImageData(0, 0, sample.width, sample.height).data)
-    }
-    const image = new ImageData(canvas.width, canvas.height)
-    image.data.set(accumulator.result())
-    output.putImageData(image, 0, 0)
-    return canvas.toDataURL('image/png')
+    return paintVisibleFrame(seconds, attempt => {
+      if (attempt > 0) resetCanvases()
+      return renderFrame(seconds)
+    })
   },
   async audio() {
     if (!scene?.sfx?.some(cue => cue.sound && cue.volume > 0)) return ''
@@ -157,6 +215,7 @@ window.__scene2dExport = {
   dispose() {
     media.forEach(element => { if (element instanceof HTMLVideoElement) element.removeAttribute('src') })
     media.clear()
+    releaseScratch()
     scene = null
   },
 }

@@ -165,6 +165,17 @@ def test_preflight_rejects_blob_urls_and_unknown_media():
     assert error.value.detail["code"] == "unsupported_capability"
 
 
+def test_export_keeps_slot_tilt_and_a_yaw_only_document_omits_it():
+    tilted = _document()
+    tilted["slots"][0]["rotationX"] = 0.4
+    tilted["slots"][0]["rotationZ"] = -0.15
+    frozen = freeze_export_command(_command(intent_id="tilt", document=tilted))
+    slot = frozen["effective"]["input"]["snapshot"]["document"]["slots"][0]
+    assert slot["rotationX"] == 0.4 and slot["rotationZ"] == -0.15 and slot["rotationY"] == 0
+    bare = freeze_export_command(_command(intent_id="yaw"))["effective"]["input"]["snapshot"]["document"]["slots"][0]
+    assert "rotationX" not in bare and "rotationZ" not in bare and bare["rotationY"] == 0
+
+
 def test_voiced_duration_is_an_explicit_preflight_reject():
     document = _document(duration=181, sfx=[{"id": "spark", "kind": "sparks", "start": 0, "end": 1,
                                             "sound": True, "volume": 0.4}])
@@ -191,6 +202,27 @@ def test_short_voiced_scene_is_admitted_with_its_audio_frozen_as_a_ref():
     refs = freeze_export_command(_command(document=spoken))["effective"]["input"]["snapshot"]["refs"]
     assert refs == [{"audioId": "subject_1/voice", "url": "/api/v1/file/voice.wav", "kind": "audio",
                      "filename": "voice.wav", "workspace": WORKSPACE}]
+
+
+def test_a_model_in_a_folder_of_the_workspace_is_found_where_it_is(tmp_path):
+    service = _service(tmp_path, renderer=_paint)
+    slots = [{"id": "subject_1", "slot": "subject_1", "position": [0, 0, 0], "rotationY": 0, "scale": 1, "media": "model3d", "clip": None,
+              "sourceUrl": f"/api/v1/file/pack/horse.glb?workspace={WORKSPACE}"}]
+    refs = freeze_export_command(_command(document=_document(slots=slots)))["effective"]["input"]["snapshot"]["refs"]
+    assert refs == [{"slotId": "subject_1", "url": slots[0]["sourceUrl"], "kind": "model3d", "filename": "horse.glb", "path": "pack/horse.glb",
+                     "workspace": WORKSPACE}]
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent_id="horse-missing", document=_document(slots=slots)))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
+    pack = Path(service.workspace_dir(WORKSPACE)) / "pack"
+    pack.mkdir()
+    (pack / "horse.glb").write_bytes(b"glTF")
+    assert service.submit(_command(intent_id="horse-present", document=_document(slots=slots)))["replayed"] is False
+    forget_task_registry(service._registry(WORKSPACE).workspace_dir)
+    climbing = [{**slots[0], "sourceUrl": f"/api/v1/file/pack/../secret.glb?workspace={WORKSPACE}"}]
+    with pytest.raises(Exception) as error:
+        service.submit(_command(intent_id="horse-climbing", document=_document(slots=climbing)))
+    assert error.value.detail["code"] == "missing_ref"
 
 
 def test_voiced_admission_requires_the_audio_file(tmp_path):
@@ -448,6 +480,36 @@ def test_cancel_keeps_the_document_and_recoverable_partials(tmp_path):
     staging = staging_dir(registry.workspace_dir, "cancel-me")
     assert (staging / "snapshot.json").is_file()
     assert (staging / "frames" / "frame_000001.png").is_file()
+    assert list(Path(registry.workspace_dir).glob("*.mp4")) == []
+
+
+def test_activity_cancel_and_jobs_cancel_stop_an_export_by_its_task_row(tmp_path):
+    """The export's task row names no adapter: Activity's Cancel and jobs.cancel reach it by its operation."""
+    from services import task_controls
+    from services.core_canonical_tasks import control_task
+
+    hold = threading.Event()
+    started = threading.Event()
+
+    def renderer(snapshot, staging, progress, cancelled):
+        started.set()
+        hold.wait(8)
+        if cancelled():
+            raise World3DExportCancelled()
+        return _paint(snapshot, staging, progress, cancelled)
+
+    service = _service(tmp_path, renderer=renderer)
+    client = _client(service, tmp_path)
+    posted = client.post("/api/v1/scenes/world3d/export", json=_command("cancel-by-row"))
+    assert posted.status_code == 200, posted.text
+    started.wait(2)
+    registry = service._registry(WORKSPACE)
+    row = registry.get(posted.json()["receipt"]["taskIds"][0])
+    assert task_controls.handler_for_task(row, "cancel") is not None
+    result = control_task(row, "cancel")
+    assert result["status"] == "cancelled"
+    hold.set()
+    assert _wait(registry, row["id"], {"cancelled"})["status"] == "cancelled"
     assert list(Path(registry.workspace_dir).glob("*.mp4")) == []
 
 
@@ -853,3 +915,31 @@ def test_a_malformed_geometry_report_is_ignored(tmp_path):
     (tmp_path / "geometry.json").write_text(json.dumps({"verdict": "maybe"}))
     assert read_geometry_report(tmp_path) is None
     assert read_geometry_report(tmp_path / "missing") is None
+
+
+def test_a_published_export_releases_its_frames_and_keeps_its_snapshot(tmp_path, monkeypatch):
+    monkeypatch.delenv("HOCUS_KEEP_EXPORT_STAGING", raising=False)
+    service = _service(tmp_path, renderer=_paint)
+    service.submit(_command(intent_id="release-me"))
+    registry = service._registry(WORKSPACE)
+    task_id = registry.command_admission("release-me")["task_id"]
+    _wait(registry, task_id, {"completed"})
+    staging = staging_dir(registry.workspace_dir, "release-me")
+    assert not (staging / "frames").exists() and not (staging / "encoded.mp4").exists(), "intermediates go with the publish"
+    assert (staging / "snapshot.json").is_file(), "what was rendered stays readable"
+    # Staging goes before the task says completed; the published MP4 was moved out of it, so the result is whole.
+    name = registry.get(task_id)["result_refs"][0]
+    assert (Path(registry.workspace_dir) / name).stat().st_size > 0
+    forget_task_registry(registry.workspace_dir)
+
+
+def test_the_full_server_switch_falls_back_to_a_registered_control():
+    """The full server keeps its own Cancel switch; a task it does not know (an export) goes to the registered control."""
+    from services import task_controls
+    from services.canonical_task_sync import _control_canonical_task
+
+    seen = []
+    task_controls.register(OPERATION, "cancel", lambda task: seen.append(task["id"]) or {"status": "cancelled"})
+    row = {"id": "task-1", "workspace": WORKSPACE, "metadata": {"operation": OPERATION}}
+    assert _control_canonical_task(row, "cancel") == {"status": "cancelled"}
+    assert seen == ["task-1"]

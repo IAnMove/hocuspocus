@@ -1,12 +1,13 @@
 # Qwen defaults and prerendered game backgrounds
 
-New production specs and new global production profiles prefer local Qwen Image 2.1.
-Omitted image settings use 40 steps, including named looks that previously inherited
-Flux's four-step setting. Explicit model and step choices remain authoritative;
+New production specs and new global production profiles prefer local Qwen Image 2.1 Turbo
+(the base Qwen Image 2.1 when only that is installed). Omitted image settings use the
+model's own steps (8 for the Turbo, 40 for the base), including named looks that previously
+inherited Flux's four-step setting. Explicit model and step choices remain authoritative;
 existing saved production specs and user profiles are not migrated.
 
 The production default inspects NVIDIA capacity without initializing CUDA. A single
-10–16 GiB device selects Qwen Image 2.1 GGUF Q4_K; >=16 GiB selects INT8 ConvRot.
+10–16 GiB device selects Qwen Image 2.1 GGUF Q4_K (no quantized Turbo exists); >=16 GiB selects the Turbo.
 Unknown hardware, multiple GPUs and devices below 10 GiB retain the Qwen selector
 and need an explicit suitable configuration. Model installation and resource checks
 still apply. This is a conservative capacity heuristic, not a benchmark proving

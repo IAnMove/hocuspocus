@@ -21,6 +21,8 @@ type Props = { saveRef?: RefObject<(() => Promise<void>) | null>; workspace: str
   lockIdentity?: boolean; spacious?: boolean; onDirtyChange?: (dirty: boolean) => void;
   initialDraft?: CharacterDefinitionDraft; onDraftChange?: (draft: CharacterDefinitionDraft) => void;
   initialKit?: CharacterKit; onSaved?: (kit: CharacterKit) => void | Promise<void>;
+  /** Open the speech workshop on this pose of the kit (its face rig). */
+  initialPoseId?: string;
   onApply?: (patch: Partial<Scene3DSlot>) => void; onBusyChange?: (busy: boolean) => void }
 
 function initialDefinition(workspace: string, slot?: Scene3DSlot, kit?: CharacterKit) {
@@ -72,7 +74,7 @@ function DefinitionIdentity({ library, initialKit, id, disabled, onSelect }: {
   onSelect: (id: string, kit?: CharacterKit) => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
-  return <label className="block">{t('speech.savedCharacter')}<select data-testid="saved-character" value={id} disabled={disabled}
+  return <label className="block">{t('speech.savedCharacter')}<select aria-label={t('speech.savedCharacter')} data-testid="saved-character" value={id} disabled={disabled}
     className="mt-1 min-h-10 w-full rounded border border-border bg-bg-primary px-2"
     onChange={event => onSelect(event.target.value, library?.kits[event.target.value])}>
     <option value="">{t('speech.newCharacter')}</option>
@@ -84,7 +86,7 @@ function DefinitionIdentity({ library, initialKit, id, disabled, onSelect }: {
 export function CharacterDefinitionEditor(props: Props) {
   return <ScopedDefinition key={props.workspace + '/' + (props.slot?.id ?? props.initialKit?.id ?? '')} {...props} />
 }
-function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onApply, onBusyChange, onDirtyChange, lockIdentity, spacious, initialDraft, onDraftChange, saveRef }: Props) {
+function ScopedDefinition({ workspace, slot, disabled, initialKit, initialPoseId, onSaved, onApply, onBusyChange, onDirtyChange, lockIdentity, spacious, initialDraft, onDraftChange, saveRef }: Props) {
   const { t } = useUiTranslation('scene3dEditor')
   const [library, setLibrary] = useState<CharacterKitLibrary>()
   const initial = { ...initialDefinition(workspace, slot, initialKit), ...initialDraft }
@@ -154,7 +156,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
           const patch = await characterSlotPatch(kit!, workspace, library!.revision, slot)
           if (alive.current) { setVoice(kit!.voice); setName(kit!.name); onApply?.(patch); setNotice(t('speech.characterApplied')) }
         })}>{t('speech.useCharacter')}</button>}
-      <label className="block">{t('speech.definitionName')}<input data-testid="character-name" maxLength={240}
+      <label className="block">{t('speech.definitionName')}<input aria-label={t('speech.definitionName')} data-testid="character-name" maxLength={240}
         className="mt-1 min-h-10 w-full rounded border border-border bg-bg-primary px-2" value={name} onChange={e => setName(e.target.value)} /></label>
       <DefinitionModelInput slot={slot} kit={kit} items={items} model={model} workspace={workspace} onChoose={setModel} />
       <CharacterVoiceFields key={id} workspace={workspace} value={voice} savedKits={Object.values(library?.kits ?? {})} onBusyChange={setVoiceBusy} onChange={next => {
@@ -175,7 +177,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, onSaved, onAp
           setName(restored?.name ?? ''); setVoice(restored?.voice); setVoicesByLanguage(restored?.voicesByLanguage); setModel(undefined)
         }
       })}>{t('speech.reloadLibrary')}</button>
-      {!slot && <CharacterDefinitionSpeechTools workspace={workspace} kit={library?.kits[id]}
+      {!slot && <CharacterDefinitionSpeechTools workspace={workspace} kit={library?.kits[id]} initialPoseId={initialPoseId}
         disabled={busy || dirty} saveRef={workshopSave} onDirtyChange={setWorkshopDirty} onBusyChange={setWorkshopBusy}
         onSaved={async saved => { setLibrary(saved); await onSaved?.(saved.kits[id]) }} />}
       {!slot && kit?.speech3d && <button data-testid="edit-character-face" className="min-h-10 rounded border border-border px-3" disabled={speechBusy} onClick={() => run(async () => {

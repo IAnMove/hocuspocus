@@ -134,7 +134,8 @@ def _dialogue_sentence(item: Any, speaker_ids: dict[str, str]) -> str:
         requested_id = speaker_ids.get(key) or f"S{len(speaker_ids) + 1}"
     speaker_ids.setdefault(key, requested_id)
     stable_id = speaker_ids[key]
-    language = _compact(item.get("language") or "English", 30)
+    from .director.spoken_language import spoken_language_of
+    language = _compact(item.get("language") or spoken_language_of(text), 30)
     delivery = _compact(item.get("delivery") or "speaks naturally", 100)
     action = _compact(item.get("action") or "", 120)
     lead = f"{speaker} ({stable_id}) {delivery}"

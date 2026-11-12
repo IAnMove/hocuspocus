@@ -18,7 +18,7 @@ def test_graphics_catalog_lists_the_drawings():
     detail = query_catalog({"kind": "graphics", "detail": True})["result"]
     assert detail["entries"] == GRAPHICS_CATALOG["entries"]
     summary = query_catalog({})["result"]["kinds"]
-    assert summary[-1] == {"kind": "graphics", "count": 7}
+    assert {"kind": "graphics", "count": 7} in summary
     for entry in detail["entries"]:
         params = entry["params"]
         assert 3 <= len(params) <= 6

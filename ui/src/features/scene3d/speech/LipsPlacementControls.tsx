@@ -25,7 +25,7 @@ export function LipsPlacementControls({ speech, hasModel, calibrate, onChange, o
       {t(speech.face ? 'speech.editLips' : 'speech.addLips')}
     </button>
     {onPick && <button type="button" disabled={!hasModel} className={speechInput} onClick={() => { setEditing(true); onPick() }}>{t('speech.pickLips')}</button>}
-    {speech.face && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={speech.enabled}
+    {speech.face && <label className="flex items-center gap-2 text-xs"><input aria-label={t('speech.enabled')} type="checkbox" checked={speech.enabled}
       onChange={event => onChange({ ...speech, enabled: event.target.checked })} />{t('speech.enabled')}</label>}
     {notice && <p role="status" className="text-xs text-amber-200">{notice}</p>}
     {editing && <FaceControls speech={speech} onChange={onChange} initiallyOpen />}

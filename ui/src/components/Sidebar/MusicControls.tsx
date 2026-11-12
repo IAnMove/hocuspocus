@@ -33,7 +33,7 @@ export function AutoGrowTextarea({
     el.style.height = `${el.scrollHeight}px`
   }, [value])
   return (
-    <textarea
+    <textarea aria-label={placeholder}
       ref={ref}
       value={value}
       onChange={e => onChange(e.target.value)}
@@ -138,7 +138,7 @@ export function MusicControls() {
           <Music size={12} /> {t('music.song')}
         </label>
         <label className="flex items-center gap-1.5 cursor-pointer group text-[10px] text-text-secondary hover:text-text-primary transition-colors">
-          <input
+          <input aria-label={t('music.instrumental')}
             type="checkbox"
             checked={instrumental}
             onChange={e => toggleInstrumental(e.target.checked)}

@@ -111,7 +111,7 @@ function CompareSelect({
   return (
     <label className="text-[10px] uppercase tracking-wider text-text-muted">
       {copy.compareWith}
-      <select
+      <select aria-label={copy.compareWith}
         className="ml-2 rounded border border-border bg-bg-tertiary px-1 py-0.5 text-[11px]"
         value={compareId}
         onChange={event => onChange(event.target.value)}

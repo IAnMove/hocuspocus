@@ -65,7 +65,9 @@ def test_family_filters_templates():
 
 def test_q_matches_id_and_name_case_insensitively(monkeypatch):
     found = query_catalog({"kind": "templates", "q": "ESTABLISHING"})["result"]
-    assert [item["id"] for item in found["entries"]] == ["cinema-establishing"]
+    first, *others = found["entries"]
+    assert first["id"] == "cinema-establishing", "the literal id word"
+    assert all(item["score"] < first["score"] for item in others), "the rest only through a synonym"
     monkeypatch.setitem(
         CATALOGS,
         "scenes.fonts.catalog",
@@ -112,7 +114,8 @@ def test_http_catalog_uses_the_same_filters():
     filtered = client.get("/api/v1/scenes/catalog", params={"kind": "templates", "family": "cinema", "q": "establishing"})
     assert filtered.status_code == 200
     body = filtered.json()["result"]
-    assert [item["id"] for item in body["entries"]] == ["cinema-establishing"]
+    assert body["entries"][0]["id"] == "cinema-establishing"
+    assert {item["family"] for item in query_catalog({"kind": "templates", "family": "cinema", "q": "establishing", "detail": True})["result"]["entries"]} == {"cinema"}
     unknown = client.get("/api/v1/scenes/catalog", params={"kind": "shaders"})
     assert unknown.status_code == 422
     assert unknown.json()["detail"]["code"] == "catalog_unknown_kind"

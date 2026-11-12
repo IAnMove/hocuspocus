@@ -3,6 +3,15 @@
 Workspace collections are logical groups of canonical project, asset and
 Production IDs. They do not select an output folder or move source files.
 
+Do not confuse this catalog with the **output-folder** tools
+`workspaces.list` and `workspaces.create` (`app/services/workspace_folder_commands.py`).
+Those call `GET`/`POST /api/v1/workspaces` (name, path, file count, active
+folder). A name is `[A-Za-z0-9][A-Za-z0-9_-]*`; creating an existing name
+returns it unchanged, so a retry is the receipt (`workspaces.list`). They
+live in the series and game MCP profiles. See
+[WIZARD_MCP_USAGE](WIZARD_MCP_USAGE.md#before-you-start). This file is only
+the five `collections.*` operations.
+
 The collection command circuit uses the existing `WorkspaceRegistry` as its
 only data authority. The web editor, Wizard and MCP call the same versioned
 operations. No worker, generation queue or second collection registry is added.
@@ -131,8 +140,9 @@ For `tools/call`, use the operation name as the tool name and put `version`,
 `input` and (for mutations) `intent_id` in `arguments`; omit `operation` there.
 Responses expose structured content and readable JSON. Command errors set
 `isError` and include the same structured error fields. The HTTP command routes
-inherit the application's existing LAN authentication and cross-origin mutation
-guards; adding the routes does not disable or bypass those guards.
+inherit the application's existing LAN authentication (full server only; the
+core server has no LAN gate, see [LAN_AUTH](LAN_AUTH.md)) and cross-origin
+mutation guards; adding the routes does not disable or bypass those guards.
 
 The ten legacy tools keep their names. Legacy `organize` continues to require
 nonempty exact asset membership and returns its original record shape. New

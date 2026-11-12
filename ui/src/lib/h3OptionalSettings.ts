@@ -39,6 +39,7 @@ export function h3ModelSwitchSettings(params: GenerateParams, modelType: string)
   let attention = params.override_attention
   if (native && fused && attention !== 'sdpa') attention = 'sla'
   if (native && !fused && attention === 'sla') attention = undefined
+  if (native && modelType.includes('_fasth3') && attention === 'sol') attention = undefined
   if (!native && (attention === 'sla' || attention === 'sol')) attention = undefined
   return { ...restoreSemanticBridgeSettings(params, modelType), override_attention: attention }
 }

@@ -1,3 +1,5 @@
+import i18n from '../../i18n'
+
 export type AgentActionRisk = 'read' | 'edit' | 'compute' | 'external_cost'
 
 export type AgentExecutionState =
@@ -60,6 +62,7 @@ const EXPENSIVE_ACTIONS = new Set([
   'export_video_editor',
   'mount_videoclip_alternative_song',
   'remove_background',
+  'lipsync_redo',
 ])
 
 const QUEUED_ACTIONS = new Set(['start_generation', 'queue_sfx_pack', 'render_series_shots', 'export_video_editor', 'mount_videoclip_alternative_song', 'remove_background'])
@@ -142,9 +145,7 @@ export function bindGenerateComicTarget(
   currentTitle: string,
 ): string {
   if (createdProjectId && createdProjectId !== currentProjectId) {
-    throw new Error(
-      `No dibujo un cómic anterior: generate_comic debe usar el proyecto recién creado (${createdProjectId}), no “${currentTitle}”.`,
-    )
+    throw new Error(i18n.t('wizard:actionErrors.comicNotJustCreated', { createdProjectId, currentTitle }))
   }
   return createdProjectId || currentProjectId
 }
@@ -155,9 +156,7 @@ export function bindDirectorProductionTarget(
   currentTitle: string,
 ): string {
   if (stagedProductionId && stagedProductionId !== currentProductionId) {
-    throw new Error(
-      `No inicio una producción anterior: start_director_production debe usar la producción recién preparada (${stagedProductionId}), no “${currentTitle}”.`,
-    )
+    throw new Error(i18n.t('wizard:actionErrors.productionNotJustStaged', { stagedProductionId, currentTitle }))
   }
   return stagedProductionId || currentProductionId
 }

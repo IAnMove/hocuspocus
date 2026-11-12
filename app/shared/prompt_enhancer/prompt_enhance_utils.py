@@ -180,6 +180,10 @@ def _merge_prompt_enhancer_system_prompt(prompt_enhancer_model, system_prompt: s
         merged_prompt = system_suffix
     else:
         merged_prompt = f"{system_prompt}\nFollow these additional user instructions with higher priority if they conflict with the guidance above:\n{system_suffix}"
+    # HocusPocus: the hard rule about minors goes last, after any user suffix
+    # or replacement, so no prompt can drop it.
+    from services.minors_rule import with_minors_rule
+    merged_prompt = with_minors_rule(merged_prompt)
     if not _use_qwen35_thinking_prompt(prompt_enhancer_model, thinking_enabled=thinking_enabled):
         return merged_prompt
     if len(merged_prompt) == 0:

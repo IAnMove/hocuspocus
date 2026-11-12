@@ -15,6 +15,7 @@ export const GALLERY_LIST_FILTERS = new Set<MediaFilter>([
   'multiclip',
   'favorites',
   'avatars',
+  'agents',
 ])
 
 export function galleryListQuery(mediaFilter: MediaFilter, searchQuery = '') {
@@ -42,13 +43,15 @@ export function galleryListQuery(mediaFilter: MediaFilter, searchQuery = '') {
     favoritesOnly: mediaFilter === 'favorites',
     multiclipOnly: mediaFilter === 'multiclip',
     editsOnly: mediaFilter === 'avatars',
+    origin: mediaFilter === 'agents' ? 'agent' as const : undefined,
     useServerList: Boolean(
       search
       || resultKind
       || mediaType
       || mediaFilter === 'favorites'
       || mediaFilter === 'multiclip'
-      || mediaFilter === 'avatars',
+      || mediaFilter === 'avatars'
+      || mediaFilter === 'agents',
     ),
   }
 }

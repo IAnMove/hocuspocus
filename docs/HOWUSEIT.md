@@ -9,10 +9,15 @@ Operator guides for HocusPocus subsystems. Prefer these over inventing a second 
 - **Workspaces tab** (Director generation threads — not the output-folder selector): [`docs/workspaces/HOWUSEIT.md`](workspaces/HOWUSEIT.md)
 - **3D Video compositor** (Hunyuan meshes + plates + camera + rain/fog, mixed with MiniMax H3): [`docs/3d-video-compositor/HOWUSEIT.md`](3d-video-compositor/HOWUSEIT.md)
 - **Character Kits / Face Rig** (2D cutout puppets, mouth overlays, dialogue cadence): [`docs/character-kits/HOWUSEIT.md`](character-kits/HOWUSEIT.md)
+- **Settings → Installation** (optional engines: FLUX 3 / Drama 3, Hunyuan3D, TRELLIS.2, SAM, UniRig, H3 Legacy): [`docs/install/HOWUSEIT.md`](install/HOWUSEIT.md)
 
 ## Additional operator guides
 
 - [Image Studio intents and editing](image-studio/HOWUSEIT.md)
-- [In-app Help tutorial](help/HOWUSEIT.md)
+- [FLUX 3 Klein and Drama 3 (install, API, warm runtime, memory cgroup)](generation/FLUX3_DRAMA3.md)
+- [In-app Help tutorial (maintainer guide)](help/HELP_OVERLAY.md)
 - [Tijeral cut-paper example and optional downloads](cut-paper/HOWUSEIT.md)
 - [Experimental H3 30-second clips](development/H3_EXTENDED_DURATION.md)
+- [Studio video command (`generation.video` v2/v3)](development/VIDEO_COMMANDS.md)
+- [LAN authentication when sharing (full server; core has no gate)](development/LAN_AUTH.md)
+- [VoxCPM2 default speech](development/VOXCPM2.md)

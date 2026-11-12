@@ -1,4 +1,5 @@
 import { useUiTranslation } from '../../i18n'
+import { resolutionPresetLabel } from '../../lib/resolutionPresetLabel'
 import { useStore } from '../../stores/useStore'
 import type { ResolutionPreset } from '../../types'
 
@@ -35,15 +36,13 @@ export function ResolutionPresets() {
                 : 'text-text-secondary hover:text-text-primary'
             }`}
           >
-            {p === 'auto'
-              ? 'Auto'
-              : modelOptions?.resolution_presets?.[p]?.label || p}
+            {resolutionPresetLabel(p, p === 'auto' ? 'Auto' : modelOptions?.resolution_presets?.[p]?.label)}
           </button>
         ))}
       </div>
       {resolutionPreset === 'auto' && !qwen21 && (
         <p className="text-[9px] text-text-muted mt-0.5">
-          {isEdit ? 'Uses source clip resolution' : isImage ? 'Matches reference image aspect ratio' : 'Auto resolution'}
+          {isEdit ? t('imageResolution.usesSource') : isImage ? t('imageResolution.matchesReference') : t('imageResolution.autoResolution')}
         </p>
       )}
       {selectedModelPreset?.hint && (

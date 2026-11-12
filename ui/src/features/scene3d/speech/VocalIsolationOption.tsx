@@ -16,7 +16,7 @@ export function VocalIsolationOption({ checked, onChange }: { checked: boolean; 
     return () => abort.abort()
   }, [retry])
   return <div className="space-y-1 text-xs">
-    <label className="flex min-h-10 items-center gap-2"><input type="checkbox" checked={checked} disabled={!checked && state !== 'ready'} onChange={event => onChange(event.target.checked)} />{t('speech.isolation.label')}</label>
+    <label className="flex min-h-10 items-center gap-2"><input aria-label={t('speech.isolation.label')} type="checkbox" checked={checked} disabled={!checked && state !== 'ready'} onChange={event => onChange(event.target.checked)} />{t('speech.isolation.label')}</label>
     <p className="text-text-muted">{t(`speech.isolation.${state}`)}</p>
     {state === 'error' && <button type="button" onClick={() => setRetry(value => value + 1)}>{t('speech.isolation.retry')}</button>}
   </div>

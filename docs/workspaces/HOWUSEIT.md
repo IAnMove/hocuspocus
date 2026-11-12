@@ -76,7 +76,7 @@ All three fields are optional. Writes propagate to `clips`, `clip_plans`, and `p
 
 Errors:
 
-- `409` `{ "error": "Pipeline is still active; try again shortly." }`
+- `409` `{ "error": "Pipeline is still active: job <id> is running (<stage>)." }` while a job, repair, or edit is still writing. A finished run with no live job does not answer 409.
 - `400` `{ "error": "Clip not found" }` (or pipeline missing)
 
 Clip tags: `PUT .../clips/{clip_index}/tag` with `{ "tag": "good" | "needs_work" | null }`.
@@ -121,9 +121,15 @@ The system prompt (`ui/src/features/workspaces/rewrite.ts`) keeps official H3 fi
 | `POST` | `/api/v1/director/pipeline/{pid}/continue` | Continue paused |
 | `POST` | `/api/v1/director/pipelines/{pid}/rejoin` | Join all clips → `{ filename, assembly_time_sec, total_time_sec }` |
 | `PUT` | `/api/v1/director/pipelines/{pid}/clips/{clip_index}/video-selection` | `{ "filename": "<basename>" }` |
-| `POST` | `/api/v1/director/pipelines/{pid}/clips/{clip_index}/rerun-video` | `{ "prompt"?: "..." }` |
+| `POST` | `/api/v1/director/pipelines/{pid}/clips/{clip_index}/rerun-video` | `{ "prompt"?: "...", "wait"?: true, "workspace"?: "..." }` |
 
-The UI enables **Start / resume** only when status ∈ `{failed, crashed, cancelled, paused, interrupted}` **and** `clips.length > 0`. Mutations while the pipeline is active return `409`.
+`wait` defaults to waiting until the clip exists (Studio review reads the
+new take from that reply). A client that cannot hold an H3 clip open sends
+`"wait": false` and gets **202** with the same `filename` / `clip_index`
+shape (`filename` is `null` until the worker finishes). Two edits at once
+are still refused.
+
+The UI enables **Start / resume** only when status ∈ `{failed, crashed, cancelled, paused, interrupted}` **and** `clips.length > 0`. A finished, failed or cancelled run blocks a new edit only while a job is actually running; that **409** names the job and the stage. An unload after `completed` does not keep the pipeline “active”.
 
 Rejoin uses the mix path in [Video Editor / mixes](../video-editor/HOWUSEIT.md) §6 (soft freeze + crossfade unless driving audio is attached).
 

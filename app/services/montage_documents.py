@@ -34,6 +34,7 @@ ORIGIN_KINDS = frozenset({"scene2d", "scene3d", "generation", "upload", "render"
 ORIGIN_TEXT = ("scene", "note", "meta", "derivedFrom", "productionId", "shotId", "takeId")
 MAX_TAKES = 20
 FPS = (24, 25, 30, 50, 60)
+COMIC_TEXT = frozenset({"caption", "bubble", "none"})
 
 
 class MontageError(ValueError):
@@ -164,7 +165,27 @@ def _clip(raw: Any, index: int) -> dict[str, Any]:
         clip["takes"] = takes
     if raw.get("lyric"):
         clip["lyric"] = str(raw["lyric"]).strip()[:500]
+    comic = _comic(raw.get("comic"), label)
+    if comic:
+        clip["comic"] = comic
     return clip
+
+
+def _comic(raw: Any, label: str) -> dict[str, Any] | None:
+    """Optional comic-view choice. Absent stays absent, so older montages do not grow a field."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise MontageError(f"{label} comic must be an object")
+    comic: dict[str, Any] = {}
+    if raw.get("frame") is not None:
+        comic["frame"] = _number(raw.get("frame"), f"{label} comic frame", 0, 36000)
+    if raw.get("text") is not None:
+        text = str(raw.get("text") or "").strip()
+        if text not in COMIC_TEXT:
+            raise MontageError(f"{label} comic text must be caption, bubble or none")
+        comic["text"] = text
+    return comic or None
 
 
 def _soundtrack(raw: Any) -> dict[str, Any] | None:
@@ -303,6 +324,22 @@ def export_body(document: dict[str, Any], workspace: str) -> dict[str, Any]:
     }
 
 
+def montage_link(value: Any) -> dict[str, Any] | None:
+    """The saved montage an export was made from (``{"file": "<name>.montage.json", "revision": n}``), or None.
+
+    The export's sidecar keeps it (``params.video_editor.montage``) so the video opens its montage again."""
+    if not isinstance(value, dict):
+        return None
+    file = value.get("file")
+    if not isinstance(file, str) or not FILE_RE.fullmatch(file) or ".." in file:
+        return None
+    revision = value.get("revision")
+    link: dict[str, Any] = {"file": file}
+    if isinstance(revision, int) and not isinstance(revision, bool) and revision > 0:
+        link["revision"] = revision
+    return link
+
+
 def slug_file(name: str) -> str:
     stem = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-._")[:120] or "montage"
     return stem + SUFFIX
@@ -383,4 +420,4 @@ class MontageStore:
                 "url": self._url(path.name, workspace)}
 
 
-__all__ = ["MAX_TAKES", "MontageError", "MontageStore", "SUFFIX", "export_body", "normalize_montage", "slug_file"]
+__all__ = ["MAX_TAKES", "MontageError", "MontageStore", "SUFFIX", "export_body", "montage_link", "normalize_montage", "slug_file"]

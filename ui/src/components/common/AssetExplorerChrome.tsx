@@ -62,7 +62,7 @@ export function ExplorerToolbar({
   const { t } = useUiTranslation('common')
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-      <input
+      <input aria-label={t('explorer.search')}
         type="search"
         value={query}
         onChange={event => onQuery(event.target.value)}

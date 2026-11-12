@@ -1,0 +1,5 @@
+# ABI contract from app/runtime/profiles.json
+numpy==1.26.4
+bpy==4.3.0
+torch==2.1.2+cu121
+torchvision==0.16.2+cu121

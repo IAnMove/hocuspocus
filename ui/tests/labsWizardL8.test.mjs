@@ -46,7 +46,7 @@ test('Story Lab navigation keeps aliases and never claims an invisible tab opene
 
   const trailerMusic = resolveStoryLabNavigation('music', 'trailer')
   assert.equal(trailerMusic.ok, false)
-  assert.match(trailerMusic.reason, /no está visible/)
+  assert.match(trailerMusic.reason, /is not visible/)
 
   const trailerProductions = resolveStoryLabNavigation('productions', 'trailer')
   assert.equal(trailerProductions.ok, true)
@@ -90,7 +90,7 @@ test('open_story_section reports the resolved destination for compact Story type
       { type: 'open_story_section', section: 'music' },
       { adapters },
     ),
-    /no está visible/,
+    /is not visible/,
   )
 })
 

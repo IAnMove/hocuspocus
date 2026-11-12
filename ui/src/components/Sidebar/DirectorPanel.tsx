@@ -1,3 +1,5 @@
+import { useFieldIds } from '../common/fieldIds'
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useCallback, useRef, useMemo } from 'react'
 import { Upload, Loader2, Music, Zap, RotateCcw, X, ChevronRight, ChevronDown, ImageIcon, Play } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -60,6 +62,8 @@ function imageStatusLabel(
 }
 
 export function DirectorPanel() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('director')
   const { t: tCommon } = useUiTranslation('common')
   const step = useStore(s => s.directorStep)
@@ -211,7 +215,7 @@ export function DirectorPanel() {
               <Upload size={18} className="text-text-muted" />
               <span className="text-xs text-text-muted">{t('panel.dropSong')}</span>
               <span className="text-[10px] text-text-muted">{t('panel.audioFormats')}</span>
-              <input
+              <input aria-label={t('panel.dropSong')}
                 type="file"
                 accept={AUDIO_ACCEPT}
                 className="hidden"
@@ -329,12 +333,12 @@ export function DirectorPanel() {
         <div className="space-y-3">
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('panel.cutSpeed')}</label>
+              <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('panel.cutSpeed')}</label>
               <span className="text-xs text-text-secondary">
                 {(localBias ?? energyBias) > 0 ? '+' : ''}{localBias ?? energyBias}
               </span>
             </div>
-            <input
+            <input aria-label={t('panel.cutSpeed')} id={fieldIds('f0')}
               type="range"
               min={-2}
               max={2}
@@ -438,13 +442,13 @@ export function DirectorPanel() {
         <div className="space-y-2">
           <label className="block">
             <span className="text-[11px] text-text-muted uppercase tracking-wider">{t('spoken.label')}</span>
-            <select className="mt-1 w-full rounded-lg border border-border bg-bg-secondary px-2 py-1.5 text-xs text-text-primary" value={spokenLanguage} onChange={event => setSpokenLanguage(event.target.value)}>
+            <select aria-label={t('spoken.label')} className="mt-1 w-full rounded-lg border border-border bg-bg-secondary px-2 py-1.5 text-xs text-text-primary" value={spokenLanguage} onChange={event => setSpokenLanguage(event.target.value)}>
               <SpokenLanguageOptions />
             </select>
           </label>
           {/* Auto-mode checkbox */}
           <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
+            <input aria-label={t('panel.autoMode')}
               type="checkbox"
               checked={autoMode}
               onChange={e => setAutoMode(e.target.checked)}
@@ -471,7 +475,7 @@ export function DirectorPanel() {
                 <button
                   onClick={() => setReferenceImage(null)}
                   className="absolute -top-1 -right-1 bg-bg-secondary rounded-full p-0.5 border border-border hover:bg-bg-hover"
-                >
+                 title={controlLabel('a11y.removeImage')} aria-label={controlLabel('a11y.removeImage')}>
                   <X size={10} />
                 </button>
               </div>
@@ -479,7 +483,7 @@ export function DirectorPanel() {
               <label className="cursor-pointer flex items-center gap-2 border border-dashed border-border rounded-lg px-3 py-2 hover:border-border-light transition-colors">
                 <ImageIcon size={14} className="text-text-muted" />
                 <span className="text-xs text-text-muted">{t('panel.uploadReference')}</span>
-                <input
+                <input aria-label={t('panel.uploadReference')}
                   type="file"
                   accept={IMAGE_ACCEPT}
                   className="hidden"
@@ -510,7 +514,7 @@ export function DirectorPanel() {
                       >
                         {mapping.speakerId}
                       </button>
-                      <input
+                      <input aria-label={t('panel.speakerPlaceholder')}
                         type="text"
                         value={mapping.name}
                         onChange={e => setSpeakerMapping(mapping.speakerId, e.target.value, mapping.role)}
@@ -518,6 +522,7 @@ export function DirectorPanel() {
                         className="flex-1 bg-bg-secondary border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue transition-colors"
                       />
                       <select
+                        aria-label={t('panel.role')}
                         value={mapping.role}
                         onChange={e => setSpeakerMapping(mapping.speakerId, mapping.name, e.target.value as typeof mapping.role)}
                         className="bg-bg-secondary border border-border rounded px-1.5 py-1 text-[10px] text-text-secondary focus:outline-none focus:border-accent-blue transition-colors"
@@ -545,8 +550,8 @@ export function DirectorPanel() {
             </div>
           )}
 
-          <label className="text-[11px] text-text-muted uppercase tracking-wider block">{t('panel.sceneCharacters')}</label>
-          <textarea
+          <label htmlFor={fieldIds('f1')} className="text-[11px] text-text-muted uppercase tracking-wider block">{t('panel.sceneCharacters')}</label>
+          <textarea aria-label={t('panel.sceneCharacters')} id={fieldIds('f1')}
             value={sceneDescription}
             onChange={e => setSceneDescription(e.target.value)}
             placeholder={speakers.length >= 2
@@ -606,6 +611,7 @@ export function DirectorPanel() {
                     )}
                   </div>
                   <textarea
+                    aria-label={t('dashboard.imagePrompt')}
                     value={plan.image_prompt}
                     onChange={e => editClipPlan(i, 'image_prompt', e.target.value)}
                     rows={2}
@@ -760,6 +766,7 @@ export function DirectorPanel() {
                     )}
                   </div>
                   <textarea
+                    aria-label={t('dashboard.videoPrompt')}
                     value={plan.video_prompt}
                     onChange={e => editClipPlan(i, 'video_prompt', e.target.value)}
                     rows={2}

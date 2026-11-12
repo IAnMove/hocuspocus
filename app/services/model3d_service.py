@@ -18,6 +18,7 @@ import signal
 import subprocess
 import threading
 import time
+import secrets
 import uuid
 from pathlib import Path
 
@@ -26,7 +27,9 @@ from services.runtime_profiles import managed_ready
 from typing import Any
 
 from . import execution_mode, resource_scheduler, model3d_external
-from .asset_manifest import publish_generation_sidecar_best_effort
+from .asset_manifest import publish_generation_job_sidecar
+from .generation_output_name import canonical_file_url
+from .meshy_options import request_options
 from .hunyuan3d.weight_integrity import dit_cache_root, purge_truncated_safetensors, truncated_safetensors
 from .minimax_image_service import MiniMaxImageError, generate_image as generate_minimax_image
 
@@ -295,6 +298,9 @@ def installation_status() -> dict[str, Any]:
 
 def is_model_downloaded(model_id: str) -> bool:
     """Return whether the selected Hugging Face snapshot is cached locally."""
+    if model_id == "trellis2":
+        from .trellis2.assets import downloaded
+        return downloaded()
     model = MODEL_BY_ID.get(model_id)
     if model is None:
         return False
@@ -361,6 +367,24 @@ def has_active_jobs(model_id: str | None = None) -> bool:
     return False
 
 
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Hunyuan3D, Meshy and Hi3D jobs that can still write into their workspace (``services.workspace_busy`` probe).
+
+    A registered subprocess keeps its job active while a cancellation unwinds, even when the
+    public status already says ``cancelled``; that job is reported as ``cancelling``.
+    """
+    with _lock:
+        return [
+            {
+                "jobId": job_id,
+                "status": job["status"] if str(job.get("status") or "").lower() in _ACTIVE_JOB_STATES else "cancelling",
+                "workspace": job.get("workspace"),
+            }
+            for job_id, job in _jobs.items()
+            if str(job.get("status") or "").lower() in _ACTIVE_JOB_STATES or job_id in _processes
+        ]
+
+
 def delete_model_cache(model_id: str) -> list[str]:
     """Remove the upstream repository cache used by a Hunyuan3D variant.
 
@@ -370,6 +394,12 @@ def delete_model_cache(model_id: str) -> list[str]:
     model = MODEL_BY_ID.get(model_id)
     if model is None:
         raise ValueError(f"Unknown Hunyuan3D model: {model_id}")
+    if model_id == "trellis2":
+        from .trellis2.assets import CACHE
+        if not CACHE.exists():
+            return []
+        shutil.rmtree(CACHE)
+        return [model["repo"]]
     repo_cache = HF_CACHE_DIR / "hub" / f"models--{model['repo'].replace('/', '--')}"
     if not repo_cache.exists():
         return []
@@ -408,6 +438,15 @@ def _safe_decode_chunks(num_chunks: int, octree_resolution: int) -> int:
     elif octree_resolution >= 384:
         cap = min(cap, _MAX_CHUNKS_AT_OCTREE_384)
     return max(1000, min(cap, int(num_chunks)))
+
+
+def _requested_seed(value: Any) -> int:
+    """The seed asked for; none or -1 draws a new one, recorded with the job like any other setting."""
+    try:
+        seed = int(value)
+    except (TypeError, ValueError):
+        seed = -1
+    return min(seed, 2**32 - 1) if seed >= 0 else secrets.randbelow(2**32)
 
 
 def _bounded_int(value: Any, default: int, low: int, high: int) -> int:
@@ -475,7 +514,7 @@ def _prepare_request(
 
     settings = {
         "prompt": prompt,
-        "seed": _bounded_int(body.get("seed"), 1234, 0, 2**32 - 1),
+        "seed": _requested_seed(body.get("seed")),
         "num_inference_steps": _bounded_int(body.get("num_inference_steps", preset["num_inference_steps"]), preset["num_inference_steps"], 1, 100),
         "guidance_scale": _bounded_float(body.get("guidance_scale", preset["guidance_scale"]), preset["guidance_scale"], 0.0, 30.0),
         "octree_resolution": _bounded_int(body.get("octree_resolution", preset["octree_resolution"]), preset["octree_resolution"], 64, 512),
@@ -544,27 +583,13 @@ def _model3d_sidecar_identity(job: dict[str, Any], request_data: dict[str, Any])
 
 
 def _publish_model3d_result(job: dict[str, Any], output_path: str | Path, sidecar: dict[str, Any]) -> None:
-    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    payload = dict(sidecar)
-    payload.setdefault("job_id", job.get("job_id"))
-    payload.setdefault("task_id", job.get("task_id"))
-    payload.setdefault("root_task_id", job.get("root_task_id") or job.get("task_id"))
-    payload["created_at"] = job.get("created_at") or payload.get("created_at") or time.time()
-    payload["queued_at"] = job.get("created_at") or payload.get("queued_at")
-    payload["started_at"] = job.get("started_at") or payload.get("started_at")
-    payload["completed_at"] = job.get("finished_at") or time.time()
-    for key in ("command_id", "workflow_id", "run_id"):
-        if command.get(key):
-            payload.setdefault(key, command[key])
-    publish_generation_sidecar_best_effort(
+    publish_generation_job_sidecar(
+        job,
         output_path,
-        payload,
-        workspace_id=provenance.get("workspace_id"),
+        sidecar,
+        job_id_key="job_id",
         output_folder=_physical_output_folder(job.get("workspace")),
-        tool=provenance.get("tool") or "model3d",
-        actor=provenance.get("actor"),
-        capability=provenance.get("capability"),
+        tool="model3d",
     )
 
 
@@ -655,9 +680,11 @@ def _start_remote_job(
 ) -> dict[str, Any]:
     job_id = uuid.uuid4().hex
     task_id = _canonical_task_id(job_id)
-    prompt = str((body.get("prompt") or body.get("settings", {}).get("prompt") if isinstance(body.get("settings"), dict) else "") or "").strip()
+    settings = body.get("settings") if isinstance(body.get("settings"), dict) else {}
+    prompt = str(body.get("prompt") or settings.get("prompt") or "").strip()   # an MCP/REST caller sends it top-level
     model_id = str(body.get("model_id") or _active_profile().get("model3d_model") or provider)
     image_path = image_paths.get("front") or next(iter(image_paths.values()), None)
+    meshy_options = request_options(body, model_id) if provider == "meshy" else None
     job = {
         "job_id": job_id,
         "task_id": task_id,
@@ -681,6 +708,7 @@ def _start_remote_job(
             "prompt": prompt,
             "image_path": image_path,
             "model": model_id,
+            **({"meshy_options": meshy_options} if meshy_options is not None else {}),
         },
     }
     with _lock:
@@ -727,6 +755,7 @@ def _run_remote_job(job_id: str, output_dir: str) -> None:
                 model=str(request_data.get("model") or "latest"),
                 cancelled=cancelled,
                 filename_stem=stem,
+                options=request_data.get("meshy_options"),
             )
         elif provider == "hi3d":
             from .hi3d_service import generate_model as generate_hi3d
@@ -766,6 +795,7 @@ def _run_remote_job(job_id: str, output_dir: str) -> None:
                 "model_type": request_data.get("model"),
                 "provider": provider,
                 "image_path": os.path.basename(str(request_data.get("image_path") or "")) or None,
+                **({"meshy": result["meshy"]} if result.get("meshy") else {}),
             },
         })
         _update_job(
@@ -775,7 +805,7 @@ def _run_remote_job(job_id: str, output_dir: str) -> None:
             progress=1.0,
             message="3D model ready",
             filename=filename,
-            url=f"/api/v1/file/{filename}",
+            url=canonical_file_url(filename, job.get("workspace")),
         )
     except Exception as exc:
         if cancelled():
@@ -802,6 +832,8 @@ def start_job(
     profile = _active_profile()
     provider = str(body.get("provider") or profile.get("model3d_provider") or "local").strip().lower()
     if provider in {"meshy", "hi3d"}:
+        from .provider_profile import refuse_remote_retexture
+        refuse_remote_retexture(body)
         execution_mode.validate_remote_provider(workspace, provider)
         return _start_remote_job(
             provider=provider,
@@ -815,7 +847,7 @@ def start_job(
         runtime = (model3d_external.installation_status(request_data["model"]["id"])
                    if request_data["model"]["id"] in model3d_external.EXTERNAL_IDS
                    else installation_status())
-        if not runtime["installed"]:
+        if not runtime["installed"] or runtime.get("compatible") is False or runtime.get("weights_downloaded") is False:
             raise RuntimeError(runtime["install_hint"])
 
     with _lock:
@@ -833,7 +865,9 @@ def start_job(
         "status": "queued",
         "progress": 0.0,
         "phase": "queued",
-        "message": "Queued Hunyuan3D retexture" if request_data["operation"] == "retexture" else "Queued Hunyuan3D generation",
+        "message": (f"Queued {request_data['model']['label']} generation"
+                    if request_data["model"]["id"] in model3d_external.EXTERNAL_IDS
+                    else "Queued Hunyuan3D retexture" if request_data["operation"] == "retexture" else "Queued Hunyuan3D generation"),
         "error": None,
         "filename": None,
         "url": None,
@@ -1032,7 +1066,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             _update_job(
                 job_id, status="completed", phase="completed", progress=1.0,
                 message="3D model ready · simulated artifact", filename=filename,
-                url=f"/api/v1/file/{filename}", simulated=True,
+                url=canonical_file_url(filename, current_job.get("workspace")), simulated=True,
             )
         except InterruptedError:
             _settle_cancelled_job(job_id)
@@ -1135,6 +1169,9 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
         "TOKENIZERS_PARALLELISM": "false",
         "PYTORCH_CUDA_ALLOC_CONF": env.get("PYTORCH_CUDA_ALLOC_CONF") or "expandable_segments:True",
     })
+    if model_id == "trellis2":
+        # Generation consumes only the explicitly downloaded pinned bundle.
+        env.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", ATTN_BACKEND="flash_attn")
     lines: list[str] = []
     generation_committed = False
     try:
@@ -1146,7 +1183,8 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             message=(
                 "Starting isolated Hunyuan3D retexture worker"
                 if operation == "retexture"
-                else "Starting isolated Hunyuan3D worker"
+                else f"Starting isolated {request_data['model']['label']} worker"
+                if model_id in model3d_external.EXTERNAL_IDS else "Starting isolated Hunyuan3D worker"
             ),
         )
         if process is None:
@@ -1247,7 +1285,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             message=("GLB retextured as a new copy; worker exited and VRAM was released" if operation == "retexture" else "3D asset generated; worker exited and VRAM was released"),
             progress=1.0,
             filename=filename,
-            url=f"/api/v1/file/{filename}",
+            url=canonical_file_url(filename, job.get("workspace")),
             size=output_path.stat().st_size,
         )
     except Exception as exc:

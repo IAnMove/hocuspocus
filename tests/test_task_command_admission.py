@@ -514,3 +514,28 @@ def test_receipt_survives_terminal_retention_or_deletion(tmp_path, delete_termin
     assert registry.command_admission("intent-terminal")["receipt"] == admitted["receipt"]
     assert registry.get("task-terminal-retry") is None
     assert _db_counts(registry)["task_command_admissions"] == 1
+
+
+def test_every_command_spec_fingerprint_version_can_be_admitted_and_replayed(tmp_path):
+    """generation.video v3 (typed H3/LTX) froze fingerprint version 3 while the store took only 1 and 2: every real
+    admission failed with "Unsupported command fingerprint version" and only validate=true worked."""
+    import importlib
+    from services.task_command_admission import FINGERPRINT_VERSIONS
+    specs = ["image_generation_spec", "video_generation_spec", "video_generation_v3", "studio_sfx_spec", "tools_upscale_spec",
+             "studio_music_spec", "studio_speech_spec", "studio_image_spec"]
+    versions = {name: importlib.import_module(f"services.{name}").FINGERPRINT_VERSION for name in specs}
+    assert set(versions.values()) <= set(FINGERPRINT_VERSIONS), versions
+    registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
+    for version in sorted(set(versions.values())):
+        intent = f"intent-v{version}"
+        original, effective = _original_and_effective(intent)
+        original["version"] = effective["version"] = 3
+        admitted = registry.admit_command_task(intent_id=intent, operation="generation.video", digest=_digest(effective),
+                                               original=original, effective=effective, task_fields=_task_fields(f"task-{intent}"),
+                                               fingerprint_version=version)
+        again = registry.admit_command_task(intent_id=intent, operation="generation.video", digest=_digest(effective),
+                                            original=original, effective=effective, task_fields=_task_fields(f"task-{intent}-2"),
+                                            fingerprint_version=version)
+        assert again["receipt"] == admitted["receipt"] and registry.command_admission(intent)["fingerprint_version"] == version
+        if version >= 2:
+            assert admitted["receipt"]["fingerprintVersion"] == version and admitted["receipt"]["contentFingerprint"] == _digest(effective)

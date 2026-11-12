@@ -71,7 +71,7 @@ def test_green_pixel_becomes_transparent_and_red_stays(tmp_path):
 
     assert body["operation"] == "studio.key"
     result = body["result"]
-    assert set(result) == {"file", "url", "sha256", "frames"}
+    assert set(result) == {"file", "url", "sha256", "frames", "report"}
     assert result["frames"] == 1
     assert result["file"].endswith(".png")
     assert result["url"].startswith("/api/v1/file/")
@@ -180,7 +180,7 @@ def test_video_key_returns_a_webm_not_pixels(tmp_path):
         pytest.skip("ffv1 encode unavailable")
     before = source.read_bytes()
     result = _call(handlers, {"workspace": "clip", "source": str(source), "mode": "green"})["result"]
-    assert set(result) == {"file", "url", "sha256", "frames"}
+    assert set(result) == {"file", "url", "sha256", "frames", "report"}
     assert result["frames"] == 3
     assert result["file"].endswith(".webm")
     output = workspace / result["file"]
@@ -213,3 +213,73 @@ def test_same_intent_replays_without_keying_again(tmp_path):
     with pytest.raises(HTTPException) as conflict:
         asyncio.run(handlers["studio.key"]({**command, "input": {**command["input"], "mode": "magenta"}}))
     assert conflict.value.status_code == 409
+
+
+def _weak_screen(width: int = 40, height: int = 40, screen=(48, 155, 80), figure=(128, 128, 128)) -> np.ndarray:
+    """A generated 'green screen' that is only 0.29 green, with a grey square in the middle and a darker corner."""
+    rgb = np.empty((height, width, 3), dtype=np.uint8)
+    rgb[:] = screen
+    rgb[:6, :6] = (40, 120, 66)  # a vignetted corner, only 0.21 green
+    rgb[12:28, 12:28] = figure
+    rgb[11, 12:28] = [(a + b) // 2 for a, b in zip(screen, figure)]  # one mixed edge row
+    return rgb
+
+
+def test_weak_screen_leaves_no_haze_and_reports_the_residual(tmp_path):
+    workspace, _uploads, handlers = _layout(tmp_path)
+    Image.fromarray(_weak_screen()).save(workspace / "pose.png")
+    result = _call(handlers, {"workspace": "clip", "source": "pose.png"})["result"]
+    report = result["report"]
+    assert report["adaptive"] is True and report["despill"] is True and report["haze"] is False
+    assert report["screenColor"] == "#309b50" and 0.25 < report["screenStrength"] < 0.32
+    assert report["semiTransparentShare"] <= 0.02
+    with Image.open(workspace / result["file"]) as keyed:
+        rgba = np.asarray(keyed.convert("RGBA"))
+    assert int(rgba[..., 3][:6, :6].max()) == 0  # the darker corner is cleared from the border
+    assert int(rgba[30:, :, 3].max()) == 0 and int(rgba[20, 20, 3]) == 255
+    edge = [int(channel) for channel in rgba[11, 20]]
+    assert 0 < edge[3] < 255 and edge[1] <= max(edge[0], edge[2]) * 1.02 + 6  # the mixed row is grey, not green
+
+
+def test_fixed_key_on_a_weak_screen_reports_the_haze(tmp_path):
+    workspace, _uploads, handlers = _layout(tmp_path)
+    Image.fromarray(_weak_screen()).save(workspace / "pose.png")
+    result = _call(handlers, {"workspace": "clip", "source": "pose.png", "adaptive": False})["result"]
+    report = result["report"]
+    assert report["adaptive"] is False and report["haze"] is True and report["semiTransparentShare"] > 0.5
+    assert "another mode" in report["note"]
+
+
+def test_a_strong_screen_keys_as_the_fixed_key_did(tmp_path):
+    workspace, _uploads, handlers = _layout(tmp_path)
+    rgb = np.zeros((20, 20, 3), dtype=np.uint8)
+    rgb[:] = (0, 255, 0)
+    rgb[5:15, 5:15] = (180, 220, 40)
+    Image.fromarray(rgb).save(workspace / "plate.png")
+    adaptive = _call(handlers, {"workspace": "clip", "source": "plate.png"})["result"]
+    with Image.open(workspace / adaptive["file"]) as keyed:
+        rgba, fixed = np.asarray(keyed.convert("RGBA")), green_rgba(rgb)
+    assert np.array_equal(rgba[..., 3], fixed[..., 3])  # same matte
+    red, green, blue = (int(channel) for channel in rgba[10, 10, :3])
+    assert green <= max(red, blue) * 1.02 + 6  # the semi-transparent figure has no green cast
+    assert adaptive["report"]["screenStrength"] == 1.0
+
+
+def test_border_without_a_screen_falls_back_to_the_fixed_key(tmp_path):
+    workspace, _uploads, handlers = _layout(tmp_path)
+    rgb = np.zeros((20, 20, 3), dtype=np.uint8)
+    rgb[:] = (120, 90, 60)
+    rgb[8:12, 8:12] = (0, 255, 0)
+    Image.fromarray(rgb).save(workspace / "photo.png")
+    report = _call(handlers, {"workspace": "clip", "source": "photo.png"})["result"]["report"]
+    assert report["screenColor"] is None and "fixed key" in report["note"]
+
+
+def test_key_options_must_be_booleans(tmp_path):
+    workspace, _uploads, handlers = _layout(tmp_path)
+    (workspace / "plate.png").write_bytes(_plate())
+    with pytest.raises(HTTPException) as error:
+        _call(handlers, {"workspace": "clip", "source": "plate.png", "despill": "yes"})
+    assert error.value.status_code == 422
+    properties = command_catalog()[0]["inputSchema"]["properties"]["input"]["properties"]
+    assert properties["adaptive"]["type"] == "boolean" and properties["despill"]["type"] == "boolean"

@@ -59,7 +59,7 @@ test('Character replacement shows three localized steps and preserves its editab
   const f = await fixture()
   try {
     const view = f.render()
-    assert.ok(view.getByRole('heading', { name: 'Replace a character' }))
+    assert.ok(view.getByRole('heading', { name: 'Replace character' }))
     assert.equal(view.getAllByRole('region').length, 3)
     assert.ok(view.getByText('Viggle-Animate Pruned 20B'))
     assert.equal(view.getByRole('button', { name: 'Generate replacement frame' }).hasAttribute('disabled'), true)
@@ -68,7 +68,7 @@ test('Character replacement shows three localized steps and preserves its editab
     assert.match(prompt.value, /Replace the character in image 1/)
     f.fireEvent.change(prompt, { target: { value: 'Keep this exact draft.\n“Hola”.' } })
     await f.act(async () => { await f.setUiLanguage('es') })
-    assert.ok(view.getByRole('heading', { name: 'Sustituir personaje' }))
+    assert.ok(view.getByRole('heading', { name: 'Cambiar personaje' }))
     assert.ok(view.getByRole('button', { name: 'Generar fotograma sustituto' }))
     assert.ok(view.getByRole('button', { name: 'Generar vídeo con Viggle' }))
     view.unmount()

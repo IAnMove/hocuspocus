@@ -17,6 +17,9 @@ def test_accents_case_and_plurals_are_forgiven():
     assert fold("Gráficos ÁÉÍ") == "graficos aei"
     assert stem("escenas") == stem("escena") == "escena"
     assert same_word(stem("scenes"), stem("scene"))
+    assert stem("naves") == stem("nave") == "nave", "a five-letter -es plural keeps a root its singular reaches"
+    assert stem("lines") == stem("line") == "line"
+    assert stem("boxes") == stem("box") == "box" and stem("buses") == "bus" and stem("meses") == "mes"
     assert not same_word("pre", "prerenderizado")        # too short to be a prefix of anything
     assert score("ESCENAS estilo", **PS1) > 0
     assert score("graficos prerenderizados", **PS1) > 0

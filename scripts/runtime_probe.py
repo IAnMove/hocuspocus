@@ -4,11 +4,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app"))
+from services.install_catalog import optional_engines  # noqa: E402
 from services.runtime_profiles import detect_profiles  # noqa: E402
 
 FEATURES = {
@@ -18,7 +20,22 @@ FEATURES = {
     "minimax_h3": "MiniMax H3 Legacy (ComfyUI)",
     "sam": "inpaint masks (SAM 3.1)",
     "rigging": "AI rigging (UniRig)",
+    "mia": "any-pose humanoid rigging (Make-It-Animatable)",
+    "trellis2": "optional official image-to-3D (TRELLIS.2)",
+    "template_semantic": "template semantic search (CPU)",
+    "anime_face": "Anime face landmarks",
+    "see_through": "See-through layers",
 }
+
+
+def unavailable(result: dict) -> list[str]:
+    """What this computer cannot run and why, grouped by reason. Shown by the Install dialogs."""
+    blocked: dict[str, list[str]] = {}
+    for name, item in result["engines"].items():
+        if name != "core" and not item["supported"] and not item.get("supersededBy"):
+            reason = item["reason"].removeprefix(f"{item['label']} ")  # group shared driver limits
+            blocked.setdefault(reason[:1].upper() + reason[1:], []).append(FEATURES.get(name, item["label"]))
+    return [f"Not available here: {', '.join(features)}. {reason}" for reason, features in blocked.items()]
 
 
 def summary(result: dict) -> list[str]:
@@ -30,14 +47,10 @@ def summary(result: dict) -> list[str]:
         lines = [f"Installs {FEATURES['core']}; no local AI models."]
     else:
         return [f"Nothing can be installed on this computer: {engines['core']['reason']}"]
-    blocked: dict[str, list[str]] = {}
-    for name, item in engines.items():
-        if name != "core" and not item["supported"] and not item.get("supersededBy"):
-            reason = item["reason"].removeprefix(f"{item['label']} ")  # group shared driver limits
-            blocked.setdefault(reason[:1].upper() + reason[1:], []).append(FEATURES.get(name, item["label"]))
-    lines += [f"Not available here: {', '.join(features)}. {reason}" for reason, features in blocked.items()]
+    lines += unavailable(result)
+    on_request = optional_engines()
     optional = [FEATURES.get(name, item["label"]) for name, item in engines.items()
-                if item["supported"] and not item.get("defaultInstall") and not item.get("installed")]
+                if item["supported"] and name in on_request and not item.get("installed")]
     if optional:
         lines.append(f"Optional, from the Advanced menu: {', '.join(optional)}.")
     return lines
@@ -52,6 +65,9 @@ def main() -> None:
     args = parser.parse_args()
     result = detect_profiles(platform=args.platform, arch=args.arch, gpu=args.gpu)
     result["summary"] = summary(result)
+    result["unavailable"] = unavailable(result)
+    # Shown by the Install dialog next to each extra's size. A top-level key, not hashed into any recipe.
+    result["diskFreeGiB"] = round(shutil.disk_usage(ROOT).free / 2 ** 30, 1)
     target = ROOT / "app" / ".runtime" / "capabilities.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(f".{os.getpid()}.tmp")

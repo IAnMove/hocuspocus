@@ -637,8 +637,8 @@ def _story_seed(project_id: str, spec: dict[str, Any], production_ids: list[str]
         "revision": 1,
         "title": spec["title"],
         "projectType": spec.get("format") or "quick_video",
-        "language": "Español",
-        "spokenLanguage": "Español de España",
+        "language": "English",
+        "spokenLanguage": "English",
         "creativeBrief": {"generalIdea": spec.get("idea") or ""},
         "productions": [
             _production_entry(item, spec["title"], spec.get("format"), project_id, spec["workspace_id"])

@@ -513,3 +513,221 @@ H3 clips.
 | `ui/src/features/characters/orbitPrompt.ts` | Orbit A/B prompts and still-frame indices |
 
 When in doubt: **one identity per mesh, one path per compositor shot, H3 never draws that mesh.**
+
+## Box rooms
+
+A metric interior is `kind: "room"` with `size: {w, d, h}` in metres and no `mold`. The open side faces the camera. The floor is y = 0. A door defaults to 0.9 × 2.0 m on the back wall and the ceiling defaults to 2.6 m. `scene3d.room.put` stores the room and its GLB; `scene3d.room.get` reads it (the spec, what each surface wears and the paint state).
+
+**A room is never flat.** `put` gives floor, walls, ceiling (when the room has one), door and trim a procedural material chosen from the words of `floor`, `walls` and `ceiling` (`oak parquet`, `paneles metálicos remachados color crema`, `linóleo gastado verde`: English or Spanish; a colour word tints it, `dark` and `light` shade it; the room's `prompt` decides only when a surface's words name nothing). The eleven materials (`plaster`, `concrete`, `wood_planks`, `parquet`, `metal_panels`, `riveted_steel`, `tile`, `carpet`, `brick`, `stone`, `linoleum`) are drawn by `app/services/room_materials.py` with numpy: deterministic, free, no GPU, and tileable by construction. Each repeats at its real scale (`tile_m` metres: 1.2 m for boards, 2.4 m for steel plates). The geometry has skirting, a cornice, a door frame, raised door panels (two columns by two rows) and a handle, and a frame and sill for every window. A metal room gets a steel door and trim, any other a wooden door and white trim. Walls, floor and trim carry a small self-lit share (`emissive` 0.16), so a wall the key light misses is still a wall.
+
+**`scene3d.room.paint` repaints it with the image model.** Input `{workspace, name, style?, floor?, walls?, ceiling?, door?, trim?, tile_m?, seed?, engine?}`, with a new `intent_id`. Each surface takes your words (the spec's own words when you give none); `style` is a short look for all of them, appended as `Material look: …` (a whole scene in the style makes the model draw perspective, so keep it to a material). `tile_m` is `{floor, walls, ceiling, trim}` in metres one repeat covers (defaults 1, 1.5, 1.5 and 0.8) and is told to the model. The model is the fastest installed Qwen Image 2.1 (turbo by default), asked through the same admission as sets and props. It is a background job: poll `scene3d.room.paint.status` until `completed`. Each surface is its own job, so one failing does not stop the others.
+
+- A tiling picture that does not repeat is healed at its wrap by the same inpaint pass `location.set3d` uses; if the seam is still over the limit its edges are blended; if it still does not repeat, that surface keeps its procedural material and the status carries `seam_fallback`.
+- A surface the model cannot make keeps its procedural material (`paint_failed` in `warnings`); if nothing could be painted the status is `failed` and the room, its GLB and its look are untouched.
+- The pictures are `rooms/<name>/<surface>.png` (the door is a front view at 0.9:2, with no raised panels of its own geometry because its picture has them); the GLB is rebuilt at the same path. Everything is recoverable from the workspace and from `scene3d.room.get`.
+- Same room, words, style, `tile_m` and seed give the same request: a second call answers `cached: true` and asks nothing. A different seed paints again. `engine: "procedural"` needs no model: it re-chooses the procedural materials from the words you give and undoes any painted surface.
+- A Series shot standing in the room counts the room's look in its render fingerprint (`roomLook`), so a repaint renders only the shots in that room again. A room stored before looks existed keeps the digests its shots had until it is put again.
+
+Painted textures also remain a production `spec.sets` entry of the same shape. There is no room editor panel: the doors are MCP, `POST /api/v1/scene3d/rooms/commands` and the Wizard action `room_sets` (operations `scene3d.room.put`, `get`, `paint`, `paint.status`).
+
+A `kind: "3d"` Series shot names `set: "<room>"`. Each person carries `at: {x, z}` in metres or `near`, `mid` or `far`. Feet stand on the floor at that height (`heightM`, default 1.7). Use it for a wide interior full-body shot. A person outside the floor, on the door or on furniture is an error. A mold room (`location.set3d`) stays the other path and is not merged with a named box room.
+
+The wide frame is the shared camera in `app/shared/room_box_camera.json`: eye height 1.6 m, just outside the open side, field of view 48. Flat props can look like cardboard when the camera moves.
+
+### Plate rooms: a painted plate as the back wall
+
+`walls` may be a picture of the workspace (`{file: "plate.png"}`, or `{asset: …}` with the same meaning: a file of this workspace or its `/api/v1/file/…` URL) instead of words. The room is then **that plate seen from its own camera, with a floor to walk on in front of it**: with the camera still, the 3D shot is the 2D plate (measured on the office and silos plates of the Lucky Starr series: mean absolute difference 0.03 and 0.21 on a 0–255 scale). Everything is in metres and comes from the plate's perspective, the same numbers `location.layout2d.stage` keeps for a 2D shot:
+
+```json
+{"kind": "room", "prompt": "the Council's office", "walls": {"file": "office-plate.png"},
+ "stage": {"horizon": 0.22, "ref": {"baseY": 0.72, "heightPct": 0.62, "heightM": 2.0}, "floorTop": 0.72}}
+```
+
+All the fractions are of the plate's height, from the top. `horizon` is where the eye line falls (a level camera sees it there); `ref` is one object of known height on the floor (a door: `baseY` its foot, `heightPct` how tall it looks, `heightM` 2 by default); `floorTop` (default `baseY`) is the farthest floor a person may stand on. From them `put` derives the camera height `(baseY - horizon) × heightM / heightPct` (1.61 m for the office; a result outside 1.0–2.4 m warns `eye_height`), the card's distance and the room's `size` (**leave `size`, `windows` and `ceiling` out**: the plate has them). Without `stage` the plate is taken to be seen from a 1.6 m camera with a 2 m door 40 % of its height and `put` says `stage_assumed`: measure it (`series.location.stage.check` draws the grid when that tool is present). Optional: `fov` (vertical lens, default 48), `range` (below) and `door {x, w, h}` in metres from the middle of the back wall (+x toward the left of the frame, as in every room), only so nobody stands on it.
+
+- **The back wall and the floor are the plate.** The card shows the rows above the floor; the floor in front of it is the plate's own floor rows projected from the same camera, so the painted floor and the floor a person walks on are one floor (no tiling, no seam, no gradient to hide one). A horizon that is not the middle of the picture is handled by a lens shift (`camera.lensShift`, the fraction of the frame the horizon sits above the middle): verticals stay vertical, as in the plate. The GLB is unlit (`KHR_materials_unlit`) and the room asks for `look: {toneMapping: "none"}` (a new value beside `aces`, `agx` and `neutral`; a scene patch takes it as the top-level `look`, after any grade), so neither the scene's lamps nor ACES repaint the plate: through the app's own renderer in Chromium the room-only frame differs from the plate by 0.02 on a 0–255 scale (ACES at −0.5 EV, what a new scene wears, would differ by 15).
+- **What the plate does not show is its edge, mirrored, blurred and darkened.** The side walls and the ceiling are baked from the plate's border (a pyramid of blurred copies; the farther from the picture, the blurrier and darker, never black), so a camera that moves a little finds more room and not a void. Give `walls: {back: {file}, left: {file}, right: {file}}` to draw a side wall yourself (`left` is the left of the frame).
+- **People stand on the floor in metres.** `at {x, z}` with `z` from the nearest floor the frame shows (`room.plate.visible.near_z`) to the back wall; `near`, `mid` and `far` are inside that range. A person whose feet are below the frame is an error.
+- **Furniture that people must walk behind is a prop with a cut-out:** `props: [{prompt, on: "floor", x, z, y?, height_m, image: {file: "desk.png"}}]`, a PNG with alpha (`props.create` and `image.remove_background` make them). The cut-out is cropped to what it draws, so `height_m` is the object's height and the bottom of the card is its foot; it stands at `x, z` as a masked card (alpha is a mask, not a blend) that writes depth, so a person who walks behind it is hidden by it and one in front covers it. A prop cut out of the plate itself and placed with the plate's own numbers lands on the same pixels (measured: difference 0.0 over the desk). Anything painted into the plate and not cut out is glued to the wall and the floor and slides when the camera moves. The directional sprites of the cast are depth tested, so against a prop a person behind it is hidden and one in front covers it (proved in Chromium with `ui/scripts/plate-room-proof.ts`, run by `HOCUSPOCUS_BROWSER_PROOF=1 pytest tests/test_room_plate.py -k real_renderer`).
+- **The camera holds only near the plate's viewpoint.** `range {orbit_deg, shift_m}` (default 25° and 0.5 m) is where the illusion holds. A shot may move the camera from the plate's viewpoint with `scene3d.camera: {shift: {x, y, z}, yaw, pitch}` (metres, degrees); past the range, `series.episode.from_script` check says `camera_breaks_plate`. With a smooth ±0.4 m move the parallax comes free: the plate is a card behind the people.
+- **`scene3d.room.paint` with a picture is the paint.** `{workspace, name, walls: {file}}` (or `back`, `left`, `right`, `stage`, `fov`, `range`) replaces the plate (or its numbers) at once, with no model, and the room follows it; the same words are refused on a plate room, and a picture is refused on a room with no plate (put it again). The pictures stay where they were (`surfaces` in `scene3d-rooms.json` keeps each file and its hash, so a changed plate changes the room's look and re-renders only its shots).
+
+```bash
+curl -s localhost:42003/api/v1/scene3d/rooms/commands -H 'content-type: application/json' -d '{
+  "version": 1, "operation": "scene3d.room.put", "intent_id": "office-1",
+  "input": {"workspace": "default", "name": "office", "room": {"kind": "room", "prompt": "office",
+    "walls": {"file": "office-plate.png"}, "stage": {"horizon": 0.22, "ref": {"baseY": 0.72, "heightPct": 0.62}}}}}'
+```
+
+```javascript
+const put = await fetch('/api/v1/scene3d/rooms/commands', { method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ version: 1, operation: 'scene3d.room.put', intent_id: 'office-1', input: { workspace: 'default', name: 'office',
+    room: { kind: 'room', prompt: 'office', walls: { file: 'office-plate.png' }, stage: { horizon: 0.22, ref: { baseY: 0.72, heightPct: 0.62 } } } } }) })
+const { camera, metres } = (await put.json()).result.room.plate   // eye height, card distance, lens shift
+```
+
+```python
+from services.room_box_commands import run
+result = run("scene3d.room.put", {"version": 1, "intent_id": "office-1", "input": {"workspace": "default", "name": "office", "room": {
+    "kind": "room", "prompt": "office", "walls": {"file": "office-plate.png"},
+    "stage": {"horizon": 0.22, "ref": {"baseY": 0.72, "heightPct": 0.62}}}}})["result"]
+print(result["room"]["size"], result["room"]["plate"]["camera"], result.get("warnings"))
+```
+
+Limits to know: a plate drawn with an inconsistent perspective (the stage reads a camera far from 1.6 m) gives people who look too big or too small; the extension is a soft guess, not a drawing, so keep camera moves small; specular highlights painted into the floor are part of the picture and do not move with the camera; an exterior plate is a very large box (the silos plate is 20 × 13 m) whose edges are a soft horizon smear.
+
+## Directional figures (a flat character that turns to the camera)
+
+A 2D character in a 3D shot used to be one picture that always looked at the camera. A cast entry that says where it looks or goes is
+now drawn like the sprites of Octopath, Paper Mario or Don't Starve: a flat figure in the scene, lit by its key light, hidden by the
+set, and showing the drawing of the angle between where it looks and where the camera is (front, three-quarter front, side,
+three-quarter back, back; the left is the mirror of the right), with its walk cycle played by the ground it covers. Only an entry with
+`heading` or `walkTo` changes; everything else in the shot is drawn as before.
+
+```json
+{"kind": "3d", "set": "kitchen", "cast": [
+  {"characterId": "ana", "at": {"x": 1.5, "z": 0}, "heading": "right", "walkTo": {"x": -1.5, "z": 0}, "walkSpeed": 1.2, "walkAt": 0.5, "lightTint": 0.6}]}
+```
+
+- **`heading`:** degrees against the camera at the start of the shot (0 faces it, 90 faces screen right, 180 turns its back, -90 faces
+  screen left) or `toward`, `right`, `away`, `left`. It is the way the figure looks while it stands (before and after its walk). Because it is
+  read against the first camera, a still figure changes drawing when the camera orbits or travels around it.
+- **`walkTo` `{x, z}`, `walkSpeed`, `walkAt`:** the figure walks in a straight line from where it stands (`at`, or its place in the
+  template) to that point, in metres, at `walkSpeed` m/s (default 1.2, from 0.2 to 6) from `walkAt` seconds into the shot. While it
+  walks it looks along its path; it plays the walk sheet of the direction of its path against the camera, one cycle every two steps of
+  0.75 m (so the feet and the ground agree and nothing slides). When it arrives it shows the idle sheet of its `heading` (or of
+  the way it walked).
+- **The kit:** each approved animation of the Character Kit that is a walk or an idle of one side carries `motion` (`walk` or `idle`)
+  and `dir` (`front`, `front34`, `side`, `back34`, `back`): `walk` or `walk-12` and `idle-side` (a sheet looks right), `walk-front`, `walk-front34`,
+  `walk-back34`, `walk-back`, `idle-<dir>`. With no `dir`, a `side` or `front` view says it; with no `motion`, a cycle whose id starts with `walk` or `idle`
+  says it. A sheet drawn looking left says `facing: "left"`. A direction the kit lacks is drawn by the nearest one it has; with no
+  walk or idle sheet at all the base pose glides. Nothing is an error: the script check warns `direction_sheet_missing`.
+- **Which sheet:** a standing figure takes the sheet of the angle between where it looks and the line to the camera in equal sectors of 45 degrees (front 0, front34
+  45, side 90, back34 135, back 180). A figure that **walks** (or stands facing where it went, with no `heading`) is drawn by the larger part of its movement: front or back
+  while it goes more toward or away from the camera than across, side while it goes more across, and a three-quarter sheet only for a really diagonal walk
+  (`walkDiagonalDeg`, 12: 33 to 57 degrees off the camera's line, and the same from the back; 22.5 gives the standing sectors, 0 turns the three-quarter sheets off
+  while walking). Perspective counts: a crossing near the edge of a wide room is seen from 55 degrees at its ends. A kit that has no three-quarter sheet of the motion
+  splits that band at 45 and 135 degrees, so the larger part still decides; **un-approving a poor three-quarter sheet in the Character Kit is the way to stop using it**.
+  The server check reads the same table (`directional_sprite.edges`), so a walk across a room no longer asks for sheets it will not draw.
+- **Fade:** when the drawing changes (another sheet, the other side, the pose) the old one fades into the new one over 0.12 s
+  (`crossfadeSeconds`), added up so the figure never thins. It starts on the frame of the change and is the same on every export; a jump in
+  time (a seek) shows no fade. The 10 degrees of hysteresis still keep it from flickering at a boundary.
+- **Mirror and asymmetric costumes:** the left is the right sheet mirrored, unless the kit drew that side itself: `dir: "side_r"`, `"front34_r"`
+  or `"back34_r"` is a sheet that looks left (a front or a back has no other side) and beats the mirror, for a badge, a sword arm or a parting. A kit that
+  says `asymmetric: true` is warned (`mirror_flips_detail`) when the shot mirrors a direction it has no `_r` sheet for.
+- **Speech, mouth and eyes:** a character that speaks never shows a walk sheet. While one of its lines runs the figure stands where it is and
+  the walk goes on afterwards, so it arrives later by the time it spoke (`walk_blocked_by_speech`, with the seconds, on the render's item; the
+  script check warns before it when the character has lines and a walk). It shows the idle sheet of its direction **if that sheet says where its mouth is**
+  (`mouth` `{offsetX, offsetY, scale, rotation?}` on the kit animation, in % of the cell's longer edge, like the pose anchors; `eyes` the same for the blink):
+  the kit's mouth drawing of each cue and its blink are drawn there, mirrored with the sheet. A sheet with no `mouth` shows the talking pose (a front picture)
+  instead, and the check warns `direction_sheet_no_mouth` for the directions the shot needs.
+- **Light and depth:** a figure drawn from sheets is unlit, so it does not brighten and darken as the camera goes round it, and is multiplied by the
+  key light of the scene: its colour at its strength, `lightTint` of the way from white (cast field or `screen.directional.lightTint`, 0 to 1, default 0.6, 0 turns it off).
+  It is a plane with alpha in the depth buffer, so a column, a piece of furniture or the walls of a room hide it, and it hides what is behind it; its contact shadow
+  is on the floor. It writes colour and depth only where its alpha is at least a half (`ALPHA_CUT`, with alpha to coverage for a smooth edge), so the faint alpha a keyed picture
+  has around its figure never cuts a figure behind it with the rectangle of its plane; during a fade the two sheets add up where they overlap and the silhouettes swap at the middle.
+- **Checks:** `direction_sheet_missing`, `direction_sheet_no_mouth`, `mirror_flips_detail`, `walk_path_outside_room` (the destination is off the floor of a box room; the
+  walk is not stopped) and `walk_blocked_by_speech`. A bad value (`heading: "up"`, `walkTo: {x: 1}`, a speed with no destination, `lightTint: 3`) or the fields on a shot that
+  is not 3D stops the script.
+- **Doors:** the script (`series.episode.from_script`, `series.shot.update`, `edit_series_shot`), the 3D cast part of the shot inspector
+  (Looks, Walks to x and z, Speed, Starts at, Light tint) and, for a plain Video 3D scene, the `directional` binding of `world3d.scene.patch`
+  (`{sheets, heading?, walk? {to, speed, start}, speech?, lightTint?}` on an image cutout; `null` removes it).
+- **Numbers:** `app/shared/directional_sprites.json` (sector table, 10 degrees of hysteresis, `walkDiagonalDeg` 12 and `walkHysteresisDeg` 4 for a walking figure, 0.75 m step, 1.2 m/s, 0.12 s fade, 0.6 light tint). The choice of
+  drawing is `ui/src/features/scene3d/directionalSprite.ts` (pure); the camera pass of `paintWorld` paints it. The proof is
+  `ui/scripts/directional-billboards-proof.ts`: a real Chromium on the CPU renders an orbiting shot, a walk that stops to speak, the frames of a fade and a
+  column in front of and behind two figures, with a synthetic five-direction kit, and checks the pixels.
+
+## Agent-built scenes: layout, bounds, fit and a blank start
+
+An agent that builds a Video 3D scene through `world3d.scene.*` cannot see the frame, so the scene tells it where everything is. `world3d.scene.inspect`, and the reply of every `world3d.scene.patch` (the inspect view of the new revision), carry, next to `objects` (unchanged: the ids and roles patches address):
+
+- `camera`: the authored `family`, `eye`, `look`, `fov`, `framing` (target, anchor, from/to, fov move) and a `shake` summary (`windows`, first start, last end, largest amplitude). An orbit, a framing or a shake moves the live eye from these values; they are not a per-frame position.
+- `light`, `duration` and `size` (`width`, `height`, `fps`).
+- `layout.items`: one row per object (at most 32; `layout.omitted` counts the rest) with `id`, `role`, `media`, `position`, `rotationY`, `rotationX` and `rotationZ` when the scene stored them, `scale`, `sourceUrl`, `clip` and `boundsM`.
+
+**`boundsM` is in metres and follows the renderer.** A 3D model is drawn **1.7 m x `scale` tall: its bounding-box height, whatever its length** (`fitGltf` in `ui/src/features/scene3d/gpu.ts`; an image cutout is a plane 2 m x `scale` tall). The model is scaled about its own origin and never re-centred, so a whole-environment GLB (a Meshy island, a street) enters as a 1.7 m object until `scale` says otherwise, and x/z stay wherever the GLB put its origin. `boundsM.size` is the model's own width, height and depth after that scaling; `min`, `max` and `center` are the scene coordinates after `position` and Euler XYZ (`rotationX`, `rotationY`, `rotationZ`; omitted X and Z are 0, the same box as a yaw-only turn); `bottomY` is the lowest point. A `grounded` object is lowered or lifted so that point sits at `position[1]`. The numbers come from the POSITION accessor `min`/`max` of the GLB's JSON chunk (no buffer is read) under the node transforms of the default scene, so they are the **rest pose**: a skinned model is measured in its bind pose and a clip can reach outside the box. A moving object (`motion`) travels from the placed position.
+
+`boundsM` is `null` with a `boundsReason` when the object cannot be measured, and an inspect never fails because of it: `marker` (no model bound yet), `not_a_3d_model`, `outside_workspace` (uploads, example media, other workspaces, remote URLs), `missing_file`, `not_glb` (a `.gltf`, or a file that is not a GLB), `truncated`, `json_too_large`, `missing_min_max`, `no_meshes`, `unmeasurable`. Bind workspace `.glb` files (`/api/v1/file/<name>?workspace=<ws>`) to get bounds.
+
+**`fit` sizes an object in metres instead of guessing `scale`.** In a `world3d.scene.patch` binding, `fit` is exactly one of:
+
+| `fit` | scale is set so that | needs the GLB |
+|---|---|---|
+| `{"heightM": 30}` | the bounding-box height is 30 m (`scale = heightM / 1.7`) | no |
+| `{"widthM": 6}` / `{"depthM": 6}` | the model's own x / z extent, before `rotationY` | yes |
+| `{"longestM": 80}` | the longest of its three extents | yes |
+| `"native"` | the GLB is at its file size taken as metres (`scale = height / 1.7`); a size outside 1 cm to 30 m warns `fit_native_unusual` | yes |
+
+A `source_url` bound in the same binding is measured. A binding with both `fit` and `scale` is refused (`invalid_fit`), as are a bad key, a non-positive or non-finite size, and a model with no extent on that axis; a GLB that cannot be read for `widthM`, `depthM`, `longestM` or `native` is `bounds_unavailable` (use `heightM`). An image cutout accepts `heightM` only. A refused patch writes nothing. The scale is stored on the object like any other, so the editor shows and edits it as usual.
+
+**A blank start.** The built-in cards are compiled from the UI's TypeScript templates, so there is no built-in blank card; a personal template needs none. Register this once per workspace, then instantiate it, patch objects in with `add: true`, and publish:
+
+```json
+{"operation": "world3d.templates.user.put", "input": {"workspace": "default", "id": "user-blank-stage", "title": "Blank stage", "document": {
+  "version": 1, "units": "meters", "up": "y", "templateId": "two-shot", "width": 1280, "height": 720, "fps": 30, "duration": 5,
+  "camera": {"family": "fixed", "eye": [0, 1.6, 6], "look": [0, 1, 0], "fov": 45},
+  "light": {"kind": "directional", "direction": [-0.4, -1, -0.3], "intensity": 1.2, "color": "#ffffff"}, "slots": []}}}
+```
+
+`services.world3d_blank_scene.blank_template_row()` builds the same row (and `markers=[("hero", "subject_1")]` adds empty model objects for a cast). Added objects are always `prop`; give an empty slot another role in the template when you need `subject_1`. The editor is stricter than the save: `light` must be `{kind: "directional", direction, intensity, color}` (a `{"preset": ...}` light saves but the editor shows "Invalid Video3D scene"), `fps` is 24, 30 or 60, and `editor_shape_problems(document)` in the same module lists what the editor would refuse. Nothing is blocked: the replies of `world3d.templates.user.put`, `world3d.scene.inspect`, `world3d.scene.patch` and `world3d.scene.publish` carry each problem as a warning `editor_would_refuse: <problem>` (at most 8, then a count), so an agent sees it before the user opens the scene. Then: `world3d.scene.instantiate` -> `world3d.scene.patch` (`source_url`, `fit`, `position`, `camera`) -> `world3d.scene.inspect` to read `layout.items` -> `world3d.scene.preview` -> `world3d.scene.publish`.
+
+**Opening it.** An unpublished working copy (`world3d-edits/w3d-<id>.json`) is listed in the Video 3D editor's **Open** dialog with the template's title; opening it loads the current revision, with every object, the camera and the light editable. `world3d.scene.publish` saves the same document as an ordinary scene file (`*.world3d.scene.json`) that opens in the same editor, and the working copy then leaves the Open dialog's list of unpublished scenes.
+
+## Agent-built scenes: timed moves, collisions, 3D effects and beats
+
+An agent that builds a scene also has to say *when* things happen and notice what goes wrong. Four additions, all reopenable and editable in the Video 3D editor because each one is ordinary document data.
+
+**Timed moves: `motion.start` and `motion.end`.** `slot.motion` used to span the whole shot. `motion` now takes `start` and `end` in scene seconds (default 0 and the end of the scene). Before `start` the object sits at its `position`; from `start` to `end` it travels the same path (straight, a `via` curve or `points` waypoints) with the same `easing`; after `end` it stays at `to`. "The plane flies from 1 s to 3 s" is `{"to": [24, 11, -4], "faceTravel": true, "start": 1, "end": 3}`. Either one alone is fine. A patch refuses a move that cannot run (`invalid_motion`: not a time of 0 to 600 s, `start` not before `end`, `start` at or after the end of the scene, `to` not three numbers), and a window next to a baked humanoid walk (`motion_window_with_walk`: the baked walk plants the feet along the whole shot, and the editor's "Walk without sliding" says so instead of baking a timed move). `retime: true` stretches the window with the scene. The editor's Travel panel has **Starts at** and **Ends at** (empty means the default). A document without them renders exactly as before (so `RENDER_RECIPE` does not change, as for `camera.lensShift`).
+
+**Collisions: `layout.collisions`.** `boundsM` is one box for the whole GLB (a village is one 42 x 17 x 60 m box). For collisions the server also reads **one box per mesh node** (a house, a tower, the ground slab; `procedural_3d/glb_parts.py`, JSON chunk only, at most 200 parts, the largest if there are more) and, for every object with a `motion`, samples where it is over the seconds it moves with the renderer's own formulas (`world3d_scene_motion.py` is the Python twin of `slotPoseAtTime`; both are pinned by `tests/fixtures/world3d_motion_samples.json`). Where the moving object's box sinks at least 0.1 m into a part of another object, the reply has
+
+```json
+{"a": "avioneta", "b": "village", "part": 33, "partName": "Landmark • Timber watchtower", "from_s": 2.55, "to_s": 2.98, "at": [0.9, 3.05, -13.3], "depth_m": 1.04}
+```
+
+in `layout.collisions` (the deepest four passages of each pair, twelve in all; `layout.collisionsOmitted` counts the rest) and a warning `collision: avioneta passes through village (part 33 "…") at 2.55-2.983 s near [0.9, 3.1, -13.3]…` in `world3d.scene.inspect` and every patch and beats reply. Nothing is refused. What is left out on purpose: two objects that both stand still (the author placed them), flat low parts (a part ten times wider than thick in the lowest quarter of its model: a ground slab, a cobbled lane, so a walker or a low flyer does not "hit the floor"), a graze shallower than 0.1 m (less for a small object), an object with `collide: false` (a ghost, a spirit: set it in a binding; `true` or `null` takes it off), an object held in a hand, and an object before its `appearance` starts. Only the seconds a move runs are checked. A fixed camera whose eye lies inside a part's box also warns `camera_inside_geometry` (an interior shot may be meant). The boxes are the rest pose and axis-aligned per node: a turned or concave part is a little bigger than the thing, and a model built as a single mesh is one part.
+
+**3D effects: `worldFx`.** `world3d.scene.patch` takes `worldFx: [{id?, kind, start, end?, at, scale?, color?, intensity?, sound?, volume?, to?}]` for the effects drawn *in* the scene (`screenFx` is the overlay): `explosion`, `shockwave`, `sparks`, `smoke`, `fire`, `lightning`… (`kind` is one of the world kinds of `scenes.effects.catalog`). `at` is `[x, y, z]` metres (within 50 m of the origin: the editor cannot place a cue farther), `{object_id, offset?}` (a point in that object's own frame, metres from its `position`; stored as the editor's `anchor`, so the effect follows the object when it moves) or `{collision: n}` (the middle of `layout.collisions[n]` as the patch leaves the scene). `end` defaults to a length that suits the kind and never goes past the scene; a beam (`lightning`, `energy_beam`, `laser`, `arcane_missiles`) may give `to` where it ends. Ids start with `fx-` (one is made when absent); a patch with `worldFx` replaces the earlier `fx-*` cues and keeps the template's own, `[]` removes them, like `screenFx`. The reply's `worldFx` lists every world effect of the scene (`own: true` for the caller's). An object that cannot be measured (a marker) gets a fixed effect and the warning `fx_anchor_fixed`.
+
+**Beats: `world3d.scene.beats`.** The higher-level way to say who does what when, validated. `beats: [{t, who, verb, ...}]` with `t` in scene seconds and `who` an object id; every verb resolves into the object's own fields, so the editor opens and edits the result. Same envelope as `world3d.scene.patch` (`scene_id`, `base_revision`, `intent_id`); the reply is the inspect view plus `resolved: [{beat, who, verb, set: {fields}, notes?}]`, with `layout.collisions` and the warnings of what the moves cause.
+
+| verb | fields | becomes |
+|---|---|---|
+| `appear` | `at?: [x, z]`, `duration?`, `color?` | `appearance` (hidden until `t`, then it materializes) and, with `at`, `position` |
+| `go` | `to`: `[x, z]`, `[x, y, z]` or `{near: object_id, distance_m? 1.5}`; `via?`; `duration?` or `speed_mps?`; `face?: true`; `easing?` | `motion` with `start: t` and `end: t + duration`, and, when the model has a walk clip (a run clip from 3 m/s), a `clips` entry over the same seconds with its idle clip before and after |
+| `face` | `toward: object_id` or `[x, z]` | `rotationY` before the object moves, or (with no move) a turn in place over 0.5 s: a `motion` to where it stands with a `turnTo`, the short way round |
+| `do` | `action`, `duration?` | a `clips` entry for the clip the model's GLB has for the word, matched **by name** (see below) |
+| `fx` | `kind`, `at?: object_id \| [x, y, z] \| "collision"` (default `who`), `duration?`, `scale?`, `color?`, `intensity?`, `sound?`, `volume?` | a `worldSfx` cue (as `worldFx`), labelled `beat:<who>`; `"collision"` is the passage of `who` through something nearest `t` |
+
+With no `duration` or `speed_mps`, a model with a walk clip walks at 1.4 m/s and any other object takes until its next beat (or the end of the scene). `do` matches the word to a clip of the model's GLB: the exact clip name ignoring case and spaces (`Dance Bounce` is `dance_bounce`), then the rig's id or label (`wobble` is `Wobble Dance`), then the one clip whose name contains the word. Humanoid clips: Walk, Run, Jump, Sit Down, Hover, Wave, Cheer, Clap, Victory, Talk, Nod, Look Around, Bow, Point, Shrug, Kneel Pray, Dance Bounce / Side / Arms, Idle, Breathe, Punch, Aim, Shoot, Claw, Hit, Crouch; procedural ones: idle, breathe, hover, alert, walk, run, strafe, jump, attack, hit, roll, charge, victory, bounce, spin, wobble. The cue plays once for the clip's own length unless `duration` asks for longer (then it loops); `crouch` and `kneel_pray` hold their last pose. A rigid model with no clips can `appear`, `go` and `fx`; a `do` on it, or a word it has no clip for, gives the warning `no_clip_for_verb` (with the clips it has) and does nothing, never an error.
+
+Refused, with code `invalid_beats`, the beat's position and nothing written: `beats` not a list of 1 to 64, an unknown `who` (the reply lists the objects), a `t` outside 0 to the end of the scene, an unknown verb or world-effect kind, a bad `to`, `at` or `duration`, `duration` together with `speed_mps`, a `near` that is the object itself, a `face` toward its own place. Warnings: `implied_speed` (above 15 m/s), `collision`, `no_clip_for_verb`, `go_cut_short` (the move would end after the scene: it is cut there), `go_nowhere`, `no_collision_for_fx` (an `fx` at `"collision"` for an object that passes through nothing: the beat is ignored), `second_go_ignored` and `second_appear_ignored`, `face_after_go_ignored`, and, for a **fixed** camera, `actor_out_of_frame` (the middle of the object is outside the picture when it appears, acts, turns or has an effect, or never inside it during a `go`; an entrance from outside the frame is fine).
+
+One call is one sheet for the objects it names: their `go`, `face` and `do` beats replace the earlier `motion` and `clips`, `appear` replaces the `appearance`, `fx` beats replace the earlier beat effects of that object; objects it does not name keep what they have. So send all of an object's moves and actions in one call. Limits: an object has **one move per call** (waypoints with `via`, or a second `world3d.scene.patch`, for more), a turn *after* the move cannot be timed (turn along the way with `face: true` instead), and the walk clip plays at its own pace: the feet slide unless the speed is about a walk's (a baked walk with planted feet cannot be timed, see above).
+
+## Agent-built scenes: people seated at a table or on a bed (`furniture`, `height`, `beside`, `rest`)
+
+"Two people seated at a table" used to come out wrong: every model is drawn 1.7 m x `scale` tall, so a table at scale 1 is neck-high; nothing knew where a seat is; the generic `sit_down` clip knows no seat, so a character sank into furniture or sat on air. An agent now **declares the intent** in `world3d.scene.patch` bindings and the server turns it into the plain `position`, `rotationY`, `scale` and clips the renderer already reads (the editor opens and edits the result; no renderer change):
+
+| field | on | what it says | resolved into |
+|---|---|---|---|
+| `furniture: {kind, height?, seat?, width?, depth?, color?}` | a model (with `add: true` for a new one) | a plain chair, stool, bench, sofa, table, desk, bed or nightstand at real size | a GLB of named boxes (`seat`, `back`, `top`, `mattress`…) in `world3d-furniture/`, `grounded`, `scale` for its real height |
+| `height: 0.75` | any model | its real height in metres | the same as `fit: {heightM: 0.75}` (not stored; `boundsM.size[1]` shows it) |
+| `beside: {object, side?, gap?, offset?, facing?}` | furniture | stand next to another object on one side of its box, on its floor | `position`, `rotationY`, `grounded`; re-solved on every patch, so a moved table takes its chairs |
+| `rest: {pose: "sit", on, at?, surface?, facing?, hands?}` | a rigged character | sit on `on` (hips on the seat near its front, feet on the floor, away from the backrest), at `at` (hands on its top) | `position`, `rotationY`, `grounded: false`, and the character's own GLB plus one baked, held clip (below) |
+
+`side` is degrees around the object from its front (+z turned with it) toward its right (+x seen from the front), or `front`/`right`/`back`/`left`; `gap` metres between the two boxes (negative tucks a chair under the table); `facing` `object` (default), `away`, `same` or a scene yaw in degrees. `rest.surface` is `{part: <name or index>}` or `{point: [x, y, z]}` when the seat finder cannot tell; `rest.facing` (degrees, `at`, `away`) turns a sitter on a seat with no backrest (a stool, the edge of a bed). `null` removes `beside` or `rest` (the sitter stands up with its own file and clip back); a binding that gives `position`, `rotationY` or `motion` (or, for `rest`, `clip`/`clips`) without restating the field drops it.
+
+**The seat.** A part named like a seat (`seat`, `mattress`, `cushion`, `asiento`, `colchón`…) wins; otherwise the flat upward faces of the mesh at 0.1–1.2 m, at least 0.18 m wide and open above for a body (a chair's seat, not its backrest's top; a bed's cover, not the frame under it). A one-mesh model (the Kenney furniture, `cc0-table.glb`) whose seat is not its box top warns `seat_surface_guessed` with the height it found. Geometry over one edge of the seat is the backrest; a headboard across a bed's short end is not, so a bed is sat on along its long side, the one facing the camera.
+
+**The seated clip.** The server bakes `sit_clip` for that seat in the character's own units (the CPU animate worker, the same as `model3d.animate` `interactions`; with `at` both wrists rest on the table top) and writes the character's GLB plus that one clip as `world3d-rest/<name>-sit-<hash>.glb`, once per character file and seat, with its `.humanoid.json` next to it. The slot shows that file and holds the clip's seated end with a `clips` cue whose clock stops. The shared character GLB is never rewritten, so other scenes are unaffected; the slot keeps what it had in `restBase`.
+
+**The contact check: `layout.contacts`.** `world3d.scene.inspect` and every patch reply judge each rigged character from its **joints** at the pose it holds in the middle of the shot (glTF channels sampled in the app) against the furniture's real triangles, never from bind-pose boxes: one row `{id, pose, hipsM, seat?, at?, through?, issues?, fix?}` per character, and a warning per problem, each ending with the binding to paste (the row's `fix` holds the same bindings): `seated_without_seat`, `floats_above_seat`, `sunk_into_seat`, `seat_height_unusual` (the feet leave the floor: the seat for those legs), `limb_through_object` (a limb inside a piece or right through it), `inside_object` (a person standing in furniture), `at_height_unusual` (the top not between the seated hips and chest; one height for everyone at the table), `at_out_of_reach` and `at_not_in_front` (the `beside` gap or turn of the seat), `furniture_size_unusual` (a seat or table still drawn 1.7 m). `collide: false` exempts a person.
+
+`limb_through_object` and `inside_object` say how deep and the way out in numbers: a standing person is stepped out of the piece (`position`), a sitter's limb in the table its chair stands beside opens that chair's `beside` gap, a table top in the knees or the forearms gets its `height`, anything else is moved away. A person standing with only the legs through a table gets `limb_through_object`; `inside_object` is the body (back, neck) inside a piece.
+
+**Round 2.** A mould body (`model3d.blob.make`, `model3d.anime.make`) whose skirt hides its legs is rigged from the mould's own leg layout: the silhouette used to see the hem as the crotch, so a 1.62 m character in a skirt had its hips at 0.49 m and its knees at 0.26 m and every clip bent it at the hem; its skirt now follows the thighs to the hem. A grown body (over 1.4 m) that would need a seat under 0.35 m warns `legs_unusually_short` instead of shrinking the furniture. Seated hands rest on the table of `at`, else beside the hips on a wide seat (a bed, a bench, a sofa), else on the thighs (`hands: false` keeps the clip's arms). A character whose maker recorded its height is drawn at that height when bound without `height`, `fit` or `scale` (`layout.items[].recordedHeightM`). A stage's own furniture (`room.mold.blocks`: a bed, desks, a sofa box) can be named by `rest` and `beside`. `world3d.scene.instantiate {template_id: "blank", width, height, duration}` makes an empty stage, a patch takes `width`, `height` and `fps`, and `world3d.scene.publish` takes `name`.
+
+**Round 3.** A skirted mould body is drawn from both sides (seated, the hem tips toward the camera and its inside was culled), nothing above the hem follows the shins (the knee's weight crept up the thigh's long quads and pushed the thigh through the cloth), and the thigh under the skirt keeps the cloth's colour down to the hem; characters made before keep the old skirt. On a bed `beside` takes `head`, `foot`, and `left`/`right` as for someone lying in it (by the head end, `offset` toward the foot; `furniture {kind: bed}` has its headboard at the GLB's -x end, a stage's bed at the back wall); a nightstand with no side goes on the bed's right. `world3d.scene.preview {still: true}` paints up to three real frames with the export's renderer (640 px, about 5 s each on CPU). The blank stage has a pale floor and sky and a soft fill, and its replies say `blank`. A GLB named like furniture with no `height` gets `furniture_size_unusual` with the usual height before anyone sits at it.
+
+Recipe for an agent: furniture → `beside` → `rest` for each character (`height` only for a model with no recorded height) → apply the fixes of the reply until no contact warning is left → publish. A `go`, `face` or `do` beat on a sitter stands it up (`rest_released`): its held clip is the whole shot. Not covered yet: lying down (needs a new clip), standing at a counter, acting while seated, two sitters on one sofa or bed (give each `rest.surface {point}`), a seat whose mesh cannot be read (more than 60 000 triangles, skinned), and cleaning up superseded `world3d-rest/` files.

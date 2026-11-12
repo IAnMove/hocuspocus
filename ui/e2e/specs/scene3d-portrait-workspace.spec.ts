@@ -10,7 +10,7 @@ test('portrait preview fits, paused resizes repaint, and covered image objects r
   const scene = applyScene3DTemplate('creative-ocean-window')
   await workspace.getByTestId('world3d-load-shot').setInputFiles({ name: 'portrait.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(scene)) })
   const list = workspace.getByTestId('scene3d-object-list')
-  await expect(list.getByRole('button')).toHaveCount(scene.slots.length)
+  await expect(list.locator('[data-slot-id]')).toHaveCount(scene.slots.length)
   // A rear image can be selected without raycasting through the foreground.
   await list.locator('[data-slot-id="background"]').click()
   await expect(list.locator('[data-slot-id="background"]')).toHaveAttribute('aria-pressed', 'true')
@@ -35,7 +35,10 @@ test('portrait preview fits, paused resizes repaint, and covered image objects r
     await page.setViewportSize({ width, height: 900 })
     await expect.poll(opaqueRatio).toBeGreaterThan(.95)
     const box = (await picture.boundingBox())!, outer = (await matte.boundingBox())!
-    expect(box.height).toBeLessThan(530)
+    // The picture fills the free matte and keeps the portrait ratio, with room on both sides.
+    expect(box.height).toBeGreaterThan(360)
+    expect(box.height).toBeLessThanOrEqual(outer.height + 1)
+    expect(box.width).toBeLessThanOrEqual(outer.width + 1)
     expect(Math.abs(box.width / box.height - 9 / 16)).toBeLessThan(.01)
     expect(outer.width - box.width).toBeGreaterThan(20)
   }

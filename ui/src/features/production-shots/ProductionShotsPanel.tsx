@@ -1,5 +1,7 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { LipsyncRedoButton } from '../lipsync-redo/LipsyncRedoButton'
 import { loadShotView, postShotAction } from './api'
 import { previewUrl } from './preview'
 import type { ProductionShot, ShotAction, ShotView } from './types'
@@ -68,19 +70,24 @@ export function ProductionShotsPanel({ view, workspace, onClose, onAction }: {
       {limits.map(code => <p key={code}>{isLimit(code) ? t(LIMIT_KEYS[code]) : code}</p>)}
       {view.truncated ? <p>{t('truncated', { count: view.shots.length })}</p> : null}
       {view.shots.length === 0 ? <p>{t('empty')}</p> : <ol className="flex flex-col gap-3">
-        {view.shots.map(shot => <ShotCard key={shot.id} shot={shot} workspace={workspace} onAction={onAction} />)}
+        {view.shots.map(shot => <ShotCard key={shot.id} shot={shot} workspace={workspace} productionId={view.production_id} onAction={onAction} />)}
       </ol>}
     </div>
   </div>
 }
 
-function ShotCard({ shot, workspace, onAction }: { shot: ProductionShot; workspace: string; onAction?: ShotActionHandler }) {
+function ShotCard({ shot, workspace, productionId, onAction }: {
+  shot: ProductionShot
+  workspace: string
+  productionId: string
+  onAction?: ShotActionHandler
+}) {
   const { t } = useTranslation('productionShots')
   const act: ShotActionHandler = body => onAction?.({ shot: shot.id, ...body })
   return <li className="flex w-full flex-col gap-2 rounded-lg border border-border p-3">
     <h3>{t('order', { order: shot.order })}</h3>
     <ShotFacts shot={shot} />
-    <TakeList shot={shot} workspace={workspace} onAction={act} />
+    <TakeList shot={shot} workspace={workspace} productionId={productionId} onAction={act} />
     <ShotActions shot={shot} onAction={act} />
   </li>
 }
@@ -145,32 +152,44 @@ function ShotFacts({ shot }: { shot: ProductionShot }) {
   </div>
 }
 
-function TakeList({ shot, workspace, onAction }: { shot: ProductionShot; workspace: string; onAction?: ShotActionHandler }) {
+function isVideo(file: string | null): boolean {
+  return Boolean(file && /\.(mp4|webm|mov)$/i.test(file))
+}
+
+function TakeList({ shot, workspace, productionId, onAction }: {
+  shot: ProductionShot
+  workspace: string
+  productionId: string
+  onAction?: ShotActionHandler
+}) {
   const { t } = useTranslation('productionShots')
   if (shot.takes.length === 0) return null
   const selectable = shot.actions?.find(item => item.action === 'select')?.enabled === true
   return <ul aria-label={t('takes')} className="flex flex-col gap-2">
-    {shot.takes.map(take => <TakeRow key={take.id} file={take.file} id={take.id} selected={take.selected} workspace={workspace} selectable={selectable} onAction={onAction} />)}
+    {shot.takes.map(take => <TakeRow key={take.id} file={take.file} id={take.id} selected={take.selected} workspace={workspace} productionId={productionId} shotId={shot.id} selectable={selectable} onAction={onAction} />)}
   </ul>
 }
 
-function TakeRow({ file, id, selected, workspace, selectable, onAction }: {
+function TakeRow({ file, id, selected, workspace, productionId, shotId, selectable, onAction }: {
   file: string | null
   id: string
   selected: boolean
   workspace: string
+  productionId: string
+  shotId: string
   selectable: boolean
   onAction?: ShotActionHandler
 }) {
   const { t } = useTranslation('productionShots')
   const src = previewUrl(file, workspace)
   return <li className="flex flex-col gap-1 sm:flex-row sm:items-center">
-    {src ? (/\.(mp4|webm|mov)$/i.test(file ?? '')
+    {src ? (isVideo(file)
       ? <video src={src} controls preload="metadata" aria-label={file ?? id} className="h-24 w-auto max-w-full object-contain" />
       : <img src={src} alt={file ?? id} className="h-24 w-auto max-w-full object-contain" />) : null}
     <span>{file ?? id}</span>
     {selected ? <span>{t('selected')}</span> : null}
     {!selected && selectable ? <button type="button" data-action="select" onClick={() => onAction?.({ action: 'select', take: id })}>{t('actions.select')}</button> : null}
+    {isVideo(file) && file ? <LipsyncRedoButton workspace={workspace} namespace="productionShots" labelKey="actions.redoLips" engineKey="actions.lipsEngine" target={{ production_id: productionId, shot: shotId, source: file }} /> : null}
   </li>
 }
 
@@ -261,7 +280,7 @@ export function ShotLoader({ workspace, productionId, onClose }: {
   return <>
     {busy ? <p role="status">{t('working')}</p> : null}
     {actionFailed ? <p role="alert">{t('actionFailed')}</p> : null}
-    <fieldset disabled={busy} className="h-full min-h-0 w-full border-0 p-0">
+    <fieldset disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="h-full min-h-0 w-full border-0 p-0">
     <ProductionShotsPanel view={view} workspace={workspace} onClose={onClose} onAction={body => {
     if (busy) return
     setBusy(true)

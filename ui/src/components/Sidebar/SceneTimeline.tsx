@@ -41,7 +41,7 @@ function CurvePreview({ curve, label }: { curve: SceneCurve; label: string }) {
 }
 
 const numberField = (label: string, value: number, change: (value: number) => void, step = .1, min?: number, max?: number, disabled = false) => (
-  <label className="text-[9px] text-text-muted">{label}<input type="number" value={Number.isFinite(value) ? Number(value.toFixed(3)) : 0} step={step} min={min} max={max} disabled={disabled} onChange={event => { const next = Number(event.target.value); if (Number.isFinite(next)) change(next) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
+  <label className="text-[9px] text-text-muted">{label}<input aria-label={label} type="number" value={Number.isFinite(value) ? Number(value.toFixed(3)) : 0} step={step} min={min} max={max} disabled={disabled} onChange={event => { const next = Number(event.target.value); if (Number.isFinite(next)) change(next) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
 )
 
 export function SceneTimeline({ layers, duration, fps, currentTime, selectedLayerId, selectedKeyframeId, selectedEventId, onScrub, onSelectLayer, onSelectKeyframe, onSelectEvent, onAddKeyframe, onAddEvent, onDeleteKeyframe, onDeleteEvent, onCopyKeyframes, onPasteKeyframes, onUpdateKeyframe, onUpdateEvent, onUpdateTiming }: Props) {
@@ -69,9 +69,9 @@ export function SceneTimeline({ layers, duration, fps, currentTime, selectedLaye
       <span className="mr-auto text-[10px] font-medium uppercase tracking-wider text-text-secondary">{t('timeline.title', { current: currentTime.toFixed(2), duration: duration.toFixed(2), fps })}</span>
       <button type="button" onClick={onAddKeyframe} disabled={!selectedLayer || locked} className="flex items-center gap-1 rounded border border-border px-1.5 py-1 text-[9px] disabled:opacity-40"><Plus size={10} /> {t('timeline.keyframe')}</button>
       <button type="button" onClick={onAddEvent} disabled={!selectedLayer || locked} className="flex items-center gap-1 rounded border border-amber-400/40 px-1.5 py-1 text-[9px] text-amber-200 disabled:opacity-40"><Flag size={10} /> {t('timeline.event')}</button>
-      <button type="button" onClick={selectedEvent ? onDeleteEvent : onDeleteKeyframe} disabled={locked || (!selectedEvent && (!selectedFrame || isEndpoint))} title={selectedEvent ? t('timeline.deleteEvent') : isEndpoint ? t('timeline.deleteEndpoint') : t('timeline.deleteKeyframe')} className="rounded border border-border p-1 text-red-300 disabled:opacity-30"><Trash2 size={11} /></button>
-      <button type="button" onClick={onCopyKeyframes} disabled={!selectedLayer} title={t('timeline.copyKeyframes')} className="rounded border border-border p-1 disabled:opacity-30"><Copy size={11} /></button>
-      <button type="button" onClick={onPasteKeyframes} disabled={!selectedLayer || locked} title={t('timeline.pasteKeyframes')} className="rounded border border-border p-1 disabled:opacity-30"><ClipboardPaste size={11} /></button>
+      <button type="button" onClick={selectedEvent ? onDeleteEvent : onDeleteKeyframe} disabled={locked || (!selectedEvent && (!selectedFrame || isEndpoint))} title={selectedEvent ? t('timeline.deleteEvent') : isEndpoint ? t('timeline.deleteEndpoint') : t('timeline.deleteKeyframe')} aria-label={selectedEvent ? t('timeline.deleteEvent') : isEndpoint ? t('timeline.deleteEndpoint') : t('timeline.deleteKeyframe')} className="rounded border border-border p-1 text-red-300 disabled:opacity-30"><Trash2 size={11} /></button>
+      <button type="button" onClick={onCopyKeyframes} disabled={!selectedLayer} title={t('timeline.copyKeyframes')} aria-label={t('timeline.copyKeyframes')} className="rounded border border-border p-1 disabled:opacity-30"><Copy size={11} /></button>
+      <button type="button" onClick={onPasteKeyframes} disabled={!selectedLayer || locked} title={t('timeline.pasteKeyframes')} aria-label={t('timeline.pasteKeyframes')} className="rounded border border-border p-1 disabled:opacity-30"><ClipboardPaste size={11} /></button>
     </div>
     <div className="px-2 pb-2 pt-1.5">
       <input aria-label={t('timeline.playheadAria')} type="range" min={0} max={Math.max(.1, duration)} step={1 / fps} value={Math.min(duration, currentTime)} onChange={event => onScrub(quantizeTime(Number(event.target.value)))} className="mb-1.5 w-full accent-blue-500" />
@@ -98,7 +98,7 @@ export function SceneTimeline({ layers, duration, fps, currentTime, selectedLaye
         {numberField(t('timeline.trimIn'), selectedTiming.trimStart, value => onUpdateTiming({ trimStart: value }), .05, 0, selectedLayer.animation.duration - .01, locked)}
         {numberField(t('timeline.trimOut'), selectedTiming.trimEnd, value => onUpdateTiming({ trimEnd: value }), .05, .01, selectedLayer.animation.duration, locked)}
         {numberField(t('timeline.speed'), selectedTiming.speed, value => onUpdateTiming({ speed: value }), .1, .1, 8, locked)}
-        <label className="flex items-end gap-1.5 pb-1 text-[9px] text-text-secondary"><input type="checkbox" checked={selectedTiming.loop} disabled={locked} onChange={event => onUpdateTiming({ loop: event.target.checked })} /> {t('timeline.repeatMotion')}</label>
+        <label className="flex items-end gap-1.5 pb-1 text-[9px] text-text-secondary"><input aria-label={t('timeline.repeatMotion')} type="checkbox" checked={selectedTiming.loop} disabled={locked} onChange={event => onUpdateTiming({ loop: event.target.checked })} /> {t('timeline.repeatMotion')}</label>
       </div>
       <p className="mt-1 text-[8px] text-text-muted">{t('timeline.timingHelp')}</p>
     </div>}
@@ -113,7 +113,7 @@ export function SceneTimeline({ layers, duration, fps, currentTime, selectedLaye
         {numberField(t('timeline.rotation'), selectedFrame.rotation, value => onUpdateKeyframe(selectedFrame.id, { rotation: value }), 1, -1080, 1080, locked)}
       </div>
       <div className="mt-2 flex items-end gap-2">
-        <label className="min-w-36 text-[9px] text-text-muted">{t('timeline.easing')}<select value={selectedFrame.curve} disabled={isLast || locked} onChange={event => onUpdateKeyframe(selectedFrame.id, { curve: event.target.value as SceneCurve })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50">{CURVES.map(curve => <option key={curve} value={curve}>{curveLabel(curve)}</option>)}</select></label>
+        <label className="min-w-36 text-[9px] text-text-muted">{t('timeline.easing')}<select aria-label={t('timeline.easing')} value={selectedFrame.curve} disabled={isLast || locked} onChange={event => onUpdateKeyframe(selectedFrame.id, { curve: event.target.value as SceneCurve })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50">{CURVES.map(curve => <option key={curve} value={curve}>{curveLabel(curve)}</option>)}</select></label>
         {!isLast && <CurvePreview curve={selectedFrame.curve} label={t('timeline.easingPreview', { curve: curveLabel(selectedFrame.curve) })} />}
         <p className="text-[8px] leading-tight text-text-muted">{t('timeline.keyframeHelp')}</p>
       </div>
@@ -122,8 +122,8 @@ export function SceneTimeline({ layers, duration, fps, currentTime, selectedLaye
       <div className="mb-1.5 flex items-center justify-between"><span className="flex items-center gap-1 text-[9px] font-medium text-amber-200"><Flag size={10} /> {t('timeline.animationEvent', { time: selectedEvent.time.toFixed(2) })}</span><span className="text-[8px] text-text-muted">{t('timeline.metadataMarker')}</span></div>
       <div className="grid grid-cols-2 gap-1.5 md:grid-cols-[100px_1fr_2fr]">
         {numberField(t('timeline.time'), selectedEvent.time, value => onUpdateEvent(selectedEvent.id, { time: value }), 1 / fps, 0, selectedLayer.animation.duration, locked)}
-        <label className="text-[9px] text-text-muted">{t('timeline.name')}<input value={selectedEvent.name} disabled={locked} maxLength={100} onChange={event => onUpdateEvent(selectedEvent.id, { name: event.target.value })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
-        <label className="text-[9px] text-text-muted">{t('timeline.payload')}<input value={selectedEvent.payload ?? ''} disabled={locked} maxLength={2000} placeholder={t('timeline.payloadPlaceholder')} onChange={event => onUpdateEvent(selectedEvent.id, { payload: event.target.value })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
+        <label className="text-[9px] text-text-muted">{t('timeline.name')}<input aria-label={t('timeline.name')} value={selectedEvent.name} disabled={locked} maxLength={100} onChange={event => onUpdateEvent(selectedEvent.id, { name: event.target.value })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
+        <label className="text-[9px] text-text-muted">{t('timeline.payload')}<input aria-label={t('timeline.payload')} value={selectedEvent.payload ?? ''} disabled={locked} maxLength={2000} placeholder={t('timeline.payloadPlaceholder')} onChange={event => onUpdateEvent(selectedEvent.id, { payload: event.target.value })} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1.5 py-1 text-[10px] disabled:opacity-50" /></label>
       </div>
       <p className="mt-1 text-[8px] text-text-muted">{t('timeline.eventHelp')}</p>
     </div>}

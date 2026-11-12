@@ -1,5 +1,5 @@
 import { randomUuid } from '../lib/uuid'
-import { BASE } from './http'
+import { BASE, httpError } from './http'
 
 // --- Native Hunyuan3D ---
 
@@ -15,7 +15,7 @@ export interface Hunyuan3DModel {
   supports_text: boolean
   recommended_vram_gb: number | null
   description: string
-  runtime?: { installed: boolean; install_hint: string | null; validation?: string }
+  runtime?: { installed: boolean; install_hint: string | null; validation?: string; compatible?: boolean; weights_downloaded?: boolean; compatibility_reason?: string | null }
   resolutions?: number[]
   supports_low_vram?: boolean
   supports_camera_fov?: boolean
@@ -111,13 +111,9 @@ export async function startHunyuan3DJob(params: {
 
 export async function fetchHunyuan3DJob(jobId: string): Promise<Hunyuan3DJob> {
   const res = await fetch(`${BASE}/api/v1/model3d/status/${encodeURIComponent(jobId)}`)
-  if (!res.ok) {
-    // A 404 means the job registry no longer knows this id (the backend
-    // restarted mid-generation); callers use the status to stop polling.
-    const error = new Error(res.status === 404 ? 'Hunyuan3D job not found' : 'Failed to fetch Hunyuan3D job')
-    ;(error as Error & { status?: number }).status = res.status
-    throw error
-  }
+  // A 404 means the job registry no longer knows this id (the backend
+  // restarted mid-generation); callers use the status to stop polling.
+  if (!res.ok) throw await httpError(res, res.status === 404 ? 'Hunyuan3D job not found' : 'Failed to fetch Hunyuan3D job')
   return res.json()
 }
 
@@ -135,6 +131,8 @@ export interface RigEngine {
   description: string
   installed: boolean
   install_hint: string | null
+  /** A cloud engine (Meshy): reached through MCP/REST with library animations, not this panel's clip picker. */
+  remote?: boolean
 }
 
 export interface RigAnimation {
@@ -187,6 +185,8 @@ export interface RigJob {
   /** Set when the worker refused the mesh, e.g. ``not_humanoid`` with reason ``hands_stuck``. */
   error_code?: string
   error_reason?: string
+  /** Set when a humanoid refusal can be retried with another installed engine. The server does not switch. */
+  suggested_engine?: string
   /** Humanoid engine: what was detected and which clips the GLB holds. */
   humanoid?: HumanoidRigSummary
   created_at: number
@@ -210,7 +210,8 @@ export interface HumanoidRigSummary {
 export async function fetchRigCapabilities(): Promise<RigCapabilities> {
   const res = await fetch(`${BASE}/api/v1/rig/capabilities`)
   if (!res.ok) throw new Error('Failed to fetch rig capabilities')
-  return res.json()
+  const capabilities: RigCapabilities = await res.json()
+  return { ...capabilities, engines: capabilities.engines.filter(engine => !engine.remote) }
 }
 
 export async function startRigJob(params: {

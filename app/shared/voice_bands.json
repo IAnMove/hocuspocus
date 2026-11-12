@@ -1,0 +1,7 @@
+{
+  "man": {"pitchBandHz": [80, 136], "maxBrightness": 0.04},
+  "woman": {"pitchBandHz": [108, 249], "maxBrightness": 0.03},
+  "womanRegisterHz": [150, 249],
+  "child": {"pitchBandHz": [180, 230], "maxBrightness": 0.04, "maxCentroidHz": 510},
+  "robot": {"pitchBandHz": [90, 145], "maxBrightness": 0.04}
+}

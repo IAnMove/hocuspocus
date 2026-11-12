@@ -1,0 +1,15 @@
+# Boot smoke list for the full server (scripts/boot_smoke.py runs it on every boot).
+# One check per line: METHOD /path [status[,status]] [json body]. The status defaults to 200.
+# A slice PR adds scripts/boot_smoke/<slice>.txt with its own routes and passes it with --list.
+GET /api/v1/workspaces
+GET /api/v1/jobs
+GET /api/v1/jobs/recovery
+GET /api/v1/tasks?workspace=default
+GET /api/v1/resources
+GET /api/v1/system/preflight
+GET /api/v1/models
+GET /api/v1/outputs
+GET /api/v1/series
+GET /api/v1/director/pipelines
+GET /api/v1/does-not-exist 404
+GET /

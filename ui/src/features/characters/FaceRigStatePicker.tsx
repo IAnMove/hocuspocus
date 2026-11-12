@@ -4,7 +4,7 @@ import { isFaceRigEyeState, type CharacterKitFaceRigState } from '../../lib/char
 import { CHARACTER_MOUTH_STATES } from '../../lib/characterMouthStates'
 
 export function FaceRigStatePicker({ kit, selected, disabled, onSelect }: {
-  kit: CharacterKit; selected: CharacterKitFaceRigState; disabled: boolean; onSelect: (state: CharacterKitFaceRigState) => void
+  kit: CharacterKit; selected: CharacterKitFaceRigState; disabled: boolean; title?: string; onSelect: (state: CharacterKitFaceRigState) => void
 }) {
   const { t } = useUiTranslation('characters')
   const choice = (state: CharacterKitFaceRigState) => {

@@ -167,13 +167,16 @@ def test_loopback_only_mode_remains_credential_free(monkeypatch) -> None:
     assert _middleware_status(_request("/api/v1/probe", method="POST"))[0] == 200
 
 
-def test_lan_sharing_is_credential_free_by_default(monkeypatch) -> None:
+def test_lan_sharing_stays_open_until_the_token_gate_is_turned_on(monkeypatch) -> None:
     monkeypatch.setenv("PINOKIO_SHARE_LOCAL", "true")
     monkeypatch.delenv("LOREFRAME_LAN_AUTH", raising=False)
     monkeypatch.delenv("LOREFRAME_LAN_TOKEN", raising=False)
     assert _middleware_status(_request("/api/v1/probe"))[0] == 200
     assert _middleware_status(_request("/api/v1/probe", method="POST"))[0] == 200
     assert describe_lan_auth_startup() == []
+    monkeypatch.setenv("LOREFRAME_LAN_AUTH", "1")
+    assert _middleware_status(_request("/api/v1/probe"))[0] == 401, "turning the gate on asks other devices for the token"
+    assert any("session token" in line for line in describe_lan_auth_startup())
 
 
 def test_local_loopback_client_is_exempt_even_while_sharing(monkeypatch) -> None:
@@ -290,12 +293,31 @@ def test_launch_installs_auth_middleware_router_and_startup_notice() -> None:
         and isinstance(call.args[0], ast.Name)
         and call.args[0].id == "LanAuthMiddleware"
     )
-    trace_middleware = next(
+    trace_registration = next(
         node for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == "trace_user_mutations"
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and node.value.args
+        and isinstance(node.value.args[0], ast.Name)
+        and node.value.args[0].id == "trace_user_mutations"
+        and isinstance(node.value.func, ast.Call)
+        and isinstance(node.value.func.func, ast.Attribute)
+        and node.value.func.func.attr == "middleware"
     )
-    assert middleware_call.lineno > trace_middleware.end_lineno
+    assert middleware_call.lineno > trace_registration.end_lineno
+    # The cross-origin check is registered before the trace, so the trace runs outside it and records refusals.
+    origin_registration = next(
+        node for node in tree.body
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and node.value.args
+        and isinstance(node.value.args[0], ast.Name)
+        and node.value.args[0].id == "protect_cross_origin_mutations"
+        and isinstance(node.value.func, ast.Call)
+        and isinstance(node.value.func.func, ast.Attribute)
+        and node.value.func.func.attr == "middleware"
+    )
+    assert origin_registration.end_lineno < trace_registration.lineno
     assert any(
         isinstance(call.func, ast.Name)
         and call.func.id == "create_lan_auth_router"

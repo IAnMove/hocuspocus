@@ -1,3 +1,4 @@
+import { StoryWritingGuide } from '../writing-guide/StoryWritingGuide'
 import { ImagePlus, Loader2, Plus, Upload } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { button, panel, Field, SectionHeader, type StoryLabSectionTabProps } from './storyLabChrome'
@@ -30,6 +31,7 @@ export function StoryWorldTab({
   const { imageBusy, referenceBatchBusy, generateVisual, requestUpload, removeReference } = useStoryLabVisuals()
   return (
     <>
+      <StoryWritingGuide projectId={project.id} scope="world" />
       <div id="story-review-world" className="scroll-mt-4">
         <SectionHeader title={t('world.title')} description={t('world.description')} scope="world" busy={busy} approved={isApproved('world')} instruction={instruction} setInstruction={setInstruction} onGenerate={generate} onApprove={() => approve('world')} />
       </div>

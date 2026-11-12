@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   EXAMPLE_SAUCER_CRUISE_RECIPE,
+  RECIPE_CAMERA_PRESETS,
   SCENE_RECIPE_JSON_SCHEMA,
   buildRecipeSystemPrompt,
   compileRecipeShot,
@@ -701,4 +702,19 @@ test('the looping travel template only accepts a plate verified as seamless', ()
   const scene = compileRecipeShot(recipe, recipe.shots[0], { runner: 'runner.png', world: 'world.png' }, file => file)
   assert.equal(scene.layers.find(layer => layer.seamlessHorizontal)?.seamlessHorizontal, true)
   assert.equal(recipeAssetDuration(recipe, 'world'), 10)
+})
+
+test('a calm observational shot is pointed at slow cameras, not at the dolly opening', () => {
+  // camera-dolly is a 1.5 -> 0.92 diagonal opening with a roll; the planner used to offer it for quiet shots.
+  const prompt = buildRecipeSystemPrompt({ mode: 'auto', inventory: [] })
+  const calm = prompt.split('\n').find(line => line.startsWith('- calm observational shot ->'))
+  assert.ok(calm)
+  const advice = calm.split('.')[0]
+  const named = Object.keys(RECIPE_CAMERA_PRESETS).filter(id => new RegExp(`\\b${id}\\b`).test(advice))
+  assert.ok(named.length >= 2 && !named.includes('camera-dolly'), named.join(', '))
+  for (const id of named) {
+    const preset = RECIPE_CAMERA_PRESETS[id]
+    assert.ok(Math.abs(preset.end.scale - preset.start.scale) <= 0.2 && !preset.start.rotation && !preset.end.rotation && !preset.shake, `${id} is slow`)
+  }
+  assert.match(prompt, /camera-dolly is a big diagonal opening with a roll/)
 })

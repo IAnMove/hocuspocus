@@ -11,10 +11,11 @@ from fastapi.responses import JSONResponse
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
+REQUEST_GUARDS = ROOT / "app" / "services" / "request_guards.py"
 
 
-def load_function(name: str, namespace: dict):
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+def load_function(name: str, namespace: dict, path: Path = LAUNCH):
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     node = copy.deepcopy(next(
         item for item in tree.body if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
         and item.name == name
@@ -22,7 +23,7 @@ def load_function(name: str, namespace: dict):
     node.decorator_list = []
     module = ast.Module(body=[node], type_ignores=[])
     ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
+    exec(compile(module, str(path), "exec"), namespace)
 
 
 def test_output_resolution_never_searches_another_workspace(tmp_path):
@@ -40,7 +41,7 @@ def test_output_resolution_never_searches_another_workspace(tmp_path):
         "_workspace_dir": lambda workspace=None: str(other if workspace == "other" else default),
         "_safe_join": safe_join,
     }
-    load_function("_resolve_output_file", namespace)
+    load_function("_resolve_output_file", namespace, ROOT / "app" / "services" / "output_listing.py")
 
     assert namespace["_resolve_output_file"]("same.mp4") is None
     assert namespace["_resolve_output_file"]("same.mp4", "other") == str(other / "same.mp4")
@@ -48,7 +49,7 @@ def test_output_resolution_never_searches_another_workspace(tmp_path):
 
 def test_browser_mutations_require_a_same_host_origin():
     namespace = {"re": re, "JSONResponse": JSONResponse, "Request": FastAPIRequest}
-    load_function("protect_cross_origin_mutations", namespace)
+    load_function("protect_cross_origin_mutations", namespace, REQUEST_GUARDS)
     calls = []
 
     class Request:

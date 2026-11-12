@@ -1,3 +1,5 @@
+import { useFieldIds } from '../common/fieldIds'
+import { controlLabel } from '../../i18n/controlLabel'
 import { useCallback } from 'react'
 import { X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -8,6 +10,8 @@ import { StudioSourceField } from '../../lib/StudioSourceField.tsx'
 import { applyChosenStudioMedia, useWorkspaceOutputs } from '../../lib/studioAssetPick.ts'
 
 export function RetakeControls() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const editVideoFile = useStore(s => s.editVideoFile)
   const editVideoPath = useStore(s => s.editVideoPath)
@@ -43,7 +47,7 @@ export function RetakeControls() {
       ) : (
         <div className="relative">
           <button onClick={clearEditVideo}
-            className="absolute top-1.5 right-1.5 z-20 p-1 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80 transition-colors">
+            className="absolute top-1.5 right-1.5 z-20 p-1 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80 transition-colors" title={controlLabel('a11y.clearVideo')} aria-label={controlLabel('a11y.clearVideo')}>
             <X size={14} />
           </button>
           <VideoTimelineSelector
@@ -61,7 +65,7 @@ export function RetakeControls() {
       {/* Regenerate Audio toggle — native engine only */}
       {editRetakeEngine === 'native' && editVideoPath && (
         <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" checked={editRegenerateAudio}
+          <input aria-label={t('retake.regenerateAudio')} type="checkbox" checked={editRegenerateAudio}
             onChange={e => useStore.setState({ editRegenerateAudio: e.target.checked })}
             className="w-3.5 h-3.5 rounded border-border accent-accent-blue" />
           <span className="text-[10px] text-text-secondary">{t('retake.regenerateAudio')}</span>
@@ -75,10 +79,10 @@ export function RetakeControls() {
       {editRetakeEngine === 'legacy' && (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('retake.strength')}</label>
+            <label htmlFor={fieldIds('f0')} className="text-[10px] text-text-muted uppercase tracking-wider">{t('retake.strength')}</label>
             <span className="text-[10px] text-text-secondary">{editRetakeStrength.toFixed(2)}</span>
           </div>
-          <input type="range" min={0.1} max={1} step={0.05} value={editRetakeStrength}
+          <input aria-label={t('retake.strength')} id={fieldIds('f0')} type="range" min={0.1} max={1} step={0.05} value={editRetakeStrength}
             onChange={e => useStore.setState({ editRetakeStrength: parseFloat(e.target.value) })} className="w-full" />
         </div>
       )}

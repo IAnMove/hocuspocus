@@ -36,7 +36,7 @@ def test_only_installed_visible_image_models_are_listed_with_their_cost():
 def test_cloud_providers_are_ready_or_need_a_key_and_no_secret_is_returned():
     result = media_options.build(MODELS, SERVICES, PROFILE)
     assert result["cloud"]["image"] == {"ready": ["minimax"], "needs_key": []}
-    assert result["cloud"]["music"] == {"ready": [], "needs_key": ["minimax"]}
+    assert "music" not in result["cloud"]  # paid MiniMax music is not an option for an assistant
     assert result["cloud"]["model3d"]["needs_key"] == ["meshy", "hi3d"]
     assert "openai" in result["cloud"]["text"]["ready"]
     assert "sk-secret-value" not in json.dumps(result)

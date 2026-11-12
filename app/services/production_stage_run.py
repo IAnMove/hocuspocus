@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from services.production_control import Cancelled, arm, checkpoint, disarm
-from services.production_disk import release_completed
+from services.production_disk import release_completed, release_uploads
 
 _IDENTITY_KEYS = ("project", "intent_id", "origin", "format")
 
@@ -48,6 +48,8 @@ def execute_run(production: Any, spec: dict, retake: tuple[str, ...] = (), throu
     from services.production_preview import keep_completed_cut, remember_completed_cut
     remember_completed_cut(production.state, prior_status, through)
     adopt_prepared_identity(production)
+    from services.production_seeds import ensure_seed_base
+    ensure_seed_base(production.state)       # before "started": a run from before the base keeps its old seeds
     production.state.update(spec=spec, status="running", started=production.state.get("started") or host.time.time(), through=through)
     from services.production_close import note_resume
     note_resume(production)
@@ -60,6 +62,9 @@ def execute_run(production: Any, spec: dict, retake: tuple[str, ...] = (), throu
         watch.call("song", production.song, spec)
         watch.call("analyze", production.analyze, spec)
         watch.call("cast", production.cast, spec)
+        if spec.get("models") or spec.get("sets"):
+            from services.production_models import make_models
+            watch.call("models", make_models, production, spec)
         windows = host.shot_windows(spec, production.score())
         watch.call("frames", production.frames, spec, windows)
         if through == "frames":
@@ -82,6 +87,9 @@ def execute_run(production: Any, spec: dict, retake: tuple[str, ...] = (), throu
         watch.call("clips", production.clips, spec, windows, retake)
         if any(shot.get("kind") == "scene3d" for shot in [*spec["shots"], *(spec.get("fill") or [])]):
             watch.call("clips", host.export_scene3d_clips, production, spec, windows, retake)
+        from services.production_scene2d import cast_ids, make_cutouts
+        if cast_ids(spec):      # the cast members a scene2d shot plays, cut out of their portraits
+            watch.call("clips", make_cutouts, production, spec)
         from services.production_enhance import enhance_clips
         enhance_clips(production, spec)
         watch.call("scenes", production.scenes, spec, windows)
@@ -105,4 +113,5 @@ def execute_run(production: Any, spec: dict, retake: tuple[str, ...] = (), throu
         from services.production_close import close_run
         close_run(production, retake)
         release_completed(production.root, production.state, production.id)
+        release_uploads(production.uploads, production.state)
         production.save()

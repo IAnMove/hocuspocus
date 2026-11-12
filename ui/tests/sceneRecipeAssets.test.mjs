@@ -7,7 +7,7 @@ test('recipe speech uses the proven HocusPocus voice-generation contract', () =>
   const params = recipeAudioGenerationParams({
     id: 'luma-line', kind: 'speech', prompt: 'Hola desde la plaza.',
   }, 4.2, 'episode-room')
-  assert.equal(params.model_type, 'qwen3_tts_voicedesign')
+  assert.equal(params.model_type, 'voxcpm2_voicedesign')
   assert.equal(params.generation_mode, 'audio')
   assert.equal(params._audio_sub_mode, 'speech')
   assert.equal(params.duration_seconds, 4.2)

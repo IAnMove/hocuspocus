@@ -1,4 +1,4 @@
-"""A profile that was never saved starts on local Qwen Image 2.1 when it is installed, and only then."""
+"""A profile that was never saved starts on local Qwen Image 2.1 Turbo when it is installed (the base Qwen 2.1 when only that is), and only then."""
 from __future__ import annotations
 
 import os
@@ -17,11 +17,15 @@ class ProductionProfileDefaultsTests(unittest.TestCase):
     def setUp(self):
         defaults.reset_cache()
 
-    def test_installed_qwen_becomes_the_default_image_model_without_touching_the_rest(self):
-        profile = defaults.default_profile(STATIC, lambda model: model == "qwen_image_21")
-        self.assertEqual(profile["image"], {"provider": "local", "model": "qwen_image_21"})
+    def test_installed_turbo_becomes_the_default_image_model_without_touching_the_rest(self):
+        profile = defaults.default_profile(STATIC, lambda model: model in ("qwen_image_21", "qwen_image_21_turbo"))
+        self.assertEqual(profile["image"], {"provider": "local", "model": "qwen_image_21_turbo"})
         self.assertEqual(profile["music"], STATIC["music"])
         self.assertEqual(STATIC["image"], {"provider": "minimax", "model": "image-01"})   # the static default is never mutated
+
+    def test_an_install_with_only_the_base_qwen_keeps_it_and_is_not_pointed_at_a_download(self):
+        profile = defaults.default_profile(STATIC, lambda model: model == "qwen_image_21")
+        self.assertEqual(profile["image"], {"provider": "local", "model": "qwen_image_21"})
 
     def test_without_the_weights_the_static_default_stays(self):
         self.assertEqual(defaults.default_profile(STATIC, lambda model: False), STATIC)
@@ -39,7 +43,7 @@ class ProductionProfileDefaultsTests(unittest.TestCase):
         clock = [100.0]
         for _ in range(3):
             defaults.default_profile(STATIC, probe, now=lambda: clock[0])
-        self.assertEqual(calls, ["qwen_image_21"])
+        self.assertEqual(calls, ["qwen_image_21_turbo"])
         clock[0] += defaults._TTL_S + 1
         defaults.default_profile(STATIC, probe, now=lambda: clock[0])
         self.assertEqual(len(calls), 2)

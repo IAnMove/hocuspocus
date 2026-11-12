@@ -283,3 +283,23 @@ export function languageContractSummary(intent: LanguageIntent | undefined): str
       : '',
   ].filter(Boolean).join(' ')
 }
+
+/**
+ * Language labels for a project read from storage. A saved label wins. A
+ * missing label comes from the saved language intent, and only then is
+ * English. The UI language is never used here.
+ */
+export function savedProjectLanguage(project: object): { language: string; spokenLanguage: string } {
+  const raw = project as Record<string, unknown>
+  const intent = raw.languageIntent && typeof raw.languageIntent === 'object' && !Array.isArray(raw.languageIntent)
+    ? raw.languageIntent as Record<string, unknown>
+    : {}
+  const label = (value: unknown): string => typeof value === 'string' ? value.trim() : ''
+  const intentContent = label(intent.contentLanguage ?? intent.content_language)
+  const intentSpoken = label(intent.spokenLanguage ?? intent.spoken_language)
+  const language = typeof raw.language === 'string' ? raw.language : intentContent || 'English'
+  const spokenLanguage = typeof raw.spokenLanguage === 'string'
+    ? raw.spokenLanguage
+    : typeof raw.language === 'string' ? raw.language : intentSpoken || intentContent || 'English'
+  return { language, spokenLanguage }
+}

@@ -1,7 +1,7 @@
 # Contratos de ejecución y baseline histórico
 
-El registro del 5 de septiembre fue sustituido como cola por
-[CURRENT_WORK](CURRENT_WORK.md) y [SLICE_QUEUE](SLICE_QUEUE.md).
+El registro del 5 de septiembre dejó de ser la cola de trabajo; el estado vive en
+[CHANGELOG](../../CHANGELOG.md) y en el [tablero de producción](PRODUCTION_WORK_BOARD.md).
 El [original completo](../archive/2026-09-06/architecture-wave/EXECUTION_BASELINE.md)
 se conserva para trazabilidad; no seguir sus órdenes de ramas ni sus estados de PR.
 

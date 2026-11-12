@@ -1,12 +1,15 @@
 import { useUiTranslation } from '../../i18n'
 import { h3CatalogEntry } from '../../lib/h3Catalog'
-import { resolveModelCatalog, type ModelCatalogInput } from '../../lib/modelCatalog'
+import { isRemoteModel, resolveModelCatalog, type ModelCatalogInput } from '../../lib/modelCatalog'
 import { H3ModelInfo } from './H3ModelInfo'
 
 export function ModelCatalogInfo({ model }: { model: ModelCatalogInput }) {
   const { t } = useUiTranslation('studio')
   if (h3CatalogEntry(model.model_type)) {
     return <H3ModelInfo modelType={model.model_type} />
+  }
+  if (isRemoteModel(model)) {
+    return <div className="mt-1 ml-6 mb-2 text-[11px] text-text-muted leading-snug"><p>{t('modelCatalog.remoteHint')}</p></div>
   }
   const entry = resolveModelCatalog(model)
   const { requirements } = entry

@@ -1,14 +1,352 @@
 # Video 3D templates for agents
 
-The editor's shot library is the only library. MCP, Ask the Wizard, and the production planner search the same short cards in `app/shared/world3d_templates.json`. A card has the exact id, both titles, format, duration, playback speed, roles, and one line. The full scene document is loaded only for the id that was chosen.
+The editor's shot library is the only library. MCP, Ask the Wizard, the production planner and a Series `kind: "3d"` shot search the same short cards: the 823 cards of `app/shared/world3d_templates.json` plus the 30 `stage-*` cards that `app/services/world3d_stage_cards.py` builds from the room molds, 853 in all. A card has the exact id, both titles, format, duration, playback speed, roles, one line and the derived traits below. The full scene document is loaded only for the id that was chosen.
 
-Regenerate the cards from the UI with `node --import ./node_modules/tsx/dist/loader.mjs scripts/export-world3d-catalog.mjs` inside `ui`. `--check` fails when the JSON drifts from the editor.
+Regenerate the cards from the UI with `node --import ./node_modules/tsx/dist/loader.mjs scripts/export-world3d-catalog.mjs` inside `ui`. `--check` fails when the JSON drifts from the editor. The contract behind every field, filter and warning is [TEMPLATE_LIBRARY_MODEL.md](TEMPLATE_LIBRARY_MODEL.md).
+
+## Kinds and intents
+
+A shot is chosen on axes, never from a flat list. The two shelves: a **signature scene** keeps its motion and its place (the `atmos-*` worlds, the `pixel-*` worlds, the action sets, the anime shots, the `motion-*` native sets, the drive and music sets); a **stage** is place geometry with speaking marks and dialogue cameras whose skin arrives later (a Qwen painting, a texture, a video). Take a scene when the spectacle is the point and a stage when people talk or live in a place.
+
+| axis | field | values (cards that carry each one) |
+| --- | --- | --- |
+| kind | `kind` | `scene` 380, `camera` 263, `look` 161, `stage` 30, `transition` 15, `title` 4 |
+| intent | `uses` | `figure` 455, `establishing` 287, `talk` 287, `look` 161, `action` 92, `reaction` 85, `dialogue` 86, `plate` 78, `speed` 51, `title` 47, `reveal` 41, `impact` 40, `product` 17, `drive` 17, `music` 15, `transition` 16 |
+| place | `place` | 133 ids: a dressing (`citadel`, `chase-street`, `treadmill`, `retro-lab`), an `atmos-*` or `pixel-*` world, a `motion-*` set, a mold (`cocina`, `plaza`) |
+| camera | `shot`, `distance`, `moves` | see the table below |
+| cast | `subjects`, `props`, `screens`, `travel`, `authoredFor` | counts, whether a subject crosses the set, the media the slots were authored with |
+
+Every value is derived from the built document (`ui/src/features/scene3d/templateTraits.ts`) or from the mold; nothing is hand-written per card. `kind` is read like this: `look` for the lighting, colour, lens, genre, viral and atmosphere families; `camera` for a technique of the generic citadel set (`camera-movement`, `framing`, `camera-angles`, `composition`, `editing`, `time-and-motion`, `effects`); `transition` for a cut piece of 3 s or less carried by its effects, any `transition-*` id, or a `comic-panel-*` chapter change; `title` for a `title-*` id, or no subject slot and kinetic texts; `stage` for a `stage-*` card; `scene` for everything else. In `uses`, `speed` means the drive category, a chase, pursuit, hood or wing camera, a treadmill or `drive-*` dressing, a subject that travels while the camera tracks, rides or slides, or a `speed-*` id; `impact` a camera shake or an explosive world effect (`action` keeps it too); `dialogue` two subject slots that are not `far`, not a product, not a chase family and without an impact beat; `reaction` one subject, `close`, with a push, an arc or a still frame that is not a look.
+
+## Comic chapter transition
+
+Use this when a video changes chapter and the cut should be invisible, and only when the piece is told like a story: a tale, a comic-style piece, a music video with a narrative. It is a stylised device; do not use it in a documentary, a news piece or an explainer. `scene3d.comic.transition` (MCP, Wizard and the Video 3D editor; same `POST /api/v1/world3d/templates/commands`) builds two editable scenes that share one page and one wide camera pose:
+
+- `comic-panel-exit` starts with panel P filling the frame and pulls out to the page. `comic-panel-enter` starts on that same wide frame and flies into panel Q. The portrait pair is `comic-panel-exit-portrait` and `comic-panel-enter-portrait` (authored for 9:16, not the generic portrait adapter).
+- `panels` is three to six images, or `{video, at}` frames. `from_panel` and `to_panel` are the frames of the cut, so both cuts can be invisible. `seed` (default 0) picks one of two layouts for that count. The panels and one gutter width tile the paper inside the padding, so no empty patch is larger than a gutter. Those two panels keep the frame's aspect and its resolution; the others are cover-cropped to the cell. Each panel is cut out with the existing background remover. The cutout keeps the picture's colour. Its matte is a sticker: half-alpha, holes filled, specks under half a percent dropped, a few pixels of the original background along the edge, and that edge softened over a pixel and a half. It sits 10.8 cm in front, scaled by `(D - d) / D` about the fill camera so that frame still matches. The picture behind the sticker is filled in. A subject that meets the panel edge fades over the outer 3 percent, and those pixels of the picture stay as they were. A failed or empty cutout leaves the panel flat and adds a warning. One other panel's cutout may break its border.
+- The camera yaws 8° between the fill and one shared wide pose, and holds that pose for `hold` seconds (default 0.4) on each half. `exit_duration` and `enter_duration` default to 1.8 s. The yaw is zero at both ends of each half, so the two scenes still meet on the same wide frame.
+- `format` is `landscape` or `portrait`. `export: true` renders both clips when the Video 3D exporter is available. The page stands upright on a dark vignette. The paper, grain, ink borders and panel shadows are generated in the app; no texture is downloaded.
+- The same operation accepts `montage` (a saved `<name>.montage.json`, or a version 1 document) and `between`. An integer from 0 to the last boundary is the cut after that clip; any other number is seconds, so one clip at `60` is one minute in. `mode` `insert` (the default) adds the two clips. `mode` `replace` trims the exited clip back by `exit_duration` and the entered clip forward by `enter_duration`, so the montage stays the same length and a song stays in sync. The other two panels are frames about half a second away. Both halves are rendered. The previous montage bytes are saved as `<stem>.rN.montage.json` before the new revision. When the montage has no soundtrack and the exited clip has audio, that source becomes the soundtrack for the original span and every clip is muted. The Video Editor's transition inspector sends this same body.
+
+The panel pictures are unlit and ungraded, so they keep the colours of the source frames. The four catalogue cards use licence-free filler art and are in the template library under Transitions.
 
 ## Search
 
-`POST /api/v1/world3d/templates/commands` with `{"operation","version":1,"input":{"workspace",...}}`. Mutations also send `intent_id`. The same operations are MCP tools. `world3d.templates.list` and `world3d.templates.catalog` are the same bounded search (default 8, maximum 24). Both languages are searched. A limit above 24 or a language other than `es` or `en` is rejected. An unknown id returns `unknown_template` and does not open another shot.
+`POST /api/v1/world3d/templates/commands` with `{"operation","version":1,"input":{"workspace",...}}`. Mutations also send `intent_id`. The same operations are MCP tools. With a query, `world3d.templates.list` and `world3d.templates.catalog` are the same bounded search (default 8, maximum 24). Without a query, `world3d.templates.list` pages the library in id order (default and maximum 50, `offset`, `total`) and `catalog` keeps catalogue order. Both languages are always searched; a language other than `es` or `en`, or a limit above the maximum, is rejected. An unknown id returns `unknown_template` and does not open another shot.
 
-`world3d.scene.apply_query` instantiates a scene only when the top score is strictly higher than the second. A tie returns `needs_choice` and creates nothing. The same `intent_id` with the same payload returns the stored result. A different payload is a conflict. `world3d.receipt` reads that stored result.
+A query is a handful of words in Spanish or English, matched one by one through `app/services/world3d_template_vocabulary.py`. Each group there is one meaning («diálogo», «conversación», «two people» reach `uses: dialogue`; «contraplano», «hombro», «shoulder», «ots» the over-the-shoulder pair; «plano general» reaches `wide`; «girar alrededor» the arcs and orbits; «triste», «llora», «laugh» reach `reaction`; «camina» reaches `travel`; «sentados» the seated stages; «hacia» is a direction, so «correr hacia cámara» prefers `speed-run-toward`; «cocina», «azotea», «bosque», «hospital», «escalera» their own place group) and a word belongs to one group only. Number words («tres», «five») count only as literals. Words that name the search itself (plano, toma, shot, scene, template, video…) are dropped. Plurals match singulars through stems of four letters or more.
+
+- **`unknown_words`.** Every reply lists the query words that no card of the whole library knows. They never count against the match: `diálogo xyzzy` returns the cards that know «diálogo» as `full` (`duo-diagonal` 15, `speech-dialogue` 15, `two-shot` 12…) with `unknown_words: ["xyzzy"]`. A query whose words are all unknown (`xyzzy`) returns nothing and the list says why.
+- **`match`.** `full` when every known word is in the card. When no card has them all, the best cards with at least half of the known words (one of two is enough) come back as `partial` and the reply says `partial: true`. Partial cards never mix with full ones: `beso bajo la lluvia` has no card with both the kiss and the rain, so it returns `atmos-neon-rain-wide` (22), `night-rain-pursuit` (21), `atmos-neon-rain-low` (20) and `anime-code-rain` (14), all `partial`.
+- **Score.** A literal word scores 8 in the id, 6 in the title, 6 in the traits (`shot`, `moves`, `uses`, `kind`, `place`, `travel`, tags, roles, the stage words `seated`, `entrance`, `crowd`) and 2 in a line; a synonym 4, 3, 4 and 1. A trait therefore outranks a stray word in a line, and a synonym in a line alone is not a hit. An exact title adds 80 and an exact id 40: `dolly zoom` gives `cine-dolly-zoom` 120 over `cine-dolly-zoom-in` and `-out` at 64. A literal word of three letters or fewer («bar», «pov», «off») in an id or title earns the synonym points, not the literal ones. A stage's camera names are one token each (`close_1` is not «close»).
+- **Frame.** A query that names no frame (no `format` filter, no frame word such as «vertical», «tiktok», «portrait», «horizontal») is read for the production's 16:9 frame: a portrait card scores 1 less (`app/services/world3d_template_frame.py`). A vertical card that only ties its landscape twin («caminar», «sentado», «mesa») therefore comes second and the twin keeps a strict win for `apply_query` and a brief; «caminar en vertical» gives `vertical-dialogue-walk`.
+- **Tie-break**, in order: higher score, more hits, a card that moves before a still one, a base template before a variant, the shorter id, catalogue order. `whip pan` gives `transition-whip-pan` (106, moves) before `cine-whip-pan` (102, still).
+- **Filters** narrow the library before the words are scored: `roles` (every listed role present), `setting` (`studio`, `city`, `sea`, `stage`, `space`, `interior`, `exterior`…), `category` (a category: `cinema`, `action`, `product`, `drive`, `music`, `space`; or a tag: `animated`, `psx`, `dark-fantasy`, `creative`, `pixel`, `stage`, `perspective`, `anime`, `transition`), and the trait filters `shot`, `use`, `move`, `kind`, `place` (a dressing, mold or world id, folded exact match), `travel` (true or false), `subjects` (at least that many subject slots, 0–2) and `format` (`landscape`, `portrait`). A value outside the enum fails with `invalid_shot`, `invalid_use`, `invalid_move`, `invalid_kind`, `invalid_place`, `invalid_travel`, `invalid_subjects` or `invalid_format`.
+
+Real replies (`search_report` in `app/services/world3d_template_catalog.py`, the same code the tools call):
+
+| query | reply |
+| --- | --- |
+| `persecución a pie` | `speed-foot-chase` 98, the only card |
+| `cocina` | `stage-cocina` 102, the only card |
+| `nieve` | `cine-snow` 96, `snow-compound` 40, `atmos-snow-low` 13, `atmos-snow-wide` 13, `pixel-blizzard` 12 |
+| `plano general bosque` | `atmos-clearing-wide` 26, `atmos-meadow-wide` 20, `atmos-snow-wide` 19, `atmos-temple-wide` 19… |
+| `órbita` | `pixel-orbit` 94 (its exact Spanish title), `dance-orbit` 40, `vehicle-roof-orbit` 40 |
+| `girar alrededor` | `cine-orbit-360`, `face-reaction-arc`, `reaction-orbit-face`, all 25: a tie |
+| `{"kind": "stage"}` (list, no query) | 30 cards in id order, `stage-aula` first |
+| `{"kind": "transition"}` | 15 cards: `anime-eyecatch`, `anime-impact-frame`, `anime-snap-zoom`, the eight `transition-*`, and the four `comic-panel-*` |
+| `{"place": "cocina"}` | 1 card; `{"travel": true}` 66 cards |
+
+`world3d.scene.apply_query` instantiates a scene only when the top card is a full match and its score is strictly higher than the second. A tie or a partial match returns `needs_choice` with the cards and creates nothing; the reply carries `unknown_words` as well. The same `intent_id` with the same payload returns the stored result. A different payload is a conflict. `world3d.receipt` reads that stored result.
+
+### `world3d.templates.suggest`
+
+The shot as a writer phrases it: `{line?, speakers? (0–4), place?, mood?, beat?, format?, kind?, limit? (default 3, at most 8)}`. `speakers` becomes the `use` filter (0: `establishing`; 1: `talk`; 2 or more: `dialogue`) and `subjects` (at most 2); `beat` (`dialogue`, `reaction`, `establishing`, `action`, `speed`, `impact`, `reveal`, `transition`, `title`, `music`, `product`) is the `use` and wins over the speakers' one; `line`, `place` and `mood` are joined as the query words. The reply is the same cards and the same `match` rule as `list`, each with a `reason` in plain words, plus `unknown_words` and the `filters` it derived. It never instantiates. Without a line, a place or a mood the cards come in catalogue order at score 0, so give it words or use `list` with `kind`.
+
+| input | reply |
+| --- | --- |
+| `{"line": "dos amigos discuten", "speakers": 2, "place": "cocina", "mood": "tenso"}` | filters `{use: dialogue, subjects: 2}`, `unknown_words: ["amigos", "tenso"]`; `stage-cocina` 32: «two subjects, wide, moves on its own, uses: dialogue, talk, figure; place: cocina; cameras: two_shot, ots_a, ots_b, wide, close_1, close_2, entrance» |
+| `{"speakers": 0, "place": "rooftop"}` | filters `{use: establishing}`; `atmos-rooftop-night-wide` 46 «one subject, far, moves: push, uses: establishing; place: atmos-rooftop-night», `rooftop-run` 45, `atmos-rooftop-night-low` 45 |
+| `{"line": "she looks up", "speakers": 1, "mood": "sad", "beat": "reaction"}` | filters `{use: reaction, subjects: 1}`, `unknown_words: ["she"]`; `reaction-look-up` 35 «one subject, close, moves: push, rise, uses: talk, reaction; place: citadel» |
+| `{"speakers": 3, "place": "bar"}` | filters `{use: dialogue, subjects: 2}`; `stage-bar` 95, `cafe-duet` 12, `stage-mostrador` 12 |
+| `{"line": "persecución a pie", "beat": "speed"}` | `speed-foot-chase` 98 «two subjects, wide, moves: track, shake, uses: figure, action, speed, impact; place: chase-street; the subject crosses the set» |
+| `{"line": "xyzzy blorf"}` | no cards, `unknown_words: ["xyzzy", "blorf"]`, filters `{}` |
+
+The Series profile and the Wizard reach `suggest` too; a Series `scene3d.template` takes any id it returns, `stage-*` included.
+
+`suggest` and `catalog` take `compact: true` (the title in `language`, `en` by default): every card is `{id, title, shot, moves, format, why}`, about 200 bytes instead of 1.2 KB. The default reply is unchanged.
+
+### `world3d.templates.plan`
+
+The cards of a whole list of shots in one call: `{shots: [{key, text?, speakers?, subjects?, place?, shot?, moving?}], format?, avoid?, per_shot? (1–3, default 3), seed?, language?}`. **Call it once for the video; use `suggest` only to replace one shot.** `speakers` works as in `suggest`; `subjects` (0–2) is how many subject slots the cast needs and is never dropped, so a card without the role (`cast_role_not_on_card`) cannot come back; `shot` is the size you would like; `moving` asks a card that moves (`true`) or a fixed one (`false`). Shipped cards only: the production compiler does not read a personal template.
+
+Every shot is ranked with the same search as `catalog` (`search_pool`), asked several ways, strictest first: the line with the filters its speakers imply, the place words on their own (a long line no longer loses the place to the half-of-the-words rule), then the asked `use` dropped and, in a portrait frame, landscape cards. A place word is a word of a place group of the vocabulary (`cocina` and `kitchen` are one place; times of day, looks and verbs are not) and weighs more than the free words of the line. The list is then chosen in order:
+
+- the same template and camera never twice in a row; a template at most twice in the plan (four when its place comes up again); a template or camera seen in the last four shots, the same shot size or camera move as the shot before, cost points; `avoid` ids are never taken; a `still` card is the primary only when nothing else is left; the `seed` decides near-ties and a shot with no words is chosen by variety, never by catalogue order. The same input and seed give the same plan; another seed another valid one.
+- shots that name one place keep one family. A place with a `stage-<mold>` card: the same card with another `roomCamera` each time (`{"template": "stage-cocina", "roomCamera": "ots_a"}`; the `shot` of the entry is what that camera shows). A place with only scenes: the shots play their cards `world`-ed in the best scene of that place (`{"template": "dialogue-ots-a", "world": "atmos-desert-low"}`), so two travellers who talk in the desert get a dialogue card in the desert although no desert card has `dialogue`. A stage is never a `world`.
+- `format: "portrait"` takes the portrait cards (123), and its `scene3d` has `width: 1080, height: 1920`. Dialogue and talk shots get the vertical pack (`vertical-dialogue-*`, `vertical-talk-*`, see [Vertical pack](#vertical-pack)), drawn for 9:16. When too few portrait cards fit, the plan falls back to landscape cards: the entry says `adapted: true` and a one-line `note`, and the export reframes the camera. That happens at a place whose only card is a landscape stage (`two friends argue in the kitchen` gives `stage-cocina` from `ots_b`, adapted) and for intents no portrait card has. Close and medium cards, and a stage seen from `ots_a`, `ots_b` or `close_*`, adapt best; wide and far ones lose the cast. A vertical card played in a place's `world` stays portrait (`two travellers talk in the desert` gives `vertical-dialogue-low` with `world: atmos-desert-low`).
+- Without `format` the plan is for the production's 16:9 frame (`production_template_fit` `FRAME`) and takes landscape cards only; a portrait card there would be cropped to fill the frame.
+
+Each entry is `{key, primary, alternates, warnings}`, the cards in the compact shape plus `scene3d`, the keys to copy into the shot: a production `scene3d` takes all of them; a Series `kind: "3d"` shot reads `template` and `roomCamera` (its frame and set come from the series). The reply ends with `summary: {templates_used, repeats, formats}`. `warnings` are `code: message` strings: `repeat` (nothing else fit), `no_card`, `still_card`, `place` (no card is at that place). The plan never writes.
+
+| input | reply |
+| --- | --- |
+| three shots «in the kitchen», `speakers` 2, 1, 2 | `stage-cocina` three times with `roomCamera` `two_shot` (wide), `close_1` (medium), `wide`: the same room, three framings |
+| two shots of travellers who talk in the desert, `speakers` 2 | `cine-walk-and-talk`, then `dialogue-ots-a`, both with `world: atmos-desert-low`, although no desert card has `dialogue` |
+| twelve shots with no words, `speakers` 2 | twelve different stages; seed 1 gives another twelve |
+
+## What a card says
+
+Besides its id, titles, one line in each language, format, duration, roles, `required` holes, `dependencies` and `tags`, every shipped card carries traits that the exporter reads from the built document (`ui/src/features/scene3d/templateTraits.ts`) or that the stage builder measures from the mold. They are estimates of the authored scene, never hand-written claims, and the same numbers the editor's gallery search uses.
+
+| field | values | read it as |
+| --- | --- | --- |
+| `shot` | `close`, `medium`, `wide`, `far`, `plate` | how much of a person the frame holds at mid-shot: head and shoulders or tighter, to the waist, the whole figure, the figure under a third of the frame, or no subject slot at all. `distance` is the metres from the camera to the subject (null on a plate). |
+| `moves` | `push`, `pull`, `slide`, `rise`, `descend`, `arc`, `orbit`, `zoom`, `roll`, `ride`, `track`, `shake` | what the camera does over the shot. Empty: the camera holds still. `ride` is the sway of a chase or hood camera; `track` means the camera follows a subject the template already moves. |
+| `moving` | `camera`, `subjects`, `props`, `screens`, `effects`, `backdrop`, `texts` | what the template itself animates: a camera move, authored clips or paths on the cast or the props, a video screen, world or screen effects, a set that moves (endless road, treadmill, procedural weather, pixel sky, native motion set, a scrolling plate), kinetic text. |
+| `still` | boolean | true when `moving` is empty: only the cast's own clip, a talking cutout or an override you add can move the picture. 158 cards are still; most are the lighting, colour and lens looks. No stage is still. |
+| `subjects`, `props`, `screens` | counts | the subject slots (`subject_1`, `subject_2`), the prop slots that are not screens, and the screens. |
+| `travel` | boolean | a subject slot has a motion path: the figure crosses the set (66 cards). |
+| `authoredFor` | `model`, `cutout`, `mixed`, `none` | the media the subject slots were authored with. A production may bind the other kind: a GLB in a cutout's place becomes a model, a picture in a model's place a cutout. |
+| `floor` | `tiles`, `none`, `backdrop`, `mirror`, `road`, or a ground style (`grass`, `meadow`, `sand`, `asphalt`, `dirt`, `snow`, `cobble`) | `none`: there is no ground under the cast; frame waist-up or against the sky, or play the shot in a `world`. `backdrop`: the background picture is projected onto the floor. A ground style is a seamless tile the scene paints itself (N64/GameCube look, plus scattered tufts/flowers/pebbles) — no picture is generated. On a parallax or diorama set it replaces the ground slab; `"scroll"` slides it with the layers. `app/shared/world3d_modifiers.json` `grounds` is the name list. |
+| `uses` | the sixteen intents above | what the shot is good for. `talk` is close enough for a speaking cutout; `figure` holds the whole body; `establishing` shows a place (far, a plate, or a wide shot with a painted or moving set); `look` is a lighting, colour or lens preset that wants a move or a clip from you. |
+| `kind`, `place` | see Kinds and intents | the shelf and the place id. Filters. |
+| `reference` | URL or null | a film still of the real technique, for inspiration only (424 cards). It is **not** our render. |
+| `preview` | URL or null | our own render of the built shot at mid-shot (see [Thumbnails](#thumbnails)). Null on a personal template. |
+| `cameras` | list | stage cards only: the mold's named cameras (`two_shot`, `ots_a`, `ots_b`, `wide`, `close_1`, `close_2`, `entrance`). |
+| `notesEs`, `notesEn` | text | the authored requirement list of the action, campaign and anime shots («GLB lead car; GLB pursuer car; optional street plate»). |
+
+A personal template (`user-…`) reports `subjects`, `props`, `screens`, `authoredFor`, `floor`, `moving` and `travel` from its stored document; `shot`, `distance`, `moves` and `uses` stay unknown because they need the editor's camera. Its `place` is its dressing.
+
+## Thumbnails
+
+A shipped or stage card's `preview` is `/api/v1/world3d/templates/<id>/thumbnail` (`previewUrl` in `world3d.templates.get`): GET it to see the shot. It is the built template at mid-shot, 640×360 (portrait 360×640) WebP, painted by the export's headless renderer with empty slots drawn as the editor's placeholders, and cached in the default workspace's `.world3d-thumbs` once per template version (the compiled document and `RENDER_RECIPE`); `X-Thumbnail-Cache` says `hit` or `miss`. When no picture can be painted now the route answers 503 `thumbnail_unavailable` with a `reason` and `retryable: true`, never a broken image. A card that shows optional example media not downloaded here (the shot library's collections: creative, dark-fantasy…) answers 409 `examples_not_installed` with the `collections` to download, at once and without a render; do not retry it. `python scripts/render_template_thumbnails.py --url http://127.0.0.1:<port> [--only id,id] [--kind stage]` warms the cache of a running instance and reports times and failures; it refuses the live ports unless `--allow-live`.
+
+## Choosing a shot that will not look frozen
+
+- **Plan first, then replace one shot.** `world3d.templates.plan` with every shot of the video chooses a card for each with variety and gives the `scene3d` keys to copy. Then `suggest` (the line, the speakers, the place and the mood turned into filters and words, with a reason for each card) or `list` with `{"use": "dialogue", "subjects": 2}` or `{"kind": "stage", "place": "bar"}` to replace one of them.
+- **Read `moving` before `uses`.** A `still` card plus a picture, or plus a GLB with no clip, exports a photograph held for the whole shot. Give it a clip (`cast[].clip`, `clips`), a `motion`, a `camera`, a `frame`, or play it in a `world` whose set moves; or take a card whose `moves` are not empty. Production dry runs warn `template_still` for exactly that case.
+- **Match the shot to the line.** `talk` and `dialogue` for speech (`dialogue-ots-a`/`-b`, `dialogue-table`, `face-to-face`, `cine-over-the-shoulder-frame`, any `stage-*`); `reaction` for a beat on one face (`reaction-push-face`, `reaction-look-up`, `face-reaction-arc`); `figure` and `establishing` to show a body or a place; `action`, `speed` and `impact` when something must travel, hit or explode (`speed-foot-chase`, `anime-sword-clash`); `transition` for a cut of 3 s or less (`transition-*`, `anime-eyecatch`).
+- **Count the people.** `subjects` is how many the template seats; a third person is `add: true` as a prop, or a `group-*` card whose extra places are prop slots (`person_3`…). Two subjects on a `far` card are tiny: five stages are `far` from `two_shot`, so pick `roomCamera: ots_a` or `close_1` for their lines.
+- **Mind the floor.** `floor: none` under a full-body cast shows feet on nothing: frame from the waist up, shoot against the sky, or give the shot a `world` or a painted `background`.
+- **Vary.** One template in more than four shots is `template_reused`; the same template, background and camera in more than four shots in a row is `looks_samey`, and one template with one camera in two shots in a row is `template_repeated` (a different `roomCamera`, `camera_template`, `frame` or `lens` breaks both); a stage shown in its mold colours is `stage_unskinned`. The looks (`uses: look`) change the light, not the composition, so pair them with a move, or name them as a `light`, `grade` or `lens` modifier on a moving card instead.
+- **Keep the frame.** `frame: close|medium|wide|far` moves any template's camera nearer or farther without changing its move; `camera_template` gives any shot another card's camera; `duration` with `retime: true` stretches effects and cues with the shot.
+
+## Stages
+
+A **mold** is a shape, not a place. Thirteen shape molds (`sala`, `sala_ventana`, `mostrador`, `filas`, `pasillo`, `umbral`, `escalera`, `escenario_publico`, `vehiculo`, and the exteriors `calle`, `plaza`, `orilla`, `azotea`) sit beside the seventeen named interiors that ship as **recipes**, a shape with furniture blocks and a default skin (`aula`, `bar`, `cabina`, `cabina_avion`, `cabina_nave`, `coche_interior`, `cocina`, `despacho`, `dormitorio`, `hemiciclo`, `hospital`, `juzgado`, `oficina_diafana`, `plato_tv`, `sala_prensa`, `salon`, `vagon`). Exteriors have no ceiling, keep their view on `wall_back` and are lit by a sun preset (`daylight`, `dusk`, `night_sky`).
+
+Every mold is a card `stage-<mold>` built by `app/services/world3d_stage_cards.py`: `kind: stage`, `place: <mold>`, `setting` `interior` or `exterior`, the tag `stage`, `cameras` (always `two_shot`, `ots_a`, `ots_b`, `wide`, `close_1`, `close_2`, `entrance`), `subjects` 2 with roles `subject_1`/`subject_2` and `prop` for every further speaking mark, `shot` and `distance` measured from `two_shot` to the first mark's face, `uses` `dialogue` (two or more marks and not `far`), `talk` and `figure`, `moving: ["effects"]` so no stage is `still`, and the search words `seated`, `entrance` and `crowd` read from the marks and the blocks. The document is the mold staged on `two-shot` with its default skin, exactly what `stageRoomSet` builds in the editor, with low dust motes (`room-dust`) and a key light that breathes ±8 % over 6 s; a mold may set `"ambient": false`. `world3d.templates.get`, `world3d.scene.instantiate`, `world3d.scene.apply_query`, the production `scene3d.template` and a Series `kind: "3d"` shot accept a `stage-*` id; `roomCamera` picks another camera and a `sets` entry of `kind: room` (or the Series location's `set3d`) brings a Qwen skin.
+
+| card | from `two_shot` | marks | words |
+| --- | --- | --- | --- |
+| `stage-aula`, `stage-cocina`, `stage-dormitorio`, `stage-hospital`, `stage-pasillo`, `stage-plato_tv`, `stage-sala_prensa` | wide, 4.4 / 3.5 / 3.7 / 2.6 / 3.3 / 3.8 / 4.3 m | 2 standing + entrance | `entrance` |
+| `stage-bar`, `stage-salon` | wide, 3.8 / 2.9 m | 2 seated + entrance | `seated`, `entrance` |
+| `stage-cabina`, `stage-coche_interior`, `stage-cabina_nave` | two_shot from behind the seats | 2 seated (driver, passenger) + entrance | `seated`, `entrance` |
+| `stage-despacho` | wide, 4.4 m | `behind_desk` seated, `visitor`, `door` | `seated` |
+| `stage-sala`, `stage-sala_ventana`, `stage-mostrador`, `stage-umbral`, `stage-escalera`, `stage-calle`, `stage-orilla`, `stage-azotea` | wide, 3.5 / 3.5 / 3.9 / 3.7 / 3.6 / 4.1 / 4.1 / 4.1 m | 3 standing + entrance | `entrance` |
+| `stage-escenario_publico` | wide, 4.3 m | 3 standing + entrance, audience seats | `entrance`, `crowd` |
+| `stage-filas` | wide, 4.2 m | 3 (2 seated) + entrance, benches | `seated`, `entrance`, `crowd` |
+| `stage-plaza` | wide, 4.1 m | 4 standing + entrance | `entrance`, `crowd` |
+| `stage-vehiculo` | wide, 2.2 m | 3 seated + entrance | `seated`, `entrance` |
+| `stage-cabina_avion`, `stage-oficina_diafana`, `stage-vagon` | **far**, 5.3 / 5.4 / 5.4 m | 2 seated + entrance | `seated`, `entrance` (+ `crowd` in the carriage) |
+| `stage-hemiciclo`, `stage-juzgado` | **far**, 6.5 / 5.4 m | 2 standing + entrance | `entrance`, `crowd` |
+
+The five `far` stages carry `talk` and `figure` but not `dialogue`, so `{"use": "dialogue"}` does not list them: ask for them by `place` or `kind` and shoot the lines from `ots_a`, `ots_b` or `close_1`. A stage shot whose skin is only colours warns `stage_unskinned` in the dry run.
+
+### Authoring a stage that reads as a place
+
+A mold is data (`app/shared/set_molds/<id>.json`), written by a generator so it can be reviewed and tuned: `scripts/dev/make_cabin_mold.py`, `make_bedroom_mold.py` and `make_office_mold.py` are the examples. The loop that keeps a stage from looking like a pile of boxes:
+
+1. Keep the old block ids, surface names, marks and the seven cameras when you rebuild a mold: skins, scenes and cards that use them keep working.
+2. Build from blocks that name what they are (`bed`, `pillow`, `duvet`, `chair`, `curtain`, `lamp`, `art`, `rug`, `trim`: each kind needs a word in both languages in `BLOCK_WORDS` of `world3d_stage_cards.py`). A block turns about its own centre with `rot`; mold validation measures the turned box.
+3. Skin it with `pattern` and `view` (see below) so the default look needs no picture. `set_lights.json` is bundled into the UI: rebuild the UI after changing a preset.
+4. `services.set_molds.mold_problems(resolved_mold)` says what validation cannot: `hidden_opening` (furniture within a metre of a wall that covers an opening: a wardrobe in front of the window). `tests/test_set_molds_catalog.py` runs it on every mold at every size.
+5. Test the bare card as an agent receives it: `world3d.scene.instantiate`, bind two models by object id without a position or a clip, read `warnings`, `world3d.scene.fix_placement` if any, export a few seconds and look.
+
+### The vehicle cabin (`stage-cabina`, `stage-coche_interior`, `stage-cabina_nave`)
+
+One geometry, three cards: `stage-cabina` (the neutral vehicle cabin), `stage-coche_interior` (a car: dark leather, carpet, an instrument cluster and a radio painted by the room, a road at night) and `stage-cabina_nave` (a spaceship cockpit: metal panels, glowing side consoles, a yoke, stars streaming past). Any of them is a base for a car, a van, a lorry cab, a boat or a ship: change the skin, the geometry stays. Built from **turned blocks** (`rot: [x, y, z]` radians about the block's centre; `scripts/dev/make_cabin_mold.py` writes the three molds): seats with cushion bolsters, raked back, side wings and a headrest, a console with shifter and cup holder, a dashboard with an instrument binnacle, a radio stack, vents and a glovebox, a tilted steering wheel (a ring of slats) or a yoke, A-, B- and C-pillars, **two windows on each side** with frames and a pillar between them, a rear window, a mirror, visors, a dome light, door pulls and armrests. Size: small 1.8 x 2.5 x 1.25 m, medium 2.1 x 3.0 x 1.45 m, large 2.6 x 3.9 x 1.8 m. Light preset `cabin` (the lamp hangs at 60 percent of the roof height).
+
+**Nothing in the default look is a picture or a clip.** A skin entry may be:
+
+- `{"pattern": "leather", "color": "#4a3a30", "tile_m": 0.35}`: a tile the room paints itself and `color` tints. Tiles: `leather`, `fabric`, `plastic`, `quilt`, `carpet`, `metal`, `wood`, `plaster`, `tile`; faces painted once over the whole block face: `dials` (an instrument cluster) and `radio`. `tile_m` defaults per pattern.
+- `{"view": "road_night", "speed_mps": 15}`: an animated window picture. `road_night`, `road_day`, `road_dawn` and `space` travel (the road comes toward the windshield and leaves through the rear window, the roadside and its guard-rail posts, lamp poles, a far town and oncoming headlights pass the side windows, stars stream past a ship); `night_window` and `day_window` are a quiet house window (moon or sun, twinkling stars, drifting clouds, swaying trees, lit windows, a street lamp). The picture is a pure function of the scene second drawn with a 1/60 s shutter, so it is smooth at any frame rate, never jumps where a clip would loop, and the two side windows show one continuous roadside. `lights: [{x, y, r, color?, colors?, to?, over?, hop?, blink?}]` on a view puts bright things in its sky (fractions of the view: x across the wall, y down it, `r` of its height): `to` is where it is after `over` seconds (position moves, size grows), `hop` makes it jump every `every` seconds, `colors` cycles six times a second, `blink` shows it `on` seconds of every `period`: a planet, a beacon, a craft, all exact at any frame rate. A `video` on a window surface is read through the browser's decoder, which in an export repeated about every third frame (30 fps content came out at 20): prefer a `view` with `lights`; a `video` or an `image` still works when you must have your own picture.
+
+The windows are the surfaces `windshield`, `window_left`, `window_right`, `window_rear`; the rest are `floor`, `ceiling`, `wall_*`, `seat_front/top`, `console_*`, `dash_*`, `cluster_*`, `radio_*`, `wheel_*`, `trim_*`, `pillar_*`, `glow_*` (the dome light and the cockpit panels). `texture` + `tile_m` repeats your own tile, `image` stretches one picture (give it `sideColor` for the ends of a block).
+
+**Seated people.** The two `sit` marks (x = +-0.5, z = -0.25, facing the windshield) put a subject on the cushion by themselves: instantiating the card with two plain models already seats them (`position[1] = cushion top - 0.53 x 1.7`; another height: `0.36 - 0.53 x height`, `rotationY = pi`). There is no sit clip yet: the legs go into the seat block and the placement check judges the person from the cushion up.
+
+### The bedroom (`stage-dormitorio`)
+
+A bed with a frame, headboard, two pillows and a quilted duvet (the mattress `bed` tops at 0.55 m, the duvet at 0.70: both soft, a figure in or on them is not sunk), two bedside tables with lamps, a wardrobe that faces the room from the right wall (it no longer stands in front of the window), a window with frame, sill and curtains over a `day_window` view, a framed door, a rug, a picture and a ceiling lamp. `scripts/dev/make_bedroom_mold.py` writes it; the block ids, surfaces, marks and the seven cameras are the old mold's. A lying figure: `rotationX = -1.5`, head toward the headboard, `position` at its feet (for a 1.65 m figure on the pillow: `[0, 0.64, -1.0]`); read `placement` and let `world3d.scene.fix_placement` correct it.
+
+## Packs by intent
+
+Seven packs of short cards, one file each under `ui/src/features/scene3d/` (`transitionTemplates.ts`, `speedTemplates.ts`, `dialogueTemplates.ts`, `reactionTemplates.ts`, `groupTemplates.ts`, `titleTemplates.ts`, and `verticalTemplates.ts` with its specs in `verticalDialogueSpecs.ts` and `verticalTalkSpecs.ts`), registered like the anime pack. The vertical pack has its own table below. Every card comes out of `templateTraits` with its `uses` and `kind`; none is `still`. Transitions last 0.6–2.5 s, the rest 4–7 s.
+
+| id | s | shot, moves | uses | what happens |
+| --- | --- | --- | --- | --- |
+| `transition-whip-pan` | 0.7 | medium; slide, roll, shake | action, impact, transition | a very fast slide with a roll over radial speed lines; lands centred on the figure |
+| `transition-iris-in` | 1.2 | close; push | talk, reaction, transition | a fast push to the centre while a vignette closes in four steps |
+| `transition-flash-white` | 0.6 | close; push | talk, reaction, transition | three white frames, then two more, over a tight push on the face; plain colours |
+| `transition-wipe-prop` | 1.5 | wide; props | figure, transition | a prop crosses the frame close to the lens and covers it at mid-shot: a door, a bus, a cloud |
+| `transition-match-shape` | 2 | close; pull | talk, transition | a centred close frame holds a second, then snaps out to the whole figure |
+| `transition-eyecatch` | 2.5 | wide; subjects (travel) | figure, action, transition | a scene-change card in two plain tones; an optional title lands under the figure |
+| `transition-smash-in` | 0.6 | medium; push, shake | action, impact, transition | an abrupt snap from the whole figure to the face in a fifth of a second |
+| `transition-rise-off` | 2 | medium; pull, rise | talk, reveal, transition | the camera lifts off the figure into a blank backdrop; the next shot can start on anything |
+| `speed-run-toward` | 6 | medium; push | talk, action, speed | a low lens creeps in on a figure running on the spot (bind a GLB with a run clip) |
+| `speed-foot-chase` | 7 | wide; track, shake | figure, action, speed, impact | two figures sprint down the street; the camera tracks the runner and shakes as the chaser closes in |
+| `speed-flyby` | 6 | wide; slide | figure, action, speed | a craft crosses the sky left to right trailing smoke; the camera pans with it over a figure |
+| `speed-rush-lines` | 5 | close; push, shake | reaction, action, speed, impact | a hard push from a medium shot to the face over radial speed lines |
+| `speed-side-dash` | 5 | wide; slide, track | figure, action, speed | the figure dashes ten metres across the set while the frame slides with it |
+| `dialogue-ots-a` / `dialogue-ots-b` | 6 | close; push, slide | dialogue, talk | over the left (A) or right (B) speaker's shoulder onto the other's face, same distance and push, so cutting A and B keeps the eyelines |
+| `dialogue-table` | 6 | medium; slide | dialogue, talk | two figures across a table at seated eye height (needs a seated clip or seated cutouts; a table GLB on the table slot) |
+| `dialogue-triangle` | 7 | wide; arc | dialogue, figure | three figures in a triangle, a master shot with a slow arc; the third is the prop slot `person_3` |
+| `dialogue-embrace` | 6 | close; push, arc | dialogue, talk | a tight two-shot at head height: a kiss, a hug, a farewell |
+| `dialogue-phone-split` | 6 | medium; push | dialogue, talk | two halves of the frame with a thin divider, a symmetric push: a phone or video call |
+| `reaction-push-face` | 5 | close; push | talk, reaction | after a short hold the camera pushes from medium-close to a close-up |
+| `reaction-orbit-face` | 6 | close; arc | talk, reaction | a slow arc of a tenth of a turn around the head |
+| `reaction-turn-to-camera` | 5 | close; push, track (travel) | talk, reaction, action | the figure turns from profile to face the camera |
+| `reaction-look-up` | 5 | close; push, rise | talk, reaction | a low angle on the face that rises and tilts up as it pushes in |
+| `reaction-impact` | 5 | close; push, shake | reaction, action, impact | two white frames, a short shake and a snap push to the face over plain colours |
+| `group-arc-five` | 7 | wide; push | figure | one figure in front and four behind in an arc (`person_2`…`person_5`) |
+| `group-line-four` | 6 | wide; slide | dialogue, figure | four figures in a line, a lateral slide at chest height (`person_3`, `person_4`) |
+| `group-audience` | 7 | wide; push, rise | figure, reveal, music | a performer on a platform and a crowd of six cutouts from behind (`crowd_1`…`crowd_6`); the camera cranes up toward the stage |
+| `group-circle` | 7 | wide; arc | dialogue, figure | five figures in a circle; the camera orbits slowly above (`person_3`…`person_5`) |
+| `title-lower-third` | 5 | medium; push, texts | talk, title | a name on a bar and a role line slide in, hold under the figure and slide out |
+| `title-kinetic-stage` | 6 | wide; push, texts | figure, title | one big word per beat punches in over a dark mirror stage (up to eight words) |
+| `title-chapter` | 4 | medium; push, texts | talk, title | a chapter card: the kicker types in, a rule draws itself, the title wipes on |
+| `title-end-card` | 5 | medium; slide, texts | talk, title | a title rises and a pulsing call to action lands under it over faint stars |
+
+A `transition-*` card is its own short shot between two others. A Series shot's `transitionIn` (`cut`, `fade_black`, `dissolve`, `dip_white`) is the join itself and needs no card.
+
+## Vertical pack
+
+Eighteen cards drawn for 9:16 (720×1280; a plan's `scene3d` asks 1080×1920, the same frame). Their cameras are authored portrait (`camera.frameFormat: "portrait"`), so no adapter scales them again, and the row keeps the frame when the editor switches to one. Every camera frames a head at rest (`track: "rest"`, never a clip's pose) in world axes, with the framed eyes on the upper third, a little air over the crown and the lower third free for captions; `ui/tests/verticalTemplates.test.ts` checks that through `framingPose` and `projectPoint`. All are in the generic `citadel` with a `background` plate, cast for models (a picture becomes a cutout), and none is `still`. Search them with a vertical word («diálogo vertical», «dos personas hablando en vertical», «portrait dialogue», «contraplano vertical») or `{"format": "portrait", "use": "dialogue"}`; without such a word a phrase keeps finding the landscape card it found before, with the same strict win (the frame point above); a phrase only a vertical card holds («busto», «low angle talk») still finds it.
+
+To seat the cast of `vertical-dialogue-across` (or `dialogue-table`) with the procedural `sit_down` clip, hold it with one `clips` cue whose clock stops in the seated part, `{"clip": {"index": 3, "name": "Sit Down"}, "start": 0, "offset": 0.9, "duration": 0.05}`: the clip sits from 0.76 s to 1.24 s of its 2 s and then stands up, and `clipPlayback.speed` never goes below 0.1, so a playback alone stands up within a 6 s shot.
+
+The A/B pairs share one blocking (subject_1 left looking right, subject_2 right looking left, 1.4 m apart) and every camera stays on the same side of the line, so `ots-a`, `ots-b`, `single-a` and `single-b` cut together with matching eyelines; `ots-a` and `single-b` frame the same face.
+
+| id | s | shot, moves | aliases | what it frames |
+| --- | --- | --- | --- | --- |
+| `vertical-dialogue-stack` | 6 | close; push | a, b | subject_1 near on the left, three-quarter; subject_2 behind on the right facing the camera, one face above the other |
+| `vertical-dialogue-ots-a` | 6 | close; push, slide | a, b | over subject_1's shoulder (the left edge) onto subject_2's face, high on the right |
+| `vertical-dialogue-ots-b` | 6 | close; push, slide | a, b | the reverse: over subject_2's shoulder (the right edge) onto subject_1's face |
+| `vertical-dialogue-single-a` | 6 | close; push | a, b | a clean single of subject_1 looking screen right, subject_2 just out of frame |
+| `vertical-dialogue-single-b` | 6 | close; push | a, b | a clean single of subject_2 looking screen left, at the same distance and push |
+| `vertical-dialogue-walk` | 7 | medium; push, track | a, b | both stroll toward the camera (0.4 m/s), subject_2 half a step behind; the frame backs away with them; bind a walk clip |
+| `vertical-dialogue-across` | 6 | medium; push | a, b, table | seated across a table (`table` prop): subject_1 near from behind, subject_2 beyond facing the camera; framed from subject_2's feet so a sit clip does not move it, and the push heads for subject_2 so the near head never covers that face |
+| `vertical-dialogue-trio` | 7 | close; push, arc | front, left, third | subject_1 near from behind, subject_2 and `person_3` (prop) beyond facing the camera |
+| `vertical-dialogue-listener` | 6 | close; push | speaker, listener | the listener (subject_2) near facing the camera, the speaker (subject_1) behind talking to them; the push is on the listener |
+| `vertical-dialogue-low` | 6 | close; push | a, b | a hip-height lens looks up at two faces in near profile |
+| `vertical-dialogue-high` | 6 | medium; push, descend | a, b | from above: subject_1 near at the bottom from behind, subject_2 beyond at the top looking up; the floor is the background |
+| `vertical-dialogue-locked` | 6 | close; none (effects) | a, b | a locked tripod two-shot from the knees up; dust drifts so it is not a still |
+| `vertical-talk-bust` | 6 | close; push | speaker | a bust straight to the lens; the chest is the caption third |
+| `vertical-talk-caption` | 6 | close; slide | speaker | waist up, the face high and the whole lower third free for captions or a title |
+| `vertical-talk-three-quarter` | 6 | close; arc | speaker | turned three-quarter, looking room on the side it faces |
+| `vertical-talk-low` | 6 | close; push, rise | speaker | a chest-height lens looks up at the face |
+| `vertical-talk-push` | 6 | close; push | speaker | from the waist to the face, the eyes on the upper third the whole way |
+| `vertical-talk-side` | 6 | close; slide | speaker | an interview look off frame: the face left, the room to look into on the right |
+
+## Modifiers
+
+Named presets that change a shot without changing its card. The tables are `app/shared/world3d_modifiers.json`, read by `app/services/world3d_modifiers.py`, `world3d_grades.py` and `ui/src/features/scene3d/modifiers.ts`, so the production compiler and `world3d.scene.patch` resolve the same name to the same numbers. The production `scene3d` accepts `light`, `grade`, `lens`, `camera_template` and `frame` next to `template`; `world3d.scene.patch` accepts the first four on a working scene. A Series `scene3d` does not carry them: patch the scene, publish it and name the file as `scene3d.scene`.
+
+- `light`: `noon`, `golden`, `overcast`, `night`, `neon`, `stage`, `campfire`, `rembrandt`, `butterfly`, `split`, `low_key`, `high_key`, `candle`, `backlight`, `window`, `moonlight`, `under`, `hard`, `soft`, `dusk`, `dawn`. A name replaces the document's sun (direction, intensity, colour) and sets the ambient share; the rest of the lighting stays. A light object `{kind: directional, direction: [x, y, z], intensity 0–10, color: #rrggbb}` is accepted too. Unknown: `invalid_light`.
+- `grade`: `natural`, `teal_orange`, `bleach`, `noir`, `sepia`, `flashback`, `dream`, `giallo`, `cold`, `warm`, `vhs`, `film`. A grade is the document `look` (tone mapping and exposure), a gel over the lamp (the ungraded colour is kept as `untinted`, so the next grade tints the lamp and not the earlier tint) and screen effects that already exist (`vignette`, `film_grain`, `light_rays`, `vhs`, `scanline`) with ids `grade-*`: a later grade replaces them and the template's and the shot's own effects stay. Unknown: `invalid_grade`.
+- `lens`: `14mm` (fov 96), `24mm` (74), `35mm` (54), `50mm` (40), `85mm` (28), `135mm` (18), `200mm` (12). It sets the camera `fov`; a framing's `fovFrom`/`fovTo` keep their move, scaled by the same ratio within 10–130. Unknown: `invalid_lens`.
+- `camera_template`: the id of a `kind: camera` card (`cine-dolly-in`, `cine-low-angle`, `cine-orbit-360`…) whose camera and framing are copied onto the shot, the symmetric of `world`; the shot keeps its duration, cast and place and the framing target is re-read. An unknown id is `unknown_template`, another kind `invalid_camera_template`; a card authored for the other frame format warns `camera_template_format`.
+- The patch applies `light`, then `lens`, then `grade`, so a grade tints the light it finds.
+- The honest effect cards gained the screen effect that does the thing when one exists: `cine-film-grain` and `cine-vignette` now carry `moving: ["effects"]`, `cine-lens-flare` light rays over its push. `cine-bokeh` stays `still`: there is no blur effect, and its line says it is the framing where blur would live.
+
+## Planner
+
+A brief field `world3d` or `toma` selects one shot (`app/services/production_plan.py`). The planner runs the same `search_report` with a limit of 8: no card, or a top card that is only `partial`, fails with `unknown_template` and names the `unknown_words`; a top card whose score equals the second's fails with `ambiguous_template` and lists the tied ids instead of inventing a path. `dolly zoom` becomes `scene3d.template = cine-dolly-zoom` (120 over 64). `girar alrededor` is a tie at 25 (`cine-orbit-360`, `face-reaction-arc`, `reaction-orbit-face`) and fails. `órbita` is not a tie: it is the exact Spanish title of `pixel-orbit` (94 over 40). `world3d_subject` or `sujeto_3d` is the subject URL. The shot lasts the card's duration over its playback speed, at least 1 s and at most the song. Briefs without the field stay on the normal shot list.
+
+## Starter deck
+
+Forty-eight real ids an agent can reach for before searching, grouped by intent. Every one moves (`still: false`); the stages and the signature scenes are both here. The line is the card's own.
+
+**Dialogue**
+- `stage-cocina`: Kitchen: interior with a counter, table; 2 marks, standing, with an entrance; wide shot from two_shot.
+- `stage-bar`: Bar: interior with a counter, bottles, tv, stool; 2 marks, seated, with an entrance; wide shot from two_shot.
+- `stage-despacho`: Office: interior with a desk, shelf; 3 marks, 1 seated; wide shot from two_shot.
+- `dialogue-ots-a`: Two figures face each other 1.7 m apart; the camera looks over the left speaker's shoulder onto the right one's face, medium-close with a slow push.
+- `dialogue-ots-b`: The reverse of A: the same two figures, the camera over the right speaker's shoulder onto the left one's face, at the same distance and with the same push.
+- `dialogue-table`: Two figures sit across a table, three-quarter to the camera, at seated eye height (1.15 m) with a gentle slide.
+- `face-to-face`: Two faces sharing a close framing.
+
+**Vertical (9:16), with `format: "portrait"`**
+- `vertical-dialogue-stack`: A 9:16 portrait two-shot in depth: one face near and low, the other behind and above, with a slow push.
+- `vertical-dialogue-ots-a` / `vertical-dialogue-ots-b`: The over-the-shoulder pair in 9:16; cut with `vertical-dialogue-single-a` / `-b`, the eyelines match.
+- `vertical-talk-bust`: One figure talks to the lens in a 9:16 bust, the chest left for captions.
+
+**Reaction**
+- `reaction-push-face`: One figure; after a short hold the camera pushes slowly from a medium-close to a close-up on the face.
+- `reaction-look-up`: A low angle on the face that rises and tilts up as it pushes in, close.
+- `face-reaction-arc`: A short arc around the face for a reaction shot.
+- `cine-crash-zoom-in`: Camera movement. A very fast snap onto the eyes.
+
+**Establishing**
+- `atmos-rooftop-night-wide`: A procedural rooftop at night. The city skyline glows behind it, and the character spot stays on the open roof.
+- `atmos-clearing-wide`: A procedural sunlit clearing. A character placed in the open takes the same light and shadow as the trunks.
+- `atmos-neon-rain-wide`: A procedural neon alley at night. Wet pavement reflects the signs, rain falls, and steam rises.
+- `stage-plaza`: Square: exterior with a fountain; 4 marks, standing, with an entrance; wide shot from two_shot.
+- `stage-calle`: Street: exterior with no furniture; 3 marks, standing, with an entrance; wide shot from two_shot.
+
+**Action, speed, impact**
+- `speed-foot-chase`: Two figures sprint down the street on parallel lanes; the camera tracks the runner from ahead and shakes lightly as the chaser closes in.
+- `speed-rush-lines`: A hard push from a medium shot to the face over radial speed lines; the camera shakes where the push lands.
+- `night-rain-pursuit`: Head-on pursuit through a flooded street as lightning hits the block.
+- `anime-sword-clash`: Two fighters rush in from both edges and cross at the centre: a slash, a shockwave, a white impact frame and a hard shake.
+- `anime-impact-frame`: A hit lands: two negative frames, three white frames with ink focus lines, a starburst and a camera shake that dies away.
+
+**Reveal**
+- `crane-reveal`: Rise from a low viewpoint into a wide composition.
+- `boots-to-face`: The camera rises from the feet to the face.
+- `drive-coast-reveal`: A crane shot reveals the car against the coastal road.
+- `group-audience`: A performer on a low platform and a crowd of six cutouts seen from behind at the bottom of the frame; the camera cranes up over the crowd toward the stage.
+
+**Music**
+- `dance-orbit`: A half orbit that keeps the performer legible.
+- `dance-stage`: A wide street set with an unhurried musical arc.
+- `motion-music-machine`: A choreographed 3D mechanism strikes bars and drums. Original local notes follow the same deterministic contact timeline.
+
+**Product**
+- `product-orbit`: A measured turn around the product with a warm key light.
+- `product-detail`: Close oblique framing to inspect the object surface.
+- `product-pedestal`: Place a product above a supporting prop and reveal it from below.
+
+**Title**
+- `title-lower-third`: A name on a bar and a role line slide in from the left, hold under the figure and slide out, over a slow push.
+- `title-chapter`: A centred chapter card: the kicker types in, a rule draws itself and the title wipes on, over a vignette and a slow push.
+- `title-kinetic-stage`: One big word per beat punches in over a dark mirror stage under a shaft of light, with a slow push on the figure.
+- `title-end-card`: A title rises and a pulsing call to action lands under it while the camera drifts sideways over faint stars.
+
+**Transition**
+- `transition-whip-pan`: A very fast slide with a roll over radial speed lines; the camera lands centred on the figure with a short settle.
+- `transition-flash-white`: Three white frames, then two more, over a tight push on the face; plain colours, no ink lines.
+- `transition-smash-in`: An abrupt snap from the whole figure to the face in a fifth of a second, with a burst of lines and a shake that dies away.
+- `transition-eyecatch`: A scene-change card in two plain tones: the figure spins in from the distance over focus lines, and an optional title lands under it.
+
+**Plate**
+- `pixel-moon-lake`: Hand-drawn pixel night over a still lake: a haloed moon, aurora, shooting stars and a rippling reflection.
+- `pixel-storm-lake`: Rain lashes a dark pixel lake while lightning strikes the far ranges; every bolt lights the whole painted world for an instant.
+- `pixel-orbit`: High above a planet: its curved horizon glows with atmosphere, city lights dot the night side, nebula clouds breathe among dense stars.
+- `drive-hood`: Immersive forward view with a restrained road bump.
+- `motion-lighthouse-story`: A geometric keeper climbs a coastal lighthouse; the beacon rotates over a volumetric sea and island.
+
+## Check before you look: the cheap scene QA loop
+
+Do not find placement defects with a picture. After `world3d.scene.patch` (or `inspect`) read `warnings` and `layout.placement`: `placement_sinks_into_support`, `placement_overhangs_support`, `placement_outside_room`, `placement_below_floor`, `placement_floating`, `placement_cropped`, `placement_tiny`, each with the `position` that fixes it, and `placement_fix_all` when an object has several. Apply the fixes in one patch. Then the existing ones: `collision: ...` for a mover through a model, `camera_inside_geometry`. Only when the warnings are clean ask `world3d.scene.preview` for one to three frames (at the start, the middle and the end of the shot) and look at them yourself. A reviewer model (a second agent that reads every frame) is for a pilot or a milestone, not for every revision: its 1-5 scores drifted 0.2 between runs on identical frames, a text warning does not drift.
+
+**A model with no clip stands in a T.** A humanoid's bind pose has its arms spread 1.67 m, and that is what is drawn and measured when no clip plays. `world3d.scene.patch` therefore plays the GLB's rest-pose clip (a name like `Idle` or `Stand`) when you bind a model with no `clip` and says so (`clip_default: subject_1 plays "Idle"`); bind `clip` to choose another. A model whose clips are only a walk or a talk keeps its bind pose.
+
+**Fix them in one call.** `world3d.scene.fix_placement` `{scene_id, base_revision, only?}` writes every position fix the check names as one revision (an object it names more than once gets all its fixes added up) and returns the inspect view of the new revision plus `fixed: [{object_id, position}]`. `cropped` and `tiny` are about the camera, so nothing moves for them. MCP and Ask the Wizard call the same operation (`POST /api/v1/world3d/templates/commands`, `operation: "world3d.scene.fix_placement"`); the Wizard reply opens the fixed scene in the Video 3D editor like any other patch. The loop: patch, read the warnings, `fix_placement`, then `world3d.scene.preview` one or two frames yourself.
+
+What the check knows: the room's blocks and every other still prop are the supports; a character is judged by its idle body (its bind pose is a T, `boundsM` is that T), and from the cushion up when it is lowered into a seat block. A lying figure pivots at its FEET (`rotationX` about the position), so its body spreads along -z (head toward -z at `rotationX = -1.5`): read `placement` instead of guessing the offset. A tight close-up of a character the camera is meant to crop will still say `cropped`: it is information, not a refusal.
 
 ## Present a robot
 
@@ -18,24 +356,92 @@ Search `dolly zoom`. The exact title is `cine-dolly-zoom`. Apply it, then patch 
 - bind the `background` object to a workspace image
 - send `base_revision` from the scene you just read
 
+For a cel look, add `"renderLook": "toon"` to the same patch, optionally with `"toon": {"steps": 3, "outline": 3, "ink": "#141018"}`. Only 3D model objects change: images and cutouts keep their look. `"renderLook": "none"` returns to the authored materials; `n64` is the retro look.
+
 The dolly `fovTo` and the framing target stay on the document. `world3d.scene.preview` paints that revision, not the template thumbnail. `world3d.scene.publish` writes the gallery file the editor and the exporter already share.
 
 The Wizard action is `world3d_templates` with operation `world3d.scene.apply_query` and `input.query`. The server picks the id. The action does not invent one. The reply lists the real card ids so the next turn can choose.
 
-## Planner
+## Anime shots
 
-A brief field `world3d` or `toma` selects one shot. `world3d_subject` or `sujeto_3d` is the subject URL. `dolly zoom` becomes `scene3d.template = cine-dolly-zoom`. `girar alrededor` is a tie and the plan fails with `ambiguous_template` instead of inventing a path. `órbita` is not a tie: it is the exact Spanish title of `pixel-orbit`. Briefs without the field stay on the normal shot list.
+Nine shots of classic TV-anime and film tricks carry the tag `anime` (search `anime`, or the library's **Anime** filter). They are 1920×1080 at 24 fps, have no set (the floor is off) and paint their look behind the world with `screenBackdrop`. Every character object starts as an empty flat cutout (`media: image`, `surface: cutout`, `imageLook.unlit`); vehicles start as empty GLBs. Every shot also has an optional `background` image (`surface: environment`): bound, it becomes the picture under the speed lines; empty, the backdrop colour shows. It is listed in `pending` like any empty object.
+
+| id | s | objects (id → role, media) | what happens |
+| --- | --- | --- | --- |
+| `anime-speedline-charge` | 4 | `subject` → subject_1, image | Focus lines behind the figure and an aura; the camera snaps from a medium shot to head and shoulders between 0.72 and 2.2 s, then shakes until 2.75 s. |
+| `anime-impact-frame` | 3 | `subject` → subject_1, image | The hit at 1.25 s: two negative frames (`impact_invert`), three flash frames (`impact_flash`), a starburst, focus lines appear behind, and a shake that dies away by 2.6 s. |
+| `anime-snap-zoom` | 2.5 | `subject` → subject_1, image | The full figure, then a crash push to the eyes between 0.75 and 1.05 s with speed lines; a small shake on landing. |
+| `anime-sword-clash` | 4 | `subject` → subject_1, image; `rival` → subject_2, image | Both rush in from the edges and cross at 2.5 s: slash, shockwave, a white impact frame and a hard shake to 3.6 s. |
+| `anime-face-off` | 4 | `subject` → subject_1 (left), image; `rival` → subject_2 (right), image | Close-ups on the left and right halves over red focus lines, lightning between the eyes from 1.4 s, a slow push, and a flash at 3.6 s. |
+| `anime-airship-flyby` | 6 | `vehicle` → subject_1, model3d | The vehicle flies a gentle arc from x −16 to 16 m; the camera tracks it while clouds stream past. |
+| `anime-fleet-approach` | 6 | `vehicle_1` … `vehicle_4` → prop, model3d | Four copies leave a cloud bank at about 2 s in a staggered formation and come at the camera; a rumble from 4.6 s. |
+| `anime-eyecatch` | 3 | `subject` → subject_1, image | A scene-change card: the figure spins in twice from the distance over yellow focus lines and stars. |
+| `anime-code-rain` | 6 | `subject` → subject_1, image (optional) | Green code rain (`code_rain`, two layers) on a black backdrop for the whole shot, behind a green-tinted cutout; a slow push from a medium shot to the chest. |
+
+`anime-code-rain` with no figure is a plate: an export draws nothing for an image cutout with no picture, and the rain repeats exactly over each backdrop cue, which spans the shot. For a `series.location.plate3d` of N seconds, patch the working scene first with `{"duration": N, "retime": true}` so the cues span N seconds, then render the plate with `seconds: N`; it loops with no seam. With a figure, a Character Kit cutout can talk in front of the rain (`world3d.scene.talk`, or a Series `scene3d` shot whose cast uses `objectId: "subject"`).
+
+Bind a cutout (a transparent full-body PNG works best; the camera frames the head at 86% of the image height):
+
+```json
+{"bindings": [{"objectId": "subject", "sourceUrl": "/api/v1/file/hero.png?workspace=studio"}]}
+```
+
+Bind a GLB in a cutout's place, static or with a clip. Send the media with the URL:
+
+```json
+{"bindings": [{"objectId": "subject", "media": "model3d", "sourceUrl": "/api/v1/file/hero.glb?workspace=studio",
+               "clip": {"index": 0, "name": "Run"}}]}
+```
+
+Patch `"renderLook": "toon"` as well to draw GLBs in cel bands with an ink outline next to the flat cutouts. A GLB faces +Z. In the clash, turn a GLB toward its run (`"rotationY": 1.5708` for `subject`, `-1.5708` for `rival`); a cutout stays at 0 and faces the camera. `"rotationY": 3.1416` mirrors a cutout. The anime cameras use `relativeToFacing: false`, so turning or mirroring an object never moves the camera behind it. Vehicles fly nose first (`faceTravel`). The fleet's four objects share the role `prop`, so bind each id: four bindings with the same URL. `applyAnimeTemplate(id, { roles: { vehicle: url } })` in the UI binds the whole family, and `{ text }` adds a title to the eyecatch, which has none by default.
+
+In a production, `scene3d.subject` may be a GLB or a picture: the subject object becomes a model for `.glb`/`.gltf` and a cutout for a picture in a model's place. That cutout stands on its feet, is as tall as the model and turns at most 60° away from the camera; `world3d.scene.patch` does the same for a picture bound to a model object, unless the binding gives `rotationY`.
+
+Cue times are absolute seconds. Patching `duration` alone rescales the camera move and object motion but leaves effects, flashes and shake windows at their seconds; send `"retime": true` with it to stretch them with the shot, backdrop effects and shake windows included (a shake's `decay` is scaled back so it keeps its shape). Series 3D shots retime by default.
+
+## Camera shake, framing windows and screen backdrop
+
+These are plain document fields, for any Video 3D shot.
+
+- `camera.shake`: up to 16 windows `{"start": 1.25, "end": 2.6, "amplitude": 0.09, "frequency": 20, "seed": 7, "decay": 3.2}`. Seconds, metres of sideways and vertical travel, oscillations per second, an integer seed (0–1 000 000) and an exponential fall-off per second (0–60; absent keeps full strength). Bounds: 0 ≤ start < end ≤ 600, 0 < amplitude ≤ 2, 0 < frequency ≤ 60. It is a pure function of time, zero outside its windows, added after the camera pose: eye and look move together across the view, and the camera rolls about 2° per 0.1 m. The editor, MP4 exports and the software preview all shake. `world3d.scene.patch` accepts it in `camera` (`"shake": []` removes it); a bad window fails with `invalid_camera_shake`.
+- `camera.framing.moveStart` / `moveEnd` (fractions of the shot, 0–1) hold the camera at `from` before the move and at `to` after it. `ease: "snap"` leaves at full speed and settles, like a crash zoom; `smooth` (the default) eases in and out. Without them a framing move takes the whole shot, as before. Framing is ignored on the `fixed` family.
+- `camera.framing.track`: `rest` (the default) measures the target once, as its model mounts and before any clip moves it, and then follows only where the slot places and turns the model, so a dance's arms or a nod never move the camera; `pose` re-reads the head bone or the live bounding box every frame, for a close-up that must stay on a moving face. `anchor` (`head`, `center`, `feet`) picks the point in either mode.
+- `screenBackdrop`: `{"color": "#1c2f86", "sfx": [<screen cue>, ...]}` is painted as the frame background, behind every object. Its cues are ordinary screen effects; radial `speedlines` there are focus lines behind the characters. It is set by the template or in the document; `world3d.scene.patch` does not edit it.
+
+## Native motion sets
+
+Eight complete native motion sets (musical contacts, sunset flight, seasonal
+carriage, data assembly, lighthouse journey, volumetric poster and particle
+typography) use no external assets. Their `motionLab` controls are shared by
+the editor and `world3d.scene.patch`; see
+[native motion templates](WORLD3D_MOTION_LAB.md) for ids, bounds and timing.
 
 ## Personal templates
 
 `world3d.templates.user.put` stores `world3d-user-templates.json` in the workspace. Ids start with `user-`. Browser `localStorage` is left untouched and stays invisible until a template is copied into that file.
 
+**Building a scene without a template.** Register a blank stage as a personal template (camera, a `kind: "directional"` light and `slots: []`; the recipe and the editor's stricter shape rules are in [HOWUSEIT, Agent-built scenes](../3d-video-compositor/HOWUSEIT.md#agent-built-scenes-layout-bounds-fit-and-a-blank-start)), instantiate it, and add each model with `world3d.scene.patch` (`{"object_id": "tower", "add": true, "source_url": "/api/v1/file/tower.glb?workspace=<ws>", "fit": {"heightM": 30}, "position": [0, 0, -10]}`). A model is drawn 1.7 m x `scale` tall whatever its length, so size it with `fit` (`heightM`, `widthM`, `depthM`, `longestM` or `"native"`) rather than a guessed `scale`. After each patch read `layout.items[].boundsM` in the reply (the object's real size and place in metres, from the workspace GLB's rest pose) and `camera` to see what is where; `boundsReason` says why an object has no bounds. `world3d.scene.publish` makes the scene open in the Video 3D editor, and until then it is listed in the editor's Open dialog.
+
+**Telling the story.** Four things beyond placing objects (the details are in [HOWUSEIT, timed moves, collisions, 3D effects and beats](../3d-video-compositor/HOWUSEIT.md#agent-built-scenes-timed-moves-collisions-3d-effects-and-beats)):
+- `motion.start` / `motion.end` (scene seconds, default 0 and the end) time a move: `{"to": [24, 11, -4], "start": 1, "end": 3}` flies from 1 s to 3 s. Refused: a window with a baked `motion.walk` (`motion_window_with_walk`).
+- `layout.collisions` and `collision: <a> passes through <b> (part n) at 1.4-1.9 s near [x, y, z]` warnings in every inspect and patch reply, from one box per mesh node of the other model; `collide: false` on a binding exempts a ghost; flat low parts (the ground) are not obstacles; a fixed camera inside a part warns `camera_inside_geometry`. Never refused.
+- `worldFx: [{id?, kind, start, end?, at, scale?, color?, intensity?, sound?, volume?, to?}]` in a patch places 3D effects (explosion, shockwave, sparks, smoke, fire...). `at` is `[x, y, z]`, `{object_id, offset?}` (follows the object) or `{collision: n}`. Ids `fx-*` are replaced by the next `worldFx`, the template's stay.
+- `world3d.scene.beats {scene_id, base_revision, beats: [{t, who, verb, ...}]}` with the verbs `appear {at?}`, `go {to, via?, duration? | speed_mps?, face?}`, `face {toward}`, `do {action}` and `fx {kind, at?}`. `do` resolves the word to a clip the model's GLB really has (`wave`, `talk`, `nod`, `point`, `bow`, `hit`, `crouch`, `jump`, `hover`, `bounce`, `wobble` or the exact clip name); a rigid model gets the warning `no_clip_for_verb`, never an error. `go` walks a model that has a walk clip and puts its idle clip around the move. The reply is the inspect view plus `resolved: [{beat, who, verb, set, notes?}]`; send all of one object's moves and actions in one call (one move per object per call). Warnings: `implied_speed` (above 15 m/s), `collision`, `no_clip_for_verb`, `go_cut_short`, `face_after_go_ignored`, `no_collision_for_fx`, and `actor_out_of_frame` for a fixed camera.
+A film in one shot: `put` a blank stage, `instantiate`, `patch` the models in with `fit`, `world3d.scene.beats` for who does what when (read `layout.collisions` and the warnings in its reply), then `preview`, `publish` and `scenes.world3d.export`.
+
 ## Honest limits
 
 - The production compiler drops the template soundtrack. The song belongs to the production.
-- The software preview does not fetch GLB bytes. Model slots draw colored boxes. Image slots are not drawn. A bound URL does not change those pixels. An empty `sourceUrl` stays a marker in `pending`; it is not a finished character.
+- The software preview does not fetch GLB bytes. Model slots draw colored boxes. Image slots are not drawn. A bound URL does not change those pixels. `renderLook` does not change them either; it shows in the editor and in the export. An empty `sourceUrl` stays a marker in `pending`; it is not a finished character.
 - A follow camera keeps its subject centered, so translating that subject does not move its box. Changing `camera.fov`, or moving the subject while the camera stays put, changes the preview hash. Dolly zoom's lens change is stored on `camera.framing` and is kept through save; the software eye for a follow shot does not play that lens move, so the start, middle, and end boxes can match. MCP appends PNG image blocks after the text summary. A client that only reads the text still gets the revision, the hashes, and the pending markers.
 - Video 2D `scenes.catalog` and particle rain are not the Video 3D shot `cine-rain`.
 - A crash after the scene file is written and before the intent file is stored can still leave a duplicate. A transport retry in the same process does not.
 - Two objects with the same role, such as the two props in `dark-still-salt-sea`, must be named by object id. The role resolves only when exactly one slot has it.
 - A two-character shot keeps `subject_2`. Supplying one subject does not remove the other hole.
+- Portrait has 123 cards: 18 of them (the vertical pack) are for speech, 12 with `dialogue`. The stages, the action, speed and title packs and most looks are landscape only, so a vertical plan at a place with a stage, or for those intents, still gets landscape cards reframed (`adapted`). The vertical pack is set in the generic `citadel`: give it a `world`, a painted `background` or a skin for a real place.
+- A Series `kind: "3d"` shot reads only `template` and `roomCamera` from a plan entry; its frame comes from the series. A vertical series must ask the plan for `format: "portrait"` to get the vertical cards.
+- `reference` is a still of the real technique from a film, never a frame of ours; `preview` is ours, and shows empty slots as placeholders, not your cast.
+
+## Seated people (`furniture`, `height`, `beside`, `rest`)
+
+A card whose cast sits (`vertical-dialogue-across`, `dialogue-table`) should not hold `sit_down` on its own: that clip knows no seat. Declare the furniture and the sitters instead (`docs/3d-video-compositor/HOWUSEIT.md`, "people seated at a table or on a bed"): `furniture: {kind: "table"}`, two `furniture: {kind: "chair"}` with `beside: {object: "table", side: "front" | "back"}`, and each subject `rest: {pose: "sit", on: <chair>, at: "table"}` at its real `height`. Inspect warns `seated_without_seat` for a held `sit_down` with nothing under the hips, with the bindings to add.

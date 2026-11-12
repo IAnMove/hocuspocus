@@ -84,6 +84,12 @@ def application_handlers(api):
 
     handlers = {'assets': asset_catalog_handler(assets), 'collections': endpoint('/api/v1/workspace-collections', 'GET'),
                 'organize': organize, 'analyze': endpoint('/api/v1/llm/generate', 'POST')}
+    try:
+        # The workspace folders: the same two routes the UI calls. A minimal embedding without them has no tools.
+        from services.workspace_folder_commands import command_handlers as folder_handlers
+        handlers.update(folder_handlers(endpoint('/api/v1/workspaces', 'GET'), endpoint('/api/v1/workspaces', 'POST')))
+    except StopIteration:
+        pass
     # New versioned operations bypass the legacy transport journal: effects and
     # receipts are committed together by the existing WorkspaceRegistry.
     from services.workspace_commands import OPERATIONS

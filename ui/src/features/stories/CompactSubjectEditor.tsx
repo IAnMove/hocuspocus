@@ -46,9 +46,9 @@ export function CompactSubjectEditor({
           </p>
         </div>
         <div className="flex items-center gap-1">
-          <button className={button} disabled={index === 0} title={t('compact.moveUp')} onClick={() => update(current => { moveItem(current.characters, index, index - 1); return current })}><ChevronUp size={12} /></button>
-          <button className={button} disabled={index === total - 1} title={t('compact.moveDown')} onClick={() => update(current => { moveItem(current.characters, index, index + 1); return current })}><ChevronDown size={12} /></button>
-          <button className="p-1 text-red-400" title={t('compact.remove')} onClick={() => update(current => {
+          <button className={button} disabled={index === 0} title={t('compact.moveUp')} aria-label={t('compact.moveUp')} onClick={() => update(current => { moveItem(current.characters, index, index - 1); return current })}><ChevronUp size={12} /></button>
+          <button className={button} disabled={index === total - 1} title={t('compact.moveDown')} aria-label={t('compact.moveDown')} onClick={() => update(current => { moveItem(current.characters, index, index + 1); return current })}><ChevronDown size={12} /></button>
+          <button className="p-1 text-red-400" title={t('compact.remove')} aria-label={t('compact.remove')} onClick={() => update(current => {
             current.characters = current.characters.filter(item => item.id !== character.id)
             current.relationships = current.relationships.filter(item => item.fromCharacterId !== character.id && item.toCharacterId !== character.id)
             pruneUnusedAssets(current)

@@ -108,6 +108,11 @@ class DevelopmentBranchPolicyTests(unittest.TestCase):
             'cancel-in-progress: ${{ github.event_name == \'pull_request\' }}',
             text,
         )
+        # A merge to development triggers a push run and the open release PR's
+        # synchronize run on the same tree. They share one group so the release
+        # run supersedes the push run; pushes still never cancel anything.
+        self.assertIn("(github.head_ref || github.ref_name) == 'development' && 'development'", text)
+        self.assertIn('github.event.pull_request.head.repo.full_name == github.repository)', text)
 
     def test_ui_validation_runs_after_ratchet_failure_without_masking_failures(self):
         text = (ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8')

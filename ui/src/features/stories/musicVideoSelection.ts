@@ -1,4 +1,5 @@
 import type { StoryMusicCandidate, StoryMusicCue, StoryProject } from './types'
+import i18n from '../../i18n'
 
 export const SYNTHETIC_STORY_SONG_CUE_ID = 'story-song'
 
@@ -59,13 +60,13 @@ function resolveCueIdentity(
   const requested = normalizeName(cueTitle)
   const requestedCandidateId = candidateId.trim()
   const cueById = cueId ? project.music.cues.find(item => item.id === cueId) : undefined
-  if (cueId && !cueById) throw new Error(`No existe el cue con ID “${cueId}” en “${project.title}”.`)
+  if (cueId && !cueById) throw new Error(i18n.t('storyLab:errors.cueMissingById', { cueId, title: project.title }))
   const candidates = cueById ? cueById.candidates : allCandidates(project)
   const titleMatches = requested
     ? candidates.filter(item => candidateAliases(item).includes(requested))
     : []
   if (titleMatches.length > 1 && !requestedCandidateId) {
-    throw new Error(`Hay varias versiones de canción llamadas “${cueTitle}”; usa su candidate_id exacto.`)
+    throw new Error(i18n.t('storyLab:errors.duplicateSongVersions', { name: cueTitle }))
   }
   const candidateFromTitle = titleMatches.length === 1 ? titleMatches[0] : undefined
   const candidateCue = candidateFromTitle
@@ -74,9 +75,9 @@ function resolveCueIdentity(
   const exactCues = requested
     ? project.music.cues.filter(item => normalizeName(item.title) === requested)
     : []
-  if (exactCues.length > 1) throw new Error(`Hay varios cues llamados “${cueTitle}”; usa el título exacto y único.`)
+  if (exactCues.length > 1) throw new Error(i18n.t('storyLab:errors.duplicateCues', { name: cueTitle }))
   if (requested && !cueById && !candidateFromTitle && !exactCues.length) {
-    throw new Error(`No existe el cue “${cueTitle}” en “${project.title}”.`)
+    throw new Error(i18n.t('storyLab:errors.cueMissingByTitle', { name: cueTitle, title: project.title }))
   }
   const selectedCue = project.music.cues.find(item => (
     item.selectedCandidateId
@@ -98,25 +99,25 @@ function resolveCandidateIdentity(
   const requestedId = candidateId.trim()
   const byId = requestedId ? pool.find(item => item.id === requestedId) : undefined
   if (requestedId && !byId) {
-    throw new Error(`No existe la versión de canción con ID “${requestedId}” en “${project.title}”.`)
+    throw new Error(i18n.t('storyLab:errors.songVersionMissingById', { id: requestedId, title: project.title }))
   }
   const requestedSong = normalizeName(songName)
   if (requestedSong) {
     const matches = pool.filter(item => candidateAliases(item).includes(requestedSong))
-    if (matches.length > 1) throw new Error(`Hay varias canciones llamadas “${songName}”; usa el nombre exacto y único.`)
+    if (matches.length > 1) throw new Error(i18n.t('storyLab:errors.duplicateSongs', { name: songName }))
     if (byId && matches.length && matches[0].id !== byId.id) {
-      throw new Error(`La canción “${songName}” no coincide con la versión ${requestedId}.`)
+      throw new Error(i18n.t('storyLab:errors.songVersionMismatch', { name: songName, id: requestedId }))
     }
     const candidate = byId || matches[0]
     if (candidate) return candidate
-    throw new Error(`No existe la canción “${songName}” en “${project.title}”.`)
+    throw new Error(i18n.t('storyLab:errors.songMissingByName', { name: songName, title: project.title }))
   }
   if (byId || candidateFromTitle) return (byId || candidateFromTitle)!
   const selectedId = cue?.selectedCandidateId || project.music.selectedCandidateId
   const selected = selectedId ? pool.find(item => item.id === selectedId) : undefined
   if (selected) return selected
   if (pool.length === 1) return pool[0]
-  throw new Error(`Hay ${pool.length} canciones en “${project.title}”. Di el nombre exacto de la canción o del cue.`)
+  throw new Error(i18n.t('storyLab:errors.ambiguousSongs', { count: pool.length, title: project.title }))
 }
 
 export function resolveStoryMusicSelection(
@@ -131,7 +132,7 @@ export function resolveStoryMusicSelection(
   )
   const pool = scopedCue ? scopedCue.candidates : allCandidates(project, cue)
   if (!pool.length) {
-    throw new Error(`“${project.title}” no tiene ninguna canción candidata. Genera o importa una en Story Lab → Music.`)
+    throw new Error(i18n.t('storyLab:errors.noCandidateSongs', { title: project.title }))
   }
   const candidate = resolveCandidateIdentity(
     project, pool, cue, candidateFromTitle, songName, candidateId,
@@ -150,12 +151,12 @@ function assertReadyStoryMusicCandidate(candidate: StoryMusicCandidate): void {
   if (isReadyStoryMusicCandidate(candidate)) return
   const label = songLabel(candidate)
   if (candidate.status === 'pending') {
-    throw new Error(`La canción “${label}” todavía se está generando; espera a que quede lista antes de preparar el videoclip.`)
+    throw new Error(i18n.t('storyLab:errors.songStillGenerating', { label }))
   }
   if (candidate.status === 'failed') {
-    throw new Error(`La canción “${label}” falló y no se puede usar para un videoclip. Genera otra versión.`)
+    throw new Error(i18n.t('storyLab:errors.songFailed', { label }))
   }
-  throw new Error(`La canción “${label}” no tiene un archivo de audio.`)
+  throw new Error(i18n.t('storyLab:errors.songNoAudio', { label }))
 }
 
 function assertPersistedMusicCue(
@@ -167,7 +168,7 @@ function assertPersistedMusicCue(
   const requestedCueId = cueId.trim()
   if (owningCue && owningCue.id !== SYNTHETIC_STORY_SONG_CUE_ID) return
   if (requestedCueId === SYNTHETIC_STORY_SONG_CUE_ID) return
-  throw new Error(`La canción “${songLabel(candidate)}” no pertenece a un cue persistido en “${project.title}”.`)
+  throw new Error(i18n.t('storyLab:errors.songNotOnPersistedCue', { label: songLabel(candidate), title: project.title }))
 }
 
 function syntheticStorySongCue(project: StoryProject, candidate: StoryMusicCandidate): StoryMusicCue {
@@ -198,7 +199,7 @@ export function effectiveStoryMusicCue(
 ): StoryMusicCue {
   if (cue && cue.id !== SYNTHETIC_STORY_SONG_CUE_ID) return cue
   if (requestedCueId.trim() !== SYNTHETIC_STORY_SONG_CUE_ID) {
-    throw new Error(`“${project.title}” no tiene un cue persistido para esta canción.`)
+    throw new Error(i18n.t('storyLab:errors.noPersistedCueForSong', { title: project.title }))
   }
   return cue || syntheticStorySongCue(project, candidate)
 }

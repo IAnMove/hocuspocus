@@ -13,18 +13,37 @@ from tests.humanoid_skinning import skin_vertices
 
 
 def _weighted(kind):
-    item = body(kind)
-    found = detect_landmarks(item["positions"], item["indices"])
-    skeleton = build_skeleton(found["points"], found["height"], found["y_min"], found["facing"], found["head_region"])
-    joints, weights = compute_weights(item["positions"], item["indices"], skeleton)
+    item, skeleton, joints, weights, _found = _draped(kind)
     return item, skeleton, joints, weights
 
 
-def _posed(skeleton, joints, weights, points, bone, degrees, axis):
+def _draped(kind):
+    item = body(kind)
+    found = detect_landmarks(item["positions"], item["indices"])
+    skeleton = build_skeleton(found["points"], found["height"], found["y_min"], found["facing"], found["head_region"], found["base"],
+                              found["robe"])
+    joints, weights = compute_weights(item["positions"], item["indices"], skeleton, found["cloth"])
+    return item, skeleton, joints, weights, found
+
+
+def _skinned(skeleton, joints, weights, points, bone, degrees, axis):
     rest = world_matrices(skeleton["bones"])
     local = skeleton["bones"][BONE_BY_NAME[bone]]["rotation"]
     posed = world_matrices(skeleton["bones"], {bone: rot.multiply(local, rot.axis_angle(axis, degrees))})
-    return np.linalg.norm(skin_vertices(points, joints, weights, rest, posed) - points, axis=1)
+    return skin_vertices(points, joints, weights, rest, posed)
+
+
+def _posed(skeleton, joints, weights, points, bone, degrees, axis):
+    return np.linalg.norm(_skinned(skeleton, joints, weights, points, bone, degrees, axis) - points, axis=1)
+
+
+def _stretch(points, moved, indices, chosen):
+    """Largest length ratio, posed over rest, of the mesh edges between ``chosen`` vertices."""
+    edges = np.concatenate((indices[:, [0, 1]], indices[:, [1, 2]], indices[:, [2, 0]]))
+    edges = edges[chosen[edges[:, 0]] & chosen[edges[:, 1]]]
+    rest = np.linalg.norm(points[edges[:, 0]] - points[edges[:, 1]], axis=1)
+    posed = np.linalg.norm(moved[edges[:, 0]] - moved[edges[:, 1]], axis=1)
+    return float((posed[rest > 1e-6] / rest[rest > 1e-6]).max())
 
 
 def _dominant(joints, weights):
@@ -93,3 +112,66 @@ def test_a_thigh_swing_does_not_drag_the_other_leg():
     left_leg = (points[:, 0] > 0.05) & (points[:, 1] < skeleton["world"]["LeftUpLeg"][1] - 0.05)
     assert left_leg.sum() > 50
     assert float(moved[left_leg].max()) < 0.005
+
+
+@pytest.mark.parametrize("kind", ("robe", "back_cape"))
+def test_a_robe_or_a_cape_over_the_legs_hangs_from_the_hips(kind):
+    item, skeleton, joints, weights, found = _draped(kind)
+    points, indices = item["positions"], item["indices"]
+    assert np.allclose(weights.sum(axis=1), 1.0, atol=1e-6)
+    world = skeleton["world"]
+    bottom = skeleton["robe"]["hem"] if skeleton["robe"] else world["LeftFoot"][1]
+    hanging = (points[:, 1] > bottom + 0.03) & (points[:, 1] < world["LeftUpLeg"][1] - 0.03)
+    if kind == "back_cape":
+        hanging &= found["cloth"]
+    assert hanging.sum() > 1000
+    stride = _skinned(skeleton, joints, weights, points, "LeftUpLeg", 40.0, [1.0, 0.0, 0.0])
+    # The plain surface weights split the cloth between the thighs and stretch an edge 10 to 14 times.
+    assert _stretch(points, stride, indices, hanging) < 3.0
+    assert float(np.linalg.norm(stride - points, axis=1)[hanging].mean()) > 0.03, "the cloth follows the stride in part"
+    knee = _posed(skeleton, joints, weights, points, "LeftLeg", 70.0, [1.0, 0.0, 0.0])
+    assert float(knee[hanging].max()) < 0.005, "a bent knee does not fold the cloth"
+    foot = (points[:, 1] < bottom - 0.02) & (points[:, 0] * skeleton["facing"] > 0.04)
+    assert float(knee[foot].min()) > 0.05, "the foot under the hem still follows the knee"
+
+
+def test_raising_an_arm_under_a_cape_lifts_its_side_only():
+    item, skeleton, joints, weights, found = _draped("cape")
+    points, indices = item["positions"], item["indices"]
+    cloth = found["cloth"]
+    raised = _skinned(skeleton, joints, weights, points, "LeftArm", -70.0, [0.0, 0.0, 1.0])
+    moved = np.linalg.norm(raised - points, axis=1)
+    near, far = cloth & (points[:, 0] > 0.25), cloth & (points[:, 0] < -0.05)
+    assert near.sum() > 200 and far.sum() > 200
+    assert float(moved[far].max()) < 0.002
+    assert float(moved[near].mean()) > 0.05, "the cape over the upper arm rises with it"
+    assert _stretch(points, raised, indices, cloth & (points[:, 0] > 0.05)) < 2.0
+
+
+def test_hair_down_onto_the_shoulders_never_hangs_from_a_shoulder():
+    item, skeleton, joints, weights = _weighted("mane")
+    points = item["positions"]
+    above = points[:, 1] > skeleton["head_region"]["y"]
+    shoulders = [BONE_BY_NAME["LeftShoulder"], BONE_BY_NAME["RightShoulder"]]
+    assert above.sum() > 200
+    assert not np.any(np.isin(joints[above][weights[above] > 0], shoulders))
+    moved = _posed(skeleton, joints, weights, points, "RightShoulder", 25.0, [0.0, 0.0, 1.0])
+    assert float(moved[above].max()) < 0.002, "a shrug leaves the head, hair and all, where it was"
+
+
+def test_above_the_neck_notch_the_shoulders_let_go_and_a_stranded_cell_keeps_its_weights():
+    from services.humanoid_rig.weights import _DEFORM, _head_mask
+
+    head_, neck, left, right = (_DEFORM.index(name) for name in ("Head", "Neck", "LeftShoulder", "RightShoulder"))
+    table = np.zeros((4, len(_DEFORM)))
+    table[0, [head_, right]] = [0.8, 0.2]          # a fringe past the head's width, pulled by the right shoulder
+    table[1, [neck, left]] = [0.5, 0.5]            # a collar above the notch, half on a shoulder
+    table[2, [right]] = [1.0]                      # a pauldron's spike: only the shoulder reached it
+    table[3, [right, left]] = [0.6, 0.4]           # the shoulders themselves, below the notch
+    head = np.array([True, False, False, False])
+    above = np.array([True, True, True, False])
+    out = _head_mask(table, head, above)
+    assert out[0, right] == 0.0 and out[0, head_] == 0.8
+    assert out[1, left] == 0.0 and out[1, neck] == 0.5
+    assert out[2].tolist() == table[2].tolist(), "a thing only a shoulder reached keeps it"
+    assert out[3].tolist() == table[3].tolist(), "below the notch nothing changes"

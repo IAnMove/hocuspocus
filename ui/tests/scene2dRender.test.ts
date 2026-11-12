@@ -38,6 +38,20 @@ test('evaluator interpolates motion and applies the active camera', () => {
   assert.equal(state.scale, 2)
 })
 
+test('a depth layer (parallaxZoom) takes its parallax share of the camera zoom; others take all of it', () => {
+  const camera = layer('cam', { type: 'camera', source: '', z: 100, animation: { start: { x: 50, y: 50, scale: 2 }, end: { x: 50, y: 50, scale: 2 }, duration: 4, curve: 'linear' } })
+  const still = { transform: { x: 60, y: 50, scale: 1, opacity: 1 }, animation: { start: { x: 60, y: 50, scale: 1 }, end: { x: 60, y: 50, scale: 1 }, duration: 4, curve: 'linear' as const } }
+  const far = layer('far', { ...still, parallax: 0.25, parallaxZoom: true })
+  const flat = layer('flat', { ...still, parallax: 0.25 })
+  const evaluator = createSceneEvaluator(scene([far, flat, camera]))
+  const [depth] = evaluator.renderedLayerStates(far, 0)
+  assert.equal(depth.scale, 1.25)
+  assert.equal(depth.x, 62.5, 'positions spread from the centre by the same share')
+  assert.equal(evaluator.renderedLayerStates(flat, 0)[0].scale, 2)
+  const normalized = normalizeScene2D(scene([far, layer('odd', { parallaxZoom: 'yes' as unknown as boolean }), { ...camera, parallaxZoom: true }]))
+  assert.deepEqual(normalized.layers.map(item => [item.id, item.parallaxZoom]), [['far', true], ['odd', undefined], ['cam', undefined]])
+})
+
 test('dependency cycles are broken before evaluation', () => {
   const a = layer('a', { relationship: { type: 'follow', targetLayerId: 'b' } })
   const b = layer('b', { relationship: { type: 'follow', targetLayerId: 'a' } })

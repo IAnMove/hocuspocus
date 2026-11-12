@@ -2,6 +2,7 @@ IMAGE PROMPT (image_prompt) — the VERY FIRST FRAME, BEFORE any action begins. 
 Show the INITIAL STATE: if clothing will be removed, it's still on. If someone enters, the room is empty.
 The video_prompt handles all transitions. The image_prompt shows where the scene STARTS, not where it ends.
 
+<!-- REFERENCE -->
 FORMAT:
 "create new scene, [environment]. [character from Nth image] [static pose/position]. With [his/her] existing full-body attributes and attire from reference image. [lighting]."
 
@@ -9,8 +10,18 @@ RULES:
 - Always start with "create new scene, [detailed environment]."
 - Anchor each character by a visual feature + which image: "the green muscular man from the second image"
 - Always end each character reference with "with his/her existing full-body attributes and attire from reference image(s)" — this preserves their complete look (helmet, armor, accessories, clothing) from the reference photo.
+<!-- CLOTHING -->
 - Do NOT invent or describe clothing. The model preserves it from the reference automatically.
-- ALWAYS end the prompt with "use lighting and color temp from reference image" to preserve the visual aesthetic (color grading, film texture, era, tone) of the reference photo.
+<!-- /CLOTHING -->
+<!-- /REFERENCE -->
+<!-- NO_REFERENCE -->
+FORMAT:
+"create new scene, [environment]. [character described by visible appearance] [static pose/position]. [lighting]."
+
+RULES:
+- Always start with "create new scene, [detailed environment]."
+- There is no reference image: describe each recurring character by the same visible features (age, build, hair, clothing, colours) in every shot, so the same people appear in every frame.
+<!-- /NO_REFERENCE -->
 - No character names. Describe a frozen moment — a photograph, not a video frame.
 - NO motion verbs (walking, running, reaching, turning, heaving, dancing, gesturing).
 - NO motion-photography effects: no motion blur, speed lines, long exposure, camera
@@ -18,6 +29,7 @@ RULES:
 - Describe POSES as static states: "standing with arms crossed", "seated at desk", "leaning against railing".
 - Describe EXPRESSIONS as states: "stern expression", "wide grin" — NOT "expression changes to".
 
+<!-- REFERENCE -->
 - ALWAYS end every image_prompt with: "Preserve character identity, attire, body attributes, and the art style of the reference image."
 
 STYLE CONSISTENCY:
@@ -30,5 +42,18 @@ STYLE CONSISTENCY:
 
 EXAMPLES (format only — never copy their subjects, objects, or settings into your prompts):
 - "create new scene, stadium stage at night. Close up of the man with star on his chest from the fourth image, standing at mic with confident posture. With his existing full-body attributes and attire. Blue and red stage lighting. Preserve character identity, attire, body attributes, and the art style of the reference image."
-- "create new scene, living room. The woman with red hair from the third image seated on the sofa, relaxed posture. With her existing full-body attributes and attire. Use lighting and color temp from reference image. Preserve character identity, attire, body attributes, and the art style of the reference image."
+- "create new scene, living room. The woman with red hair from the third image seated on the sofa, relaxed posture. With her existing full-body attributes and attire. Soft lamp light. Preserve character identity, attire, body attributes, and the art style of the reference image."
 - "create new scene, backstage area. Wide shot of the green muscular man from the second image reclined on a couch, feet up. With his existing full-body attributes and attire. Dim overhead lighting. Preserve character identity, attire, body attributes, and the art style of the reference image."
+<!-- /REFERENCE -->
+<!-- NO_REFERENCE -->
+STYLE CONSISTENCY:
+- Name the visual MEDIUM and ART STYLE of the Story (hand-drawn, watercolor, anime,
+  photorealistic, etc.) in EVERY image prompt. Without naming the medium, the image
+  model defaults to photorealism.
+- Never switch styles between shots.
+
+EXAMPLES (format only — never copy their subjects, objects, or settings into your prompts):
+- "create new scene, stadium stage at night. Close up of a tall man with a silver star on his chest, standing at the mic with confident posture. Blue and red stage lighting."
+- "create new scene, living room. A woman with long red hair seated on the sofa, relaxed posture. Soft lamp light."
+- "create new scene, backstage area. Wide shot of a muscular green-skinned man reclined on a couch, feet up. Dim overhead lighting."
+<!-- /NO_REFERENCE -->

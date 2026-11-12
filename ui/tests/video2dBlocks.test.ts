@@ -28,6 +28,18 @@ test('paths, frame sequences and beat envelopes are deterministic', () => {
   assert.equal(beatEnvelope({ bpm: 120, beats: [1] }, 1.2), 0)
 })
 
+test('a sheet sequence can start late and play mirrored; the rest keep their clock', () => {
+  const sheet = { kind: 'sheet', source: 's.png', columns: 4, rows: 1, count: 4, fps: 2 } as const
+  const late = parseSequence({ ...sheet, loop: 'once', start: 3, mirror: true })
+  assert.deepEqual(late, { ...sheet, loop: 'once', start: 3, mirror: true })
+  assert.equal(late && sequenceFrame(late, 2), 0, 'before its start it shows the first cell')
+  assert.deepEqual([3, 3.5, 4, 5, 9].map(time => late && sequenceFrame(late, time)), [0, 1, 2, 3, 3], 'a once sheet counts from its start')
+  const pingpong = parseSequence({ ...sheet, loop: 'pingpong', start: 1 })!
+  assert.deepEqual([1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5].map(time => sequenceFrame(pingpong, time)), [0, 1, 2, 3, 2, 1, 0, 1])
+  assert.deepEqual(parseSequence({ ...sheet, loop: 'loop', start: -2, mirror: false }), { ...sheet, loop: 'loop' }, 'a bad start and a false mirror are dropped')
+  assert.equal(sequenceFrame({ ...sheet, loop: 'loop' }, 1.5), 3, 'without a start the clock is the scene\'s, as before')
+})
+
 test('anchored emitters break cycles instead of following each other', () => {
   const cycled = normalizeScene2D({
     version: 1, name: 'cycle', width: 320, height: 180, fps: 24, duration: 1,

@@ -272,7 +272,7 @@ def test_series_render_keeps_the_episode_and_does_not_rewrite_the_library(tmp_pa
     assert read_story_library(str(tmp_path))["projects"] == {}
     assert Path(series_library_path(str(tmp_path))).read_bytes() == before
     assert list(tmp_path.glob("*.production.json")) == []
-    text = (Path(__file__).resolve().parents[1] / "app/_launch_runtime.py").read_text(encoding="utf-8")
+    text = (Path(__file__).resolve().parents[1] / "app/routers/series_render.py").read_text(encoding="utf-8")
     body = text.split("def start_series_episode_render", 1)[1].split("\ndef ", 1)[0]
     assert body.index("attach_episode") < body.index('episode["status"] = "rendering"')
     assert body.index("attach_episode") < body.index("_run_series_render_job")

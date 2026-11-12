@@ -20,7 +20,10 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REQUIRED_CHECKS = (
     "Clean-repo guard + Python checks",
     "UI tests + lint + type-check + build",
-    "UI E2E boot (Chromium + simulated API)",
+    # Playwright runs as a three-shard matrix; each shard reports its own check.
+    "UI E2E boot (Chromium + simulated API) 1/3",
+    "UI E2E boot (Chromium + simulated API) 2/3",
+    "UI E2E boot (Chromium + simulated API) 3/3",
     "CI required",
 )
 ALLOWED_BASE_REFS = {"development", "main"}

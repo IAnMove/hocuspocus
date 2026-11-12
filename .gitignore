@@ -1,6 +1,9 @@
 # Python virtual environment
 env/
 app/env/
+
+# Local logs from scripts/dev/gates.py. Never commit them.
+.dev-gates/
 # Cloud Agent / local dev virtualenv created by .cursor/install.sh
 .venv/
 
@@ -102,9 +105,17 @@ app/services/hunyuan3d/vendor/
 app/services/model3d_runtimes/
 app/services/rigging/vendor/
 
+# See-through (SIGGRAPH 2026) checkout, env and Hugging Face cache. Installed on request.
+app/services/see_through/env/
+app/services/see_through/vendor/
+app/services/see_through/hf/
+
 # MiniMax H3 isolated ComfyUI runtime, inputs/outputs, and model weights
 app/services/minimax_h3/env/
 app/services/minimax_h3/vendor/
+
+# Optional template-search weights (intfloat/multilingual-e5-small, MIT). Never tracked.
+app/services/template_semantic_model/
 
 # Retired optional content supplement pack — the download apparatus is
 # gone (nothing reads the pack anymore), but leftover local copies may
@@ -153,3 +164,22 @@ app/services/rigging/env/
 
 # Per-workspace medians written when a production completes. Not a measurement to commit.
 .production-timings.json
+
+# Personal generation sessions run from scripts/ (song specs, pipeline state,
+# ffmpeg concat lists, joke-clip queues and their logs). They belong to the
+# maintainer's machine, not to the repo; scripts/verify_clean_repo.py fails if
+# one of them is tracked.
+scripts/*.log
+scripts/*_song.json
+scripts/*_pipeline.json
+scripts/*_concat.txt
+scripts/joke_*.json
+# Optional FLUX 3 / Drama 3 runtime, dependencies and downloaded vendors.
+app/services/creation_models/env/
+app/services/creation_models/vendor/
+
+app/services/creation_models/input/
+app/services/creation_models/output/
+app/services/creation_models/extra_model_paths.json
+app/services/creation_models/runtime.json
+app/services/creation_models/runtime.json.tmp

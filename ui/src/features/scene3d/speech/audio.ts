@@ -4,6 +4,8 @@ import type { Scene3DDocument } from '../types'
 import { scene3dOutputDuration, scene3dPlaybackSpeed } from '../clock'
 import { safeMediaUrl } from './track'
 import { sceneVoiceTracks, speechClips } from './timeline'
+import { hasMotionLabMusic, scheduleMotionLabMusic } from '../motionlab/musicAudio'
+import { DEFAULT_MOTION_LAB } from '../motionlab/types'
 
 export const MAX_VOICE_SECONDS = 600
 export const MAX_DECODED_VOICES = 8
@@ -191,12 +193,13 @@ export function isMusicTrack(track: { key: string }): boolean {
 
 export async function mixSceneSpeech(document: Scene3DDocument): Promise<AudioBuffer | undefined> {
   const tracks = sceneVoiceTracks(document)
-  if (!tracks.length && !document.sfx?.some(cue => cue.sound && cue.volume) && !document.worldSfx?.some(cue => cue.sound && cue.volume)) return undefined
+  if (!tracks.length && !document.sfx?.some(cue => cue.sound && cue.volume) && !document.worldSfx?.some(cue => cue.sound && cue.volume) && !hasMotionLabMusic(document.dressing, document.motionLab)) return undefined
   const duration = scene3dOutputDuration(document), speed = scene3dPlaybackSpeed(document.playbackSpeed)
   // Bound memory explicitly; silent scenes retain the existing 600 s export contract.
   if (duration > 180) throw new Error('Voice exports support up to 180 output seconds per scene.')
   const context = new OfflineAudioContext(2, Math.ceil(duration * 48000), 48000)
   scheduleFx(context, [...(document.sfx ?? []), ...worldSfxAudioCues(document.worldSfx)], document.duration, speed)
+  scheduleMotionLabMusic(context, document.dressing, document.motionLab ?? { ...DEFAULT_MOTION_LAB }, document.duration, speed)
   const music = tracks.filter(isMusicTrack)
   const spoken = tracks.filter(track => !isMusicTrack(track))
   const windows: DuckWindow[] = []

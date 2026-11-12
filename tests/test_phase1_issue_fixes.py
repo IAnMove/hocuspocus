@@ -12,10 +12,14 @@ import unittest
 from unittest import mock
 
 from tests.api_client_source import api_client_source
+from tests.support.launch_ast import launch_and_worker_source
 
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
+_OUTPAINT_PLANNING = os.path.join(_ROOT, "app", "services", "outpaint_planning.py")
+_OUTPAINT_RUN = os.path.join(_ROOT, "app", "services", "outpaint_run.py")
+_OUTPAINT_ROUTER = os.path.join(_ROOT, "app", "routers", "outpaint.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
 _LTX2_PATH = os.path.join(_ROOT, "app", "models", "ltx2", "ltx2.py")
 _LTX2_INPAINT_PATH = os.path.join(
@@ -50,6 +54,17 @@ _LORAS_MULTIPLIERS_PATH = os.path.join(
     "loras_mutipliers.py",
 )
 _STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "useStore.ts")
+_OUTPAINT_SUBMISSION_PATH = os.path.join(
+    _ROOT, "ui", "src", "features", "studio", "outpaintSubmission.ts",
+)
+_STUDIO_EDIT_SLICE_PATH = os.path.join(
+    _ROOT, "ui", "src", "features", "studio", "store", "studioEditSlice.ts",
+)
+_OUTPUT_RESTORE_SLICE_PATH = os.path.join(
+    _ROOT, "ui", "src", "features", "studio", "store", "outputRestoreSlice.ts",
+)
+_MODELS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelsSlice.ts")
+_VISIBILITY_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelVisibility.ts")
 _INPUTS_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "Sidebar", "InputsPanel.tsx",
 )
@@ -84,21 +99,46 @@ def _read(path: str) -> str:
         return handle.read()
 
 
+_RECAST_SERVICE_PATHS = (
+    os.path.join(_ROOT, "app", "services", "recast_shot_planning.py"),
+    os.path.join(_ROOT, "app", "services", "recast_shot_manifest.py"),
+    os.path.join(_ROOT, "app", "services", "recast_shot_run.py"),
+    os.path.join(_ROOT, "app", "services", "recast_masks.py"),
+    os.path.join(_ROOT, "app", "services", "recast_matte.py"),
+    os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"),
+    os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"),
+)
+
+
 def _load_functions(path: str, names: tuple[str, ...], namespace=None) -> dict:
-    source = _read(path)
-    tree = ast.parse(source, filename=os.path.relpath(path, _ROOT))
-    selected = [
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name in names
-    ]
-    if len(selected) != len(names):
-        found = {node.name for node in selected}
-        raise AssertionError(f"Missing functions: {set(names) - found}")
-    module = ast.Module(body=selected, type_ignores=[])
-    ast.fix_missing_locations(module)
+    """Exec ``names`` from ``path``, or from the recast service that now defines them."""
+    pools = [path]
+    for service in _RECAST_SERVICE_PATHS:
+        if service not in pools and os.path.isfile(service):
+            pools.append(service)
+    parsed = {}
+    for item in pools:
+        tree = ast.parse(_read(item), filename=os.path.relpath(item, _ROOT))
+        parsed[item] = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+        }
+    grouped: dict[str, list[ast.FunctionDef]] = {}
+    missing = []
+    for name in names:
+        home = next((item for item in pools if name in parsed[item]), None)
+        if home is None:
+            missing.append(name)
+            continue
+        grouped.setdefault(home, []).append(parsed[home][name])
+    if missing:
+        raise AssertionError(f"Missing functions: {set(missing)}")
     loaded = dict(namespace or {})
-    exec(compile(module, os.path.relpath(path, _ROOT), "exec"), loaded)
+    for home, nodes in grouped.items():
+        module = ast.Module(body=nodes, type_ignores=[])
+        ast.fix_missing_locations(module)
+        exec(compile(module, os.path.relpath(home, _ROOT), "exec"), loaded)
     return loaded
 
 
@@ -107,7 +147,7 @@ class TestOutpaintSampling(unittest.TestCase):
     def setUpClass(cls):
         cls.resolve = staticmethod(
             _load_functions(
-                _LAUNCH_PATH,
+                _OUTPAINT_PLANNING,
                 ("_resolve_outpaint_sampling",),
             )["_resolve_outpaint_sampling"]
         )
@@ -157,7 +197,7 @@ class TestOutpaintSampling(unittest.TestCase):
 
     def test_frontend_sends_the_visible_advanced_values(self):
         client = api_client_source()
-        store = _read(_STORE_PATH)
+        outpaint = _read(_OUTPAINT_SUBMISSION_PATH)
         for field in (
             "num_inference_steps?: number",
             "guidance_scale?: number",
@@ -167,11 +207,11 @@ class TestOutpaintSampling(unittest.TestCase):
         self.assertIn(
             "num_inference_steps: "
             "(state.params.num_inference_steps as number)",
-            store,
+            outpaint,
         )
         self.assertIn(
             "guidance_scale: (state.params.guidance_scale as number)",
-            store,
+            outpaint,
         )
 
 
@@ -180,7 +220,7 @@ class TestOutpaintTimingAndWindowUI(unittest.TestCase):
     def setUpClass(cls):
         cls.resolve_timing = staticmethod(
             _load_functions(
-                _LAUNCH_PATH,
+                _OUTPAINT_PLANNING,
                 ("_resolve_outpaint_video_timing",),
                 {"math": math},
             )["_resolve_outpaint_video_timing"]
@@ -315,7 +355,7 @@ class TestOutpaintCurrentModelStack(unittest.TestCase):
         )
         cls.resolve_model = staticmethod(
             _load_functions(
-                _LAUNCH_PATH,
+                _OUTPAINT_PLANNING,
                 ("_resolve_ltx2_outpaint_reference_model",),
                 {"os": os, "wgp": fake_wgp},
             )["_resolve_ltx2_outpaint_reference_model"]
@@ -365,9 +405,8 @@ class TestOutpaintCurrentModelStack(unittest.TestCase):
             )
 
     def test_outpaint_endpoint_records_requested_model_before_routing(self):
-        launch = _read(_LAUNCH_PATH)
-        outpaint = launch.split(
-            '@api.post("/api/v1/outpaint")',
+        outpaint = _read(_OUTPAINT_ROUTER).split(
+            "async def outpaint_endpoint",
             1,
         )[1]
         self.assertLess(
@@ -387,8 +426,8 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
             sys.path.insert(0, app_root)
         cls.resolve_geometry = staticmethod(
             _load_functions(
-                _LAUNCH_PATH,
-                ("_resolve_outpaint_canvas_geometry",),
+                _OUTPAINT_PLANNING,
+                ("_resolve_outpaint_canvas_geometry", "_format_outpaint_percentage"),
                 {
                     "math": math,
                     "_OUTPAINT_PIXEL_BUDGETS": {
@@ -402,7 +441,7 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         )
         cls.cap_single_stage_window = staticmethod(
             _load_functions(
-                _LAUNCH_PATH,
+                _OUTPAINT_PLANNING,
                 ("_cap_outpaint_single_stage_window",),
                 {
                     "_OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS": 704 * 1280,
@@ -416,6 +455,21 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
                 ("get_outpainting_dims",),
             )["get_outpainting_dims"]
         )
+
+    @_requires_torch
+    def test_planning_and_inference_agree_on_the_protected_rectangle(self):
+        """edit-05: planning resolved the exact floats (383 px), the job carries 8-decimal text and the model parses
+        that (384 px). Both must read the text the job carries."""
+        from services.outpaint_planning import _format_outpaint_percentage
+        from shared.utils.utils import get_outpainting_frame_location
+
+        geometry = self.resolve_geometry(384, 256, 0, 0, 128, 128, "auto", 64)
+        self.assertEqual((geometry["final_w"], geometry["final_h"]), (640, 256))
+        carried = [float(_format_outpaint_percentage(value)) for value in geometry["dims"]]
+        inferred = get_outpainting_frame_location(geometry["final_h"], geometry["final_w"], carried, 1)
+        planned = (geometry["overlay_h"], geometry["overlay_w"], geometry["overlay_y"], geometry["overlay_x"])
+        self.assertEqual(planned, inferred)
+        self.assertEqual(geometry["overlay_w"], 384)
 
     @_requires_torch
     def test_portrait_canvas_is_aligned_before_mask_geometry(self):
@@ -1728,18 +1782,20 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
     def test_ui_replaces_misleading_controls_with_one_recommended_toggle(self):
         controls = _read(_OUTPAINT_CONTROLS_PATH)
         client = api_client_source()
-        store = _read(_STORE_PATH)
+        output_restore = _read(_OUTPUT_RESTORE_SLICE_PATH)
+        outpaint = _read(_OUTPAINT_SUBMISSION_PATH)
+        edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
         self.assertIn("t('outpaint.preserveScene')", controls)
         self.assertEqual(studio["outpaint"]["preserveScene"], "Preserve original scene")
-        self.assertIn("outpaintMaskPreserving: true", store)
+        self.assertIn("outpaintMaskPreserving: true", edit_store)
         self.assertIn("mask_preserving_outpaint?: boolean", client)
         self.assertIn("outpaint_aspect?:", client)
-        self.assertIn("outpaint_aspect: state.outpaintAspect", store)
-        self.assertIn("_inferOutpaintAspect", store)
-        self.assertIn("source_preservation: 1.0", store)
-        self.assertIn("outpaint_lora_strength: 1.0", store)
-        self.assertIn("lock_source_pixels: false", store)
+        self.assertIn("outpaint_aspect: state.outpaintAspect", outpaint)
+        self.assertIn("_inferOutpaintAspect", output_restore)
+        self.assertIn("source_preservation: 1.0", outpaint)
+        self.assertIn("outpaint_lora_strength: 1.0", outpaint)
+        self.assertIn("lock_source_pixels: false", outpaint)
         self.assertNotIn("Outpaint LoRA Strength", controls)
         self.assertNotIn("Lock source pixels", controls)
         self.assertNotIn(">Source Preservation<", controls)
@@ -1784,15 +1840,20 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         self.assertIn("area for Outpaint to generate", studio["generate"]["outpaintAreaHint"])
 
     def test_backend_uses_official_lora_and_internal_blend(self):
+        outpaint = _read(_OUTPAINT_ROUTER)
         launch = _read(_LAUNCH_PATH)
         wgp = _read(_WGP_PATH)
         ltx2 = _read(_LTX2_PATH)
         distilled = _read(_LTX2_DISTILLED_PATH)
         inpainting = _read(_LTX2_INPAINT_PATH)
-        self.assertIn('"outpaint_mask_preserve": mask_preserving_outpaint', launch)
+        self.assertIn('"outpaint_mask_preserve": mask_preserving_outpaint', outpaint)
         self.assertIn(
             '"outpaint_official_stack": official_outpaint',
-            launch,
+            outpaint,
+        )
+        self.assertNotIn(
+            "reference_fps=24.0 if official_outpaint else None",
+            outpaint,
         )
         self.assertNotIn(
             "reference_fps=24.0 if official_outpaint else None",
@@ -1800,17 +1861,17 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         )
         self.assertIn(
             '"force_fps": "control" if is_video else "auto"',
-            launch,
+            outpaint,
         )
         self.assertIn(
             "_resolve_ltx2_outpaint_reference_model(model_type)",
-            launch,
+            outpaint,
         )
         self.assertIn(
             '"[Outpaint] Reference sampling: 8-step masked first pass + "',
-            launch,
+            outpaint,
         )
-        self.assertIn("guidance_scale = 1.0", launch)
+        self.assertIn("guidance_scale = 1.0", outpaint)
         self.assertIn(
             "guide_inpaint_color = (128, 128, 128)",
             wgp,
@@ -1845,11 +1906,11 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         self.assertIn("chunk_frames", inpainting)
         self.assertIn(
             '"single_stage_pipeline": False',
-            launch,
+            outpaint,
         )
         self.assertIn(
             '"outpaint_full_resolution_refine": official_outpaint',
-            launch,
+            outpaint,
         )
         self.assertIn(
             "outpaint_full_resolution_refine="
@@ -1934,11 +1995,11 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         )
         self.assertIn(
             "Lightricks recommends an empty/minimal prompt",
-            launch,
+            outpaint,
         )
         self.assertNotIn(
             'f"{raw_outpaint_prompt}; seamlessly extend',
-            launch.split("if official_outpaint:", 1)[1].split("else:", 1)[0],
+            outpaint.split("if official_outpaint:", 1)[1].split("else:", 1)[0],
         )
         self.assertIn(
             "reference_attention=",
@@ -1954,7 +2015,7 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         )
         self.assertIn(
             "2-step decoded-pixel refinement",
-            launch,
+            outpaint,
         )
         self.assertIn('mode="area"', distilled)
         self.assertIn(
@@ -1966,19 +2027,23 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
 class TestOutpaintShotAwarePlanning(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        planning = _load_functions(
+        recast = _load_functions(
             _LAUNCH_PATH,
-            (
-                "_detect_recast_shot_ranges",
-                "_detect_outpaint_video_shot_ranges",
-            ),
+            ("_detect_recast_shot_ranges",),
+        )
+        planning = _load_functions(
+            _OUTPAINT_PLANNING,
+            ("_detect_outpaint_video_shot_ranges",),
+            {
+                "_detect_recast_shot_ranges": recast["_detect_recast_shot_ranges"],
+            },
         )
         cls.detect = staticmethod(
             planning["_detect_outpaint_video_shot_ranges"]
         )
         cls.build_filter = staticmethod(
             _load_functions(
-                _LAUNCH_PATH,
+                _OUTPAINT_PLANNING,
                 ("_build_outpaint_shot_filter",),
                 {"math": math},
             )["_build_outpaint_shot_filter"]
@@ -1989,7 +2054,7 @@ class TestOutpaintShotAwarePlanning(unittest.TestCase):
         )["_quantize_recast_shot_frame_count"]
         cls.build_manifest = staticmethod(
             _load_functions(
-                _LAUNCH_PATH,
+                _OUTPAINT_PLANNING,
                 ("_build_outpaint_shot_manifest",),
                 {
                     "os": os,
@@ -2151,7 +2216,7 @@ class TestOutpaintShotAwarePlanning(unittest.TestCase):
         import time
 
         writer = _load_functions(
-            _LAUNCH_PATH,
+            _OUTPAINT_RUN,
             ("_write_outpaint_shot_aware_sidecar",),
             {"os": os, "json": json, "time": time},
         )["_write_outpaint_shot_aware_sidecar"]
@@ -2295,7 +2360,7 @@ class TestOutpaintShotAwarePlanning(unittest.TestCase):
                 return True
 
             runner = _load_functions(
-                _LAUNCH_PATH,
+                _OUTPAINT_RUN,
                 ("_run_outpaint_shot_generation",),
                 {
                     "os": os,
@@ -2369,7 +2434,7 @@ class TestOutpaintShotAwarePlanning(unittest.TestCase):
                 return True
 
             runner = _load_functions(
-                _LAUNCH_PATH,
+                _OUTPAINT_RUN,
                 ("_prepare_and_run_outpaint",),
                 {
                     "os": os,
@@ -2414,17 +2479,21 @@ class TestOutpaintShotAwarePlanning(unittest.TestCase):
         )
 
     def test_endpoint_and_task_engine_dispatch_shot_aware_outpaint(self):
-        launch = _read(_LAUNCH_PATH)
-        self.assertIn("_prepare_and_run_outpaint", launch)
+        # The worker (launch and services/generation_worker) reads the manifest the preparation step writes.
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
+        outpaint_run = _read(_OUTPAINT_RUN)
+        self.assertIn("_prepare_and_run_outpaint", _read(_OUTPAINT_ROUTER))
+        self.assertIn("_prepare_and_run_outpaint", outpaint_run)
+        self.assertIn('"_outpaint_shot_manifest"', outpaint_run)
         self.assertIn('"_outpaint_shot_manifest"', launch)
-        self.assertIn("_run_outpaint_shot_generation(job_id)", launch)
+        self.assertIn("_run_outpaint_shot_generation(job_id)", outpaint_run)
         self.assertIn(
             'raw_params["_outpaint_preserve_audio"] = False',
             launch,
         )
         self.assertIn(
             "Outpaint camera-shot assembly changed the timeline length",
-            launch,
+            outpaint_run,
         )
 
 
@@ -2670,7 +2739,7 @@ class TestModelVisibilityPersistence(unittest.TestCase):
     def setUpClass(cls):
         cls.normalize = staticmethod(
             _load_functions(
-                _LAUNCH_PATH,
+                os.path.join(_ROOT, "app", "services", "model_visibility.py"),
                 ("_normalize_model_visibility_ids",),
             )["_normalize_model_visibility_ids"]
         )
@@ -2693,19 +2762,24 @@ class TestModelVisibilityPersistence(unittest.TestCase):
             self.normalize([123])
 
     def test_server_and_frontend_use_durable_visibility(self):
-        launch = _read(_LAUNCH_PATH)
+        service = _read(os.path.join(_ROOT, "app", "services", "model_visibility.py"))
+        router = _read(os.path.join(_ROOT, "app", "routers", "model_preferences.py"))
         client = api_client_source()
         store = _read(_STORE_PATH)
-        self.assertIn('@api.get("/api/v1/model-visibility")', launch)
-        self.assertIn('@api.put("/api/v1/model-visibility")', launch)
-        self.assertIn("os.replace(temp_path, config_path)", launch)
+        models = _read(_MODELS_PATH)
+        visibility = _read(_VISIBILITY_PATH)
+        self.assertIn('@router.get("/api/v1/model-visibility")', router)
+        self.assertIn('@router.put("/api/v1/model-visibility")', router)
+        self.assertIn("os.replace(temp_path, config_path)", service)
         self.assertIn("fetchModelVisibility", client)
         self.assertIn("updateModelVisibility", client)
-        self.assertIn("api.fetchModelVisibility()", store)
-        self.assertIn("api.updateModelVisibility(payload)", store)
-        self.assertIn("initialized_mature_models", store)
-        self.assertIn("_enableUninitializedMatureModels", store)
+        self.assertIn("api.fetchModelVisibility()", models)
+        self.assertIn("api.updateModelVisibility(payload)", visibility)
+        self.assertIn("initialized_mature_models", models)
+        self.assertIn("_enableUninitializedMatureModels", models)
         self.assertNotIn("for (const mt of nsfwModels)", store)
+        # loadModels moved out of useStore.ts: keep the negative pin on its new home.
+        self.assertNotIn("for (const mt of nsfwModels)", models)
 
 
 class TestFramesControlVideoAudio(unittest.TestCase):
@@ -2726,6 +2800,77 @@ class TestFramesControlVideoAudio(unittest.TestCase):
         self.assertIn("rawControlProcess", source)
         self.assertNotIn("supportsSoundtrack && !hasControlVid", source)
         self.assertNotIn("supportsControlVid && !hasSoundtrack", source)
+
+
+class LtxOutpaintLoraTests(unittest.TestCase):
+    """The Outpaint IC-LoRA is mandatory on both LTX stacks (final-edit E2)."""
+
+    def _resolve(self, *, official: bool):
+        import tempfile
+
+        with open(_LTX2_PATH, encoding="utf-8") as handle:
+            tree = ast.parse(handle.read())
+        method = next(
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "get_loras_transformer"
+        )
+        handler = types.SimpleNamespace(
+            _get_arch_spec=lambda _base: {
+                "outpaint_ic_lora": "outpaint-ic-lora.safetensors",
+                "inpaint_ic_lora": "inpaint-ic-lora.safetensors",
+            },
+        )
+        package = types.ModuleType("models.ltx2")
+        package.__path__ = []
+        package.ltx2_handler = handler
+        hub = types.ModuleType("huggingface_hub")
+
+        def offline(**_kwargs):
+            raise OSError("download failed")
+
+        hub.hf_hub_download = offline
+        with tempfile.TemporaryDirectory() as folder:
+            namespace = {
+                "__name__": "models.ltx2.ltx2",
+                "__package__": "models.ltx2",
+                "os": os,
+                "fl": types.SimpleNamespace(
+                    locate_file=lambda *_a, **_k: None,
+                    get_download_location=lambda: folder,
+                ),
+                "_normalize_outpainting_dims": lambda _dims: None,
+            }
+            exec(
+                compile(
+                    ast.Module(body=[method], type_ignores=[]),
+                    "<ltx2 get_loras_transformer>",
+                    "exec",
+                ),
+                namespace,
+            )
+            with mock.patch.dict(sys.modules, {
+                "models.ltx2": package, "huggingface_hub": hub,
+            }):
+                return namespace["get_loras_transformer"](
+                    types.SimpleNamespace(base_model_type="ltx2_22B"),
+                    lambda *_args: [],
+                    "ltx2_22B_distilled",
+                    "",
+                    base_model_type="ltx2_22B",
+                    model_def={"ltx2_pipeline": "distilled"},
+                    video_guide_outpainting="0 0 25 25",
+                    outpaint_official_stack=official,
+                    outpaint_mask_preserve=official,
+                )
+
+    def test_legacy_outpaint_without_its_lora_fails_instead_of_continuing(self):
+        with self.assertRaisesRegex(FileNotFoundError, "unavailable"):
+            self._resolve(official=False)
+
+    def test_official_outpaint_without_its_lora_still_fails(self):
+        with self.assertRaises(FileNotFoundError):
+            self._resolve(official=True)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,9 @@ from services.lan_auth import (
 )
 
 
+LAN_SESSION_MAX_AGE = 30 * 24 * 3600  # a phone on the Wi-Fi logs in once a month, not once a session
+
+
 class LanAuthLoginRequest(BaseModel):
     token: str = Field(min_length=1, max_length=512)
 
@@ -57,13 +60,15 @@ def create_lan_auth_router() -> APIRouter:
             )
         if required:
             attempts.clear(peer_key)
+            forwarded = str(request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
             response.set_cookie(
                 key=LAN_AUTH_COOKIE_NAME,
                 value=create_session_credential(get_lan_token()),
                 httponly=True,
-                secure=request.url.scheme == "https",
+                secure=request.url.scheme == "https" or forwarded == "https",
                 samesite="strict",
                 path="/",
+                max_age=LAN_SESSION_MAX_AGE,
             )
         return {"authenticated": True}
 

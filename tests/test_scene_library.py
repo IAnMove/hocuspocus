@@ -28,7 +28,8 @@ def test_saved_scene_roundtrip_has_workspace_identity_and_immutable_revisions(tm
     assert first['url'].endswith('?workspace=my-film')
     assert first['thumbnail_url'].endswith('?workspace=my-film')
     assert json.loads((tmp_path / 'my-film' / first['name']).read_text()) == body['document']
-    assert len(list((tmp_path / 'my-film').iterdir())) == 4
+    # Two revisions, each a JSON and its preview (hidden files such as the scene digest index aside).
+    assert len([path for path in (tmp_path / 'my-film').iterdir() if not path.name.startswith('.')]) == 4
 
 
 @pytest.mark.parametrize('patch', [{'workspace': '../elsewhere'}, {'workspace': ''}, {'preview': 'data:image/png;base64,bad'}, {'document': {'version': 1}}])
@@ -92,3 +93,23 @@ def test_native_route_does_not_require_or_overwrite_legacy_layers(tmp_path):
     client = TestClient(app)
     assert client.post('/api/v1/scenes/world3d', json=payload()).status_code == 200
     assert client.post('/api/v1/scenes/world3d', json=[]).status_code == 422
+
+
+def test_save_route_keeps_slot_tilt_and_a_yaw_only_scene_gains_none(tmp_path):
+    app = FastAPI()
+    app.include_router(create_scene_commands_router(SceneCommands(lambda workspace: tmp_path / workspace)))
+    client = TestClient(app)
+    tilted = payload()
+    yaw = payload()
+    tilted['document']['slots'][0]['rotationX'] = 0.4
+    tilted['document']['slots'][0]['rotationZ'] = -0.2
+    saved = client.post('/api/v1/scenes/world3d', json=tilted)
+    assert saved.status_code == 200, saved.text
+    stored = json.loads((tmp_path / 'my-film' / saved.json()['name']).read_text())
+    assert stored['slots'][0]['rotationX'] == 0.4
+    assert stored['slots'][0]['rotationZ'] == -0.2
+    assert stored['slots'][0]['rotationY'] == tilted['document']['slots'][0]['rotationY']
+    plain = client.post('/api/v1/scenes/world3d', json=yaw)
+    assert plain.status_code == 200, plain.text
+    old = json.loads((tmp_path / 'my-film' / plain.json()['name']).read_text())
+    assert 'rotationX' not in old['slots'][0] and 'rotationZ' not in old['slots'][0]

@@ -14,7 +14,7 @@ import json
 import math
 import os
 import re
-from typing import Optional, Any
+from typing import Any, NamedTuple, Optional
 
 from ..schema import (
     ProductionPlan, ShotPlan, CharacterProfile, ReferenceAssets,
@@ -37,6 +37,7 @@ from ..h3_dialogue import (
     h3_vocal_sound_cues as _h3_affirmative_vocal_effect_matches,
     normalize_h3_text as _normalize_h3_text,
 )
+from ..prompt_cleanup import prompt_cleanup_metadata
 from .base import BasePlanner
 
 
@@ -167,10 +168,9 @@ _SHOT_IMAGE_FIELDS = frozenset({
     "keyframe_prompts",
 })
 
-# H3 remains natural around two spoken words per second. A small 0.1 margin
-# avoids rejecting a 29-word line in the model's 14.375-second maximum clip
-# solely because the old floor-based budget rounded 28.75 down to 28.
-_H3_DIALOGUE_WORDS_PER_SECOND = 2.1
+# The one speech rate shared with the shot validator and the H3 sidecar's syllable
+# estimate (services/minimax_h3_duration.py), so a line that fits here fits there.
+from services.minimax_h3_duration import DEFAULT_WORDS_PER_SECOND as _H3_DIALOGUE_WORDS_PER_SECOND
 
 
 def _h3_preferred_native_durations(
@@ -2556,6 +2556,62 @@ def _video_character_name_rules(preserve_names: bool) -> str:
 - NOT "Ava looks annoyed" → YES "the woman from the reference image looks annoyed"."""
 
 
+# Pass-2 wording with sexual examples: the 40/60/80 s bucket lines, the
+# "MIX BUCKET SIZES" scene kinds and the multi-shot FLOWING beats. Mature mode
+# keeps the historical text word for word; without it the sexual examples are
+# left out and only the non-sexual ones remain.
+_MATURE_DURATION_BUCKET_RULES = (
+    "   - 40s = TWO connected beats that flow together as one continuous\n"
+    "     scene (an extended dialogue, a foreplay-to-act transition, a\n"
+    "     slow reveal, a full kiss + embrace). USE FREELY — don't default\n"
+    "     to two 20s shots when the screenplay has a continuous 40s beat.\n"
+    "     Two windows.\n"
+    "   - 60s = THREE connected beats in one sustained scene (a long\n"
+    "     romantic encounter, a sex sequence, a confrontation that builds\n"
+    "     and breaks). Three windows. Common in NSFW films and any film\n"
+    "     with sustained dramatic scenes — don't avoid 60s shots.\n"
+    "   - 80s = FOUR connected beats in a single uninterrupted sequence\n"
+    "     (a sustained sex act, a long climactic confrontation, an extended\n"
+    "     seduction). Four windows. Use when the screenplay has a beat\n"
+    "     that genuinely needs the breathing room."
+)
+_DURATION_BUCKET_RULES = (
+    "   - 40s = TWO connected beats that flow together as one continuous\n"
+    "     scene (an extended dialogue, a slow reveal, a full kiss +\n"
+    "     embrace). USE FREELY — don't default to two 20s shots when the\n"
+    "     screenplay has a continuous 40s beat. Two windows.\n"
+    "   - 60s = THREE connected beats in one sustained scene (a\n"
+    "     confrontation that builds and breaks). Three windows. Common in\n"
+    "     any film with sustained dramatic scenes — don't avoid 60s shots.\n"
+    "   - 80s = FOUR connected beats in a single uninterrupted sequence\n"
+    "     (a long climactic confrontation). Four windows. Use when the\n"
+    "     screenplay has a beat that genuinely needs the breathing room."
+)
+
+
+class _Pass2Examples(NamedTuple):
+    bucket_rules: str
+    long_scenes: str
+    flowing_beats: str
+
+
+_MATURE_PASS2_EXAMPLES = _Pass2Examples(
+    bucket_rules=_MATURE_DURATION_BUCKET_RULES,
+    long_scenes="romantic / dramatic / sex",
+    flowing_beats="a kiss, a sex act, a held reaction, a slow push-in",
+)
+_PASS2_EXAMPLES = _Pass2Examples(
+    bucket_rules=_DURATION_BUCKET_RULES,
+    long_scenes="romantic / dramatic",
+    flowing_beats="a kiss, a held reaction, a slow push-in",
+)
+
+
+def _pass2_examples(nsfw: bool) -> _Pass2Examples:
+    """Pass-2 examples; the sexual ones appear only in mature mode."""
+    return _MATURE_PASS2_EXAMPLES if nsfw else _PASS2_EXAMPLES
+
+
 class ShortFilmPlanner(BasePlanner):
     skill_type = "short_film"
 
@@ -2590,6 +2646,8 @@ class ShortFilmPlanner(BasePlanner):
             or kwargs.get("location_ref_paths")
         )
         is_audio_mode = bool(clips)
+        self._has_user_reference = bool(reference_image_path)
+        self._planning_source = None
         # Store extra ref info for use in private methods
         self._num_character_refs = len(kwargs.get("character_ref_paths", []) or [])
         self._num_location_refs = len(kwargs.get("location_ref_paths", []) or [])
@@ -2704,6 +2762,7 @@ class ShortFilmPlanner(BasePlanner):
             reference_assets=ref_assets,
             characters=char_profiles if char_profiles else None,
             shots=shots,
+            planning_source=getattr(self, "_planning_source", None),
             continuity_notes=[
                 "Short film — maintain visual and narrative continuity across shots",
                 "Match camera complexity to emotional content",
@@ -2746,6 +2805,8 @@ class ShortFilmPlanner(BasePlanner):
                 "canonical_visual_style": self._visual_style,
                 "preserve_visual_style": True,
             }
+            if self.raw_prompts:
+                continue  # Raw prompts: the shot keeps its style, the prompts get no lock.
             if str(shot.image_prompt or "").strip():
                 shot.image_prompt = apply_visual_style_lock(
                     shot.image_prompt,
@@ -3128,6 +3189,11 @@ exchange from fitting the video."""
                 location_ref_labels=getattr(self, '_location_ref_labels', None),
                 seamless=getattr(self, '_seamless', True),
                 image_model=image_model,
+                nsfw=nsfw,
+                **self._image_rule_options(
+                    has_user_reference=bool(getattr(self, "_has_user_reference", False)),
+                    has_any_reference=has_reference,
+                ),
             )
 
         image_planning_rules = (
@@ -3461,10 +3527,6 @@ Shots to plan:
                 video_prompt format.
         """
         from ..nsfw_guidance import inject_nsfw_if_enabled
-        from ..safety_scan import (
-            assert_no_minor_content,
-            collect_pass2_text,
-        )
 
         if target_scenes is None:
             target_scenes = max(2, min(20, target_duration // 20))
@@ -3486,12 +3548,6 @@ Shots to plan:
             has_reference=has_reference,
         )
 
-        # ── PRE-PASS-1 SAFETY SCAN: user concept ────────────────────────
-        # Scan the user's input concept BEFORE running Pass 1. Catches
-        # obviously-prohibited concepts ~30s earlier and avoids burning
-        # an LLM call on something we'll abort anyway. Same scanner /
-        # same hybrid co-occurrence policy as the post-Pass-1 check.
-        assert_no_minor_content(story_description, source="user concept")
 
         # ── PASS 1: Screenplay ───────────────────────────────────────────
         story_guide = ""
@@ -3697,12 +3753,6 @@ H3 CHARACTER-AUTHENTICITY RULES:
                 f"(budget {max_total_words})"
             )
 
-        # ── POST-PASS-1 SAFETY SCAN ─────────────────────────────────────
-        # Catches anything the prompt-level prohibition rule failed to
-        # prevent. Raises SafetyViolationError; pipeline error handler
-        # in director_pipeline.py converts to a clean user-visible
-        # message in chat.
-        assert_no_minor_content(screenplay, source="screenplay (Pass 1)")
 
         # H3 renders independent bounded shots rather than 20-second rolling
         # windows. Plan directly on its native duration lattice so legacy
@@ -3731,13 +3781,6 @@ H3 CHARACTER-AUTHENTICITY RULES:
                             )),
                         ),
                     )
-                )
-                assert_no_minor_content(
-                    "\n".join(
-                        str(entry.get("spoken_text") or "")
-                        for entry in screenplay_dialogue_manifest
-                    ),
-                    source="H3 character table read",
                 )
             return self._plan_story_h3_native(
                 story_description=story_description,
@@ -3793,6 +3836,11 @@ H3 CHARACTER-AUTHENTICITY RULES:
                 location_ref_labels=getattr(self, '_location_ref_labels', None),
                 seamless=getattr(self, '_seamless', True),
                 image_model=image_model,
+                nsfw=nsfw,
+                **self._image_rule_options(
+                    has_user_reference=bool(getattr(self, "_has_user_reference", False)),
+                    has_any_reference=has_reference,
+                ),
             )
         location_labels = [
             str(label).strip()
@@ -3854,6 +3902,8 @@ H3 CHARACTER-AUTHENTICITY RULES:
         # (Replaces the old explicit-keyword pre-scan, which can't be version-
         # controlled and missed scenes phrased without its keywords.)
         effective_nsfw = nsfw
+        # Sexual examples in the pass-2 rules belong to mature mode only.
+        pass2_examples = _pass2_examples(effective_nsfw)
 
         # Keyframe guidance is useful only when Director will actually render
         # still-image artifacts for this project.
@@ -4043,8 +4093,8 @@ Go:"""
 
                 "FORMAT A — FLOWING (only for sustained single beats):\n"
                 "A normal flowing paragraph describing ONE continuous "
-                "camera take. Use ONLY for: a kiss, a sex act, a held "
-                "reaction, a slow push-in — beats that would be RUINED "
+                f"camera take. Use ONLY for: {pass2_examples.flowing_beats}"
+                " — beats that would be RUINED "
                 "by camera cuts.\n\n"
 
                 "RULES THAT DO NOT CHANGE:\n"
@@ -4231,19 +4281,7 @@ CRITICAL OUTPUT REQUIREMENTS (these override any conflicting system-prompt guida
    - 20s = single beat (a transition, a brief reaction, an
      establishing moment, a short dialogue exchange). One prompt,
      no windows.
-   - 40s = TWO connected beats that flow together as one continuous
-     scene (an extended dialogue, a foreplay-to-act transition, a
-     slow reveal, a full kiss + embrace). USE FREELY — don't default
-     to two 20s shots when the screenplay has a continuous 40s beat.
-     Two windows.
-   - 60s = THREE connected beats in one sustained scene (a long
-     romantic encounter, a sex sequence, a confrontation that builds
-     and breaks). Three windows. Common in NSFW films and any film
-     with sustained dramatic scenes — don't avoid 60s shots.
-   - 80s = FOUR connected beats in a single uninterrupted sequence
-     (a sustained sex act, a long climactic confrontation, an extended
-     seduction). Four windows. Use when the screenplay has a beat
-     that genuinely needs the breathing room.
+{pass2_examples.bucket_rules}
    - HEURISTIC: aim for variety. A {target_duration}s film with NINE
      20s shots feels choppy; a film with three 20s shots + two 40s +
      one 60s feels cinematic. Mix the bucket sizes.
@@ -4303,7 +4341,7 @@ The user's original request:
 Shot-construction rules:
 - KEEP CONTINUOUS ACTION TOGETHER — physical progression that flows from one beat to the next is ONE shot. See the WRONG/RIGHT examples above. The video model handles intra-shot action progression; do not fragment.
 - KEEP CONVERSATIONS TOGETHER — one conversation = one shot, using window_prompts if over 20s.
-- MIX BUCKET SIZES. Use 40s for connected dialogue/action pairs. Use 60s for long romantic / dramatic / sex scenes. Use 80s for genuinely sustained sequences. With only {shot_count_high} shots allowed total, you CANNOT hit {target_duration}s using only 20s — the math forces you to use longer buckets. That is intentional: longer buckets produce more cinematic, less choppy films.
+- MIX BUCKET SIZES. Use 40s for connected dialogue/action pairs. Use 60s for long {pass2_examples.long_scenes} scenes. Use 80s for genuinely sustained sequences. With only {shot_count_high} shots allowed total, you CANNOT hit {target_duration}s using only 20s — the math forces you to use longer buckets. That is intentional: longer buckets produce more cinematic, less choppy films.
 - Only cut to a new shot when location changes, a new character enters, or there's a clear dramatic beat transition (see strict criteria above).
 - Preserve ALL dialogue from the screenplay verbatim — but each line goes in EXACTLY ONE shot/window, never repeated.
 {keyframe_user_rule}
@@ -4367,6 +4405,7 @@ SCREENPLAY:
                 "[ShortFilmPlanner] Pass 2 returned no structured shots; "
                 "recovering a deterministic shot list from the screenplay"
             )
+            self._planning_source = "deterministic_fallback"
             shot_dicts = self._fallback_shots_from_screenplay(
                 screenplay=screenplay,
                 story_description=story_description,
@@ -4374,21 +4413,16 @@ SCREENPLAY:
                 target_duration=target_duration,
                 target_scenes=max(shot_count_low, min(shot_count_high, target_scenes or shot_count_low)),
                 visual_style=getattr(self, "_visual_style", ""),
-                preserve_visual_style=getattr(self, "_preserve_visual_style", False),
+                # Raw prompts: no style lock on these shots either.
+                preserve_visual_style=(
+                    getattr(self, "_preserve_visual_style", False) and not self.raw_prompts
+                ),
                 has_reference=has_reference,
             )
         if not uses_generated_images:
             _discard_unused_image_fields(shot_dicts)
 
         # ── POST-PASS-2 SAFETY SCAN ─────────────────────────────────────
-        # Defense in depth — Pass 2's structured output (image/video
-        # prompts, action beats, dialogue, subjects) gets concatenated
-        # and scanned the same way the screenplay was. Catches the case
-        # where Pass 1 produced clean text but Pass 2's expansion
-        # introduced minor + sexual co-occurrence.
-        assert_no_minor_content(
-            collect_pass2_text(shot_dicts), source="shot list (Pass 2)"
-        )
 
         # ── CHARACTER DESCRIPTOR CANONICALIZATION ────────────────────
         # User-reported bug: uploaded selfie tagged "man in black",
@@ -5158,34 +5192,21 @@ SCREENPLAY:
                 print(f"[ShortFilmPlanner] Duration post-process skipped a shot: {e}")
 
         # ── Image-prompt sanitization (Layer 1) ──────────────────────
-        # Strip GARMENT BAN violations and narrative-filler phrases the
-        # image model can't render. Runs on every shot's image_prompt
-        # AND each keyframe_prompt regardless of whether Pass 3 polish
-        # is enabled — Pass 2 LLM (especially Gemma 4B on NSFW) routinely
-        # writes "white sweater" / "grey shirt" and emotion fillers like
-        # "showing the heat of the moment" despite the rules. Pass 3
-        # runs the same sanitizer again with the descriptor-dedupe pass
-        # added (since it has the name_to_descriptor map). No-op when
-        # the LLM already followed the rules.
+        # Strip GARMENT BAN violations, motion sentences and narrative-filler
+        # phrases the image model can't render, on every shot's image_prompt
+        # AND each keyframe_prompt regardless of whether Pass 3 polish is
+        # enabled — Pass 2 LLMs routinely write "white sweater" and emotion
+        # fillers despite the rules. Raw prompts: nothing is removed. Keep
+        # clothes from references off: clothing words stay. The counts land
+        # in each shot's metadata (prompt_cleanup) for Extra info.
         try:
-            from ..prompt_polish import sanitize_image_prompt as _sanitize_ip
-            for sd in shot_dicts:
-                ip = sd.get("image_prompt") or ""
-                if ip.strip():
-                    sd["image_prompt"] = _sanitize_ip(
-                        ip, log_prefix=f"[ShortFilmPlanner Pass2 image sanitize '{sd.get('title', 'untitled')}']"
-                    )
-                kfs = sd.get("keyframe_prompts") or []
-                if isinstance(kfs, list) and kfs:
-                    cleaned_kfs = []
-                    for ki, kf in enumerate(kfs):
-                        if isinstance(kf, str) and kf.strip():
-                            cleaned_kfs.append(_sanitize_ip(
-                                kf, log_prefix=f"[ShortFilmPlanner Pass2 keyframe[{ki}] sanitize '{sd.get('title', 'untitled')}']"
-                            ))
-                        else:
-                            cleaned_kfs.append(kf)
-                    sd["keyframe_prompts"] = cleaned_kfs
+            from ..prompt_cleanup import sanitize_pass2_image_prompts
+            sanitize_pass2_image_prompts(
+                shot_dicts,
+                raw_prompts=self.raw_prompts,
+                keep_wardrobe=self.keep_reference_wardrobe,
+                log_label="ShortFilmPlanner Pass2",
+            )
         except Exception as e:
             print(f"[ShortFilmPlanner] Image-prompt sanitization skipped: {e}")
 
@@ -5386,12 +5407,12 @@ SCREENPLAY:
             static_subject = subjects[0]["visual_description"] if subjects else "the principal subject"
             opening = re.split(r"(?<=[.!?])\s+", chunk, maxsplit=1)[0][:500]
             image_prompt = (
-                f"Cinematic first frame before the action: {static_subject} in the established "
+                f"First frame before the action: {static_subject} in the established "
                 f"story world, composed for scene {index + 1}; {opening}. "
                 "Static initial pose, coherent environment, no captions, no speech bubbles, no written text."
             )
             video_prompt = (
-                f"Animate the supplied first frame as a continuous cinematic shot. "
+                f"Animate the supplied first frame as a continuous shot. "
                 f"Scene purpose: {role}. Preserve the characters, wardrobe, environment and composition. "
                 f"Action and dialogue to portray: {chunk}. Camera: {camera_moves[index % len(camera_moves)]}. "
                 "Natural motion, readable acting, stable identities, no new captions or on-screen text."
@@ -5442,8 +5463,8 @@ SCREENPLAY:
                 "scene_type": "dialogue" if '"' in chunk or "—" in chunk else "action",
                 "subjects_on_screen": subjects,
                 "environment": "The canonical setting described by the screenplay and master story.",
-                "visual_style": canonical_style or "Cinematic visual continuity matching the supplied story world.",
-                "lighting": "Motivated cinematic lighting consistent with the location.",
+                "visual_style": canonical_style or "Visual continuity matching the supplied story world.",
+                "lighting": "Motivated lighting consistent with the location.",
                 "mood": role.replace("_", " "),
                 "action_beats": [chunk],
                 "dialogue_beats": [],
@@ -5488,7 +5509,6 @@ SCREENPLAY:
         """Break a screenplay directly into self-contained native H3 shots."""
 
         from ..nsfw_guidance import inject_nsfw_if_enabled
-        from ..safety_scan import assert_no_minor_content, collect_pass2_text
 
         uses_generated_images = bool(
             getattr(self, "_uses_generated_shot_images", True)
@@ -5560,6 +5580,11 @@ SCREENPLAY:
                 location_ref_labels=getattr(self, "_location_ref_labels", None),
                 seamless=getattr(self, "_seamless", True),
                 image_model=getattr(self, "_image_model", "") or "",
+                nsfw=nsfw,
+                **self._image_rule_options(
+                    has_user_reference=bool(getattr(self, "_has_user_reference", False)),
+                    has_any_reference=has_reference,
+                ),
             )
             image_fields = '''    "image_source": "original or previous",
     "image_prompt": "Static first-frame composition before the action",
@@ -6353,9 +6378,6 @@ VOCAL SEMANTIC REPAIR:
                 + "). No video jobs were queued."
             )
 
-        assert_no_minor_content(
-            collect_pass2_text(shot_dicts), source="shot list (H3 native Pass 2)"
-        )
 
         shots = self._convert_story_shots(
             shot_dicts,
@@ -6498,6 +6520,7 @@ VOCAL SEMANTIC REPAIR:
                 audio_plan=audio,
                 ending_beat=raw.get("ending_beat", ""),
                 metadata={
+                    **prompt_cleanup_metadata(raw),
                     "title": raw.get("title", ""),
                     "duration_frames": snapped,
                     "location_ref_label": raw.get("location_ref_label", ""),
@@ -6618,16 +6641,6 @@ Go:"""
             "both" if uses_generated_images else "video",
         )
 
-        # Single-pass fallback also gets the safety scan — it bypasses
-        # Pass 1 entirely, so the post-Pass-1 scan above doesn't run for
-        # this code path. Mirror the same hybrid co-occurrence check on
-        # the user's concept (pre-call) and on the structured shot list
-        # (post-call).
-        from ..safety_scan import (
-            assert_no_minor_content,
-            collect_pass2_text,
-        )
-        assert_no_minor_content(story_description, source="user concept")
 
         image_paths = self._build_all_image_paths(reference_image_path, has_reference)
         # Grammar constraint — this path runs with thinking_budget=4096, so
@@ -6657,6 +6670,7 @@ Go:"""
                 "[ShortFilmPlanner] Single-pass structured output was empty; "
                 "building a deterministic plan from the original story"
             )
+            self._planning_source = "deterministic_fallback"
             shot_dicts = self._fallback_shots_from_screenplay(
                 screenplay=story_description,
                 story_description=story_description,
@@ -6667,9 +6681,6 @@ Go:"""
         if not uses_generated_images:
             _discard_unused_image_fields(shot_dicts)
 
-        assert_no_minor_content(
-            collect_pass2_text(shot_dicts), source="shot list (single-pass fallback)"
-        )
 
         seen_goals = set()
         unique_dicts = []

@@ -1,4 +1,5 @@
 import { findCompletedLocalImage, generateImageAsset } from '../../lib/imageGeneration'
+import i18n from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { comicId, repairMojibake } from './model'
 import { useComicStore } from './store'
@@ -214,7 +215,12 @@ export function comicArtworkInventory(project = useComicStore.getState().project
 }
 
 export function formatComicArtworkProgress(task: ComicArtworkTask, pages: number, panels: number): string {
-  return `página ${task.pageNumber}/${pages} · viñeta ${task.globalIndex}/${panels}`
+  return i18n.t('comics:replies.artworkProgress', {
+    page: task.pageNumber,
+    pages,
+    panel: task.globalIndex,
+    panels,
+  })
 }
 
 export function selectComicArtworkTasks(
@@ -275,11 +281,14 @@ export async function generateDirectorArtwork(options: {
 }): Promise<ComicArtworkBatchResult> {
   const state = useComicStore.getState()
   const director = state.project.director
-  if (!director) throw new Error('Este cómic no tiene plan de Director; no puedo dibujar las viñetas.')
+  if (!director) throw new Error(i18n.t('comics:actionErrors.noPlanToDraw'))
   const inventory = comicArtworkInventory(state.project)
   const tasks = selectComicArtworkTasks(state.project, options)
   if (options.target && !tasks.length) {
-    throw new Error(`No existe la viñeta ${options.target.panelNumber} en la página ${options.target.pageNumber}.`)
+    throw new Error(i18n.t('comics:actionErrors.panelMissing', {
+      panel: options.target.panelNumber,
+      page: options.target.pageNumber,
+    }))
   }
   if (!tasks.length) return { generated: 0, failed: 0, total: 0, cancelled: false }
 
@@ -294,7 +303,9 @@ export async function generateDirectorArtwork(options: {
       }
       const task = tasks[index]
       options.onProgress?.(
-        `Generando ${formatComicArtworkProgress(task, inventory.pages, inventory.panels)}…`,
+        i18n.t('comics:replies.artworkGenerating', {
+          progress: formatComicArtworkProgress(task, inventory.pages, inventory.panels),
+        }),
         index + 1,
         tasks.length,
       )
@@ -341,7 +352,9 @@ export async function generateDirectorArtwork(options: {
             asset = await findCompletedLocalImage(prompt, currentDirector.imageModel, assignedNames)
             if (asset) {
               options.onProgress?.(
-                `Recuperada ${formatComicArtworkProgress(task, inventory.pages, inventory.panels)}.`,
+                i18n.t('comics:replies.artworkRecovered', {
+                  progress: formatComicArtworkProgress(task, inventory.pages, inventory.panels),
+                }),
                 index + 1,
                 tasks.length,
               )
@@ -359,12 +372,18 @@ export async function generateDirectorArtwork(options: {
                 existingJobId,
                 onJobSubmitted: jobId => rememberPanelJob(task.plan.id, jobId),
                 onPollRetry: attempt => options.onProgress?.(
-                  `Conexión interrumpida en ${formatComicArtworkProgress(task, inventory.pages, inventory.panels)}; reintentando (${attempt}/20)…`,
+                  i18n.t('comics:replies.artworkConnectionInterrupted', {
+                    progress: formatComicArtworkProgress(task, inventory.pages, inventory.panels),
+                    attempt,
+                  }),
                   index + 1,
                   tasks.length,
                 ),
                 onProviderRetry: attempt => options.onProgress?.(
-                  `El proveedor falló temporalmente en ${formatComicArtworkProgress(task, inventory.pages, inventory.panels)}; reintentando (${attempt}/2)…`,
+                  i18n.t('comics:replies.artworkProviderFailed', {
+                    progress: formatComicArtworkProgress(task, inventory.pages, inventory.panels),
+                    attempt,
+                  }),
                   index + 1,
                   tasks.length,
                 ),
@@ -373,7 +392,7 @@ export async function generateDirectorArtwork(options: {
             )
           }
         }
-        if (!asset) throw new Error('El proveedor no devolvió una ilustración.')
+        if (!asset) throw new Error(i18n.t('comics:actionErrors.providerEmpty'))
         if (identityReference.characterId) asset.characterIds = [identityReference.characterId]
         const latest = useComicStore.getState()
         const latestPage = latest.project.pages.find(page => page.id === task.pageId)
@@ -424,7 +443,10 @@ export async function generateDirectorArtwork(options: {
           })
         }
         options.onProgress?.(
-          `Falló ${formatComicArtworkProgress(task, inventory.pages, inventory.panels)}: ${error instanceof Error ? error.message : String(error)}`,
+          i18n.t('comics:replies.artworkFailed', {
+            progress: formatComicArtworkProgress(task, inventory.pages, inventory.panels),
+            message: error instanceof Error ? error.message : String(error),
+          }),
           index + 1,
           tasks.length,
         )

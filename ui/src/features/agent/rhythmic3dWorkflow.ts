@@ -1,3 +1,4 @@
+import i18n from '../../i18n'
 import { fetchOutputs } from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import type { AgentCreateRhythmic3dVideoAction, AgentPrepareAudioAction } from './agentActions'
@@ -31,8 +32,8 @@ export async function resolveRhythmic3dAudioName(context: WizardWorkflowStepCont
   if (matches.length !== 1) {
     throw new Rhythmic3dAudioSelectionRequired(
       matches.length
-        ? 'La tarea publicó varios audios. Elige cuál debe mover la escena.'
-        : 'No pude correlacionar un único audio. Elige un audio real de este workspace para continuar.',
+        ? i18n.t('wizard:actionErrors.multipleAudios')
+        : i18n.t('wizard:actionErrors.audioNotCorrelated'),
       (matches.length ? matches : library.outputs).slice(0, 30).map(output => output.name),
     )
   }
@@ -90,7 +91,7 @@ export function createRhythmic3dWorkflowDefinition(
             durationSeconds: action.durationSeconds,
           }
           const outcome = await applicationAdapters.studio.queueMusic(song)
-          if (!outcome.taskId) throw new Error('La canción no devolvió un taskId canónico.')
+          if (!outcome.taskId) throw new Error(i18n.t('wizard:actionErrors.songMissingCanonicalTaskId'))
           return { state: 'queued', taskId: outcome.taskId, output: { prompt: action.musicPrompt } }
         },
       },
@@ -139,7 +140,7 @@ export function createRhythmic3dWorkflowDefinition(
           if (typeof audioOutputName !== 'string') return audioOutputName
           const analysisStep = context.workflow.steps.find(step => step.stepId === 'analyze-audio')
           const rhythmGrid = analysisStep?.output.rhythmGrid as import('./agentUiBus').AgentRhythmGrid | undefined
-          if (!rhythmGrid?.beats.length) throw new Error('El checkpoint no contiene la rejilla rítmica analizada.')
+          if (!rhythmGrid?.beats.length) throw new Error(i18n.t('wizard:actionErrors.missingRhythmGrid'))
           const subject = await applicationAdapters.video3d.run({ type: 'apply_3d_choreography', sceneName: action.sceneName, layerName: action.layerName, audioOutputName, cueSource: action.cueSource, profile: action.profile, intensity: action.intensity, rhythmGrid })
           const camera = await applicationAdapters.video3d.run({ type: 'apply_3d_choreography', sceneName: action.sceneName, layerName: 'Rhythm camera', audioOutputName, cueSource: 'downbeats', profile: 'camera-punch', intensity: Math.min(.45, action.intensity), rhythmGrid })
           return { state: 'completed', output: { subject: subject.message, camera: camera.message } }

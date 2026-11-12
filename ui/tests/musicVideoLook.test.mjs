@@ -25,12 +25,11 @@ test('named film and series looks require MiniMax H3 text-to-video', async () =>
   assert.match(next.directVideoMasterPrompt, /text-to-video/i)
 
   const brief = 'Videoclip heavy metal con estética visual de animación adulta fantástica de la película Heavy Metal 1981.'
-  const recoveredStyle = resolveMusicVideoVisualStyle(
-    'music_video',
-    'Dirección visual cinematográfica coherente, personajes legibles y continuidad entre escenas.',
-    brief,
-  )
+  // The Wizard no longer fills an empty style with a generic sentence: an empty
+  // style plus a brief that names a film or series takes the brief as its look.
+  const recoveredStyle = resolveMusicVideoVisualStyle('music_video', '', brief)
   assert.equal(recoveredStyle, brief)
+  assert.equal(resolveMusicVideoVisualStyle('music_video', 'Flat gouache, muted palette', brief), 'Flat gouache, muted palette')
   const recovered = applyMusicVideoDirectVideoDefaults({
     ...createStoryProject('music_video'),
     visualStyle: recoveredStyle,

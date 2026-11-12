@@ -26,7 +26,9 @@ except ImportError:
     json_repair = None  # type: ignore
     _HAVE_JSON_REPAIR = False
 
+from ...minors_rule import with_minors_rule
 from ..schema import ProductionPlan, ShotPlan
+from ..visible_defaults import lighting_from_reference
 from services.operation_logging import log_operation
 
 
@@ -48,6 +50,34 @@ class BasePlanner(ABC):
 
     # Subclasses set this
     skill_type: str = ""
+    # Settings › Services › Raw prompts (set by the orchestrator): the planner
+    # adds no deterministic style lock to the prompts it writes.
+    raw_prompts: bool = False
+    # The run's visible defaults (set by the orchestrator, see
+    # director/visible_defaults.py): shared reference, light and wardrobe.
+    reference_anchor: str = "always"
+    lighting_continuity: str = "auto"
+    keep_reference_wardrobe: bool = True
+
+    def _image_rule_options(
+        self,
+        *,
+        has_user_reference: bool,
+        has_any_reference: bool,
+    ) -> dict:
+        """Keyword arguments of ``get_image_prompt_rules`` for this run."""
+        return {
+            "lighting_from_reference": lighting_from_reference(
+                self.lighting_continuity,
+                has_user_reference=has_user_reference,
+            ),
+            "keep_wardrobe": self.keep_reference_wardrobe,
+            # No reference image, no character or location references and
+            # no shared reference picture: every shot is plain text-to-image.
+            "reference_free": (
+                not has_any_reference and self.reference_anchor == "off"
+            ),
+        }
 
     def __init__(self, llm_generate: Any = None, llm_generate_streaming: Any = None):
         """
@@ -124,6 +154,8 @@ class BasePlanner(ABC):
         gen_fn = self._generate_streaming if (streaming and self._generate_streaming) else self._generate
         if gen_fn is None:
             raise RuntimeError("No LLM generate function provided to planner")
+        # Every planner pass carries the hard rule about minors (once).
+        system_prompt = with_minors_rule(system_prompt)
 
         # Model-aware thinking budget when caller didn't specify
         if thinking_budget is None:

@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, ListVideo, Loader2 } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { CanonicalTask } from '../../api/client'
@@ -19,6 +20,9 @@ import {
   truncatePrompt,
 } from './taskPresentation'
 import { translatedPhase as phaseText } from './taskPresentation'
+import { OriginBadge } from './AgentChangeDetail'
+import { taskOrigin } from './agentOrigin'
+import { GpuNoticeDot } from '../notices/GpuNoticeDot'
 
 interface ActivityCompactBarProps {
   detailsOpen: boolean
@@ -116,7 +120,8 @@ function CompactSummary({
       {generationResolution(primary) ? <span className="hidden md:inline shrink-0 tabular-nums text-text-muted">{generationResolution(primary)}</span> : null}
       {eta ? <span className="hidden sm:inline shrink-0 tabular-nums text-accent-blue" title={t('etaTitle')}>{t('eta', { value: eta })}</span> : null}
       {primary.model ? <span className="hidden md:inline max-w-64 shrink-0 truncate rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-amber-300" title={generationRecipe(primary)}>{primary.model}</span> : null}
-      {initiator ? <span className="hidden lg:inline max-w-48 shrink-0 truncate text-violet-300" title={initiator}>{initiator}</span> : null}
+      {taskOrigin(primary) ? <span className="hidden lg:inline"><OriginBadge task={primary} /></span> : null}
+      {initiator && !taskOrigin(primary) ? <span className="hidden lg:inline max-w-48 shrink-0 truncate text-violet-300" title={initiator}>{initiator}</span> : null}
       {prompt ? (
         <button type="button" onClick={() => onCopyPrompt(primary)} className="block min-w-16 flex-1 max-w-80 truncate text-left text-text-secondary hover:text-text-primary" title={t('copyPromptTitle', { prompt })} aria-label={t('copyBarPrompt', { title: primary.title })}>
           “{truncatePrompt(prompt, 100)}”
@@ -158,7 +163,7 @@ function CompactCancel({
   if (!primary.cancelable) return null
   const busy = busyIds.has(primary.id)
   return (
-    <button type="button" disabled={busy} onClick={() => onControl(primary, 'cancel')} className="flex shrink-0 items-center gap-1 rounded-md border border-red-400/40 px-2 py-1 text-red-300 disabled:opacity-50">
+    <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onControl(primary, 'cancel')} className="flex shrink-0 items-center gap-1 rounded-md border border-red-400/40 px-2 py-1 text-red-300 disabled:opacity-50">
       {busy ? <Loader2 size={11} className="animate-spin" /> : null}
       <span>{busy ? t('cancelling') : tCommon('actions.cancel')}</span>
     </button>
@@ -195,8 +200,8 @@ function CompactWorkspaces({ t }: { t: Translate }) {
     <button onClick={() => {
       useStore.getState().setMediaFilter('runs')
       setVideoWorkflowsOpen(false)
-    }} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-secondary hover:border-accent-blue/50 hover:text-accent-blue transition-colors shrink-0" title={t('workspacesTitle')}>
-      <ListVideo size={12} /><span className="hidden sm:inline">{t('workspaces')}</span>
+    }} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-secondary hover:border-accent-blue/50 hover:text-accent-blue transition-colors shrink-0" title={t('runsTitle')} aria-label={t('runs')}>
+      <ListVideo size={12} /><span className="hidden sm:inline">{t('runs')}</span>
     </button>
   )
 }
@@ -241,6 +246,7 @@ export function ActivityCompactBar({
       </div>
       {isActive ? <CompactProgress primary={primary} /> : null}
       <CompactCancel primary={primary} busyIds={busyIds} onControl={onControl} t={tActivity} tCommon={tCommon} />
+      <GpuNoticeDot />
       <CompactWorkspaces t={tActivity} />
     </>
   )

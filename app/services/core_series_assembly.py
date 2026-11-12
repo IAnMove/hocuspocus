@@ -1,7 +1,9 @@
 """Series episode assembly adapters for the core/remote profile.
 
 NVIDIA joins approved clips with WanGP's FFmpeg helper. Core keeps the same
-HTTP contract and concatenates with FFmpeg, without Torch.
+HTTP contract and concatenates with FFmpeg, without Torch. WanGP's helper takes
+no ``transitions``: ``with_transitions`` keeps it for an episode without them
+and joins one with a fade or a dissolve here.
 
 Do not use the concat demuxer (``-f concat``) with ``-c copy``: mismatched
 codecs, timebases or audio layouts make ffmpeg report success while dropping
@@ -14,8 +16,9 @@ import os
 import shutil
 from typing import Any, Callable
 
-from services import core_editor, core_workspace as core
+from services import core_workspace as core
 from services.mix_concat import (
+    ASSEMBLY_BLOCK_CLIPS,
     _run_ffmpeg_command,
     build_hard_concat_filter,
     concat_with_tail_hold_and_crossfade,
@@ -23,26 +26,24 @@ from services.mix_concat import (
     probe_duration_seconds,
     should_use_hold_crossfade,
 )
+from services.mix_concat_blocks import hard_join_in_blocks, join_in_blocks
+from services.series_transitions import any_active, filter_for
 
 
 def asset_local_path(workspace: str, asset: dict[str, Any]) -> str:
-    uri = str(asset.get("uri") or "")
-    if uri.startswith("https://"):
-        raise ValueError(
-            f"Remote Series asset {asset.get('id')} must be imported into the workspace before assembly"
-        )
-    folder = os.path.realpath(core.workspace_dir(workspace))
-    relative = uri[len("outputs/"):] if uri.startswith("outputs/") else uri
-    candidate = os.path.realpath(os.path.join(folder, relative))
-    if candidate != folder and not candidate.startswith(folder + os.sep):
-        raise ValueError(f"Series asset {asset.get('id')} leaves its workspace")
-    if not os.path.isfile(candidate):
-        raise ValueError(f"Series reference file is missing: {uri}")
-    return candidate
+    from services.series_asset_path import series_asset_local_path
+
+    return series_asset_local_path(
+        workspace,
+        asset,
+        workspace_dir=core.workspace_dir,
+        remote_purpose="assembly",
+        on_missing="raise",
+    )
 
 
 def available_filename(directory: str, name: str) -> str:
-    _filename, destination = core_editor.unique_output_name(directory, name)
+    _filename, destination = core.unique_output_name(directory, name)
     return destination
 
 
@@ -59,6 +60,11 @@ def _hard_concat_filter(
     ffmpeg = _ffmpeg_bin()
     if not ffmpeg:
         return False
+    if len(files) > ASSEMBLY_BLOCK_CLIPS:
+        return hard_join_in_blocks(
+            files, output_path, lambda blocks: _hard_concat_filter(blocks, output_path, abort_callback=abort_callback),
+            with_clip_audio=True, ffmpeg_bin=ffmpeg, abort_callback=abort_callback,
+        )
     audio_flags = probe_audio_flags(files, ffmpeg)
     silent_durations = None
     if audio_flags and any(audio_flags) and not all(audio_flags):
@@ -82,11 +88,53 @@ def _hard_concat_filter(
     return _run_ffmpeg_command(cmd, output_path, abort_callback=abort_callback)
 
 
+def _transition_concat(
+    files: list[str],
+    output_path: str,
+    transitions,
+    *,
+    abort_callback: Callable[[], bool] | None = None,
+) -> bool:
+    ffmpeg = _ffmpeg_bin()
+    if not ffmpeg:
+        return False
+    durations = [probe_duration_seconds(path, ffmpeg) for path in files]
+    if any(duration is None for duration in durations):
+        return False
+    audio_flags = probe_audio_flags(files, ffmpeg)
+    if len(files) > ASSEMBLY_BLOCK_CLIPS:
+        return join_in_blocks(
+            files, output_path, [float(duration) for duration in durations], transitions, audio_flags=audio_flags,
+            video_args=["-c:v", "libx264", "-crf", "18", "-preset", "fast"], ffmpeg_bin=ffmpeg,
+            abort_callback=abort_callback,
+        )
+    with_audio = any(audio_flags)
+    filter_str, video_label, audio_label = filter_for(
+        [float(duration) for duration in durations],
+        transitions=transitions,
+        with_audio=with_audio,
+        has_audio=audio_flags if with_audio else None,
+    )
+    cmd = [ffmpeg, "-y"]
+    for path in files:
+        cmd += ["-i", path.replace("\\", "/")]
+    cmd += ["-filter_complex", filter_str, "-map", f"[{video_label}]"]
+    if with_audio and audio_label:
+        cmd += ["-map", f"[{audio_label}]", "-c:a", "aac"]
+    cmd += [
+        "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+        "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        os.path.abspath(output_path).replace("\\", "/"),
+    ]
+    return _run_ffmpeg_command(cmd, output_path, abort_callback=abort_callback)
+
+
 def concatenate_clips(
     paths: list[str],
     output_path: str,
     *,
     abort_callback: Callable[[], bool] | None = None,
+    transitions=None,
 ) -> bool:
     if abort_callback and abort_callback():
         return False
@@ -100,6 +148,8 @@ def concatenate_clips(
     if len(files) == 1:
         shutil.copyfile(files[0], output_path)
         return os.path.isfile(output_path) and os.path.getsize(output_path) > 0
+    if any_active(transitions):
+        return _transition_concat(files, output_path, transitions, abort_callback=abort_callback)
     if should_use_hold_crossfade(len(files)):
         if concat_with_tail_hold_and_crossfade(
             files, output_path, abort_callback=abort_callback,
@@ -108,3 +158,14 @@ def concatenate_clips(
         if abort_callback and abort_callback():
             return False
     return _hard_concat_filter(files, output_path, abort_callback=abort_callback)
+
+
+def with_transitions(concatenate: Callable[..., bool]) -> Callable[..., bool]:
+    """``concatenate`` (WanGP's ``concatenate_multi_clip_videos``) called exactly as before for an episode without
+    transitions; ``concatenate_clips`` when a shot fades or dissolves in, which that helper cannot do."""
+    def join(paths: list[str], output_path: str, *, abort_callback: Callable[[], bool] | None = None,
+             transitions=None) -> bool:
+        if any_active(transitions):
+            return concatenate_clips(paths, output_path, abort_callback=abort_callback, transitions=transitions)
+        return concatenate(paths, output_path, abort_callback=abort_callback)
+    return join

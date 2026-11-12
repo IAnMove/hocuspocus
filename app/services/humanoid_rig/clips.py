@@ -3,7 +3,8 @@
 ``clip_library`` returns, per clip, its keyframe times, a local rotation track
 for every moving bone and a Hips translation track. Rotations are the stored
 rig's local rotations, so they can be written straight into its GLB. The loop
-closes exactly: the last key equals the first.
+closes exactly: the last key equals the first. A hold (``loop: false``, such
+as Kneel Pray) instead ends in the pose it keeps, for a slot that plays it once.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from functools import lru_cache
 
 import numpy as np
 
-from services.humanoid_rig.clip_recipes import RECIPES
+from services.humanoid_rig.clip_recipes import HOLDS, RECIPES
 from services.humanoid_rig.contacts import foot_contacts
 from services.humanoid_rig.errors import InvalidInput
 from services.humanoid_rig.motion import Pose, Rig, bake_with_frames
@@ -23,19 +24,20 @@ FPS = 30
 
 __all__ = ["FPS", "clip_catalog", "clip_library", "default_rig", "rig_for_skeleton"]
 
-if set(RECIPES) != set(CLIP_IDS) or set(CLIP_INFO) != set(CLIP_IDS):
+if set(RECIPES) != set(CLIP_IDS) or set(CLIP_INFO) != set(CLIP_IDS) or not HOLDS <= set(CLIP_IDS):
     raise RuntimeError("clip table does not match CLIP_IDS")
 
 
 def clip_catalog() -> list[dict]:
     return [
-        {"id": clip_id, "label": CLIP_LABELS[clip_id], "description": CLIP_INFO[clip_id][1], "category": CLIP_INFO[clip_id][0], "beats": RECIPES[clip_id][0]}
+        {"id": clip_id, "label": CLIP_LABELS[clip_id], "description": CLIP_INFO[clip_id][1], "category": CLIP_INFO[clip_id][0],
+         "beats": RECIPES[clip_id][0], "loop": clip_id not in HOLDS}
         for clip_id in CLIP_IDS
     ]
 
 
 def clip_library(bpm: float, ids: list[str] | None = None, rig: Rig | None = None) -> list[dict]:
-    """Return looping in-place clips at ``bpm`` for ``ids`` (default: all) on ``rig``."""
+    """Return in-place clips at ``bpm`` for ``ids`` (default: all) on ``rig``. Only the ``HOLDS`` do not loop."""
     tempo = _require_bpm(bpm)
     target = rig or default_rig()
     return [_build_clip(clip_id, tempo, target) for clip_id in _select_ids(ids)]
@@ -76,7 +78,9 @@ def _build_clip(clip_id: str, bpm: float, rig: Rig) -> dict:
     pose = Pose(rig, u)
     author(pose, u)
     local, root, positions, worlds = bake_with_frames(pose)
-    _close_loop(local, root)
+    loop = clip_id not in HOLDS
+    if loop:
+        _close_loop(local, root)
     rotations = {name: local[:, index] for index, name in enumerate(BONE_NAMES) if not name.endswith("_End")}
     return {
         "id": clip_id,
@@ -87,7 +91,8 @@ def _build_clip(clip_id: str, bpm: float, rig: Rig) -> dict:
         "times": times,
         "rotations": rotations,
         "hips_translation": root,
-        "contacts": foot_contacts(rig, times, positions, worlds, loop=True),
+        "loop": loop,
+        "contacts": foot_contacts(rig, times, positions, worlds, loop=loop),
     }
 
 

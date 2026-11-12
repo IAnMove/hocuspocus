@@ -7,6 +7,50 @@ from urllib.parse import urlsplit, parse_qsl, unquote
 CHARACTER_VOICE_LANGUAGES = {"auto", "chinese", "english", "japanese", "korean", "german", "french", "russian", "portuguese", "spanish", "italian"}
 # A character can carry one dedicated voice per spoken language; "auto" is not a language.
 CHARACTER_VOICE_DUB_LANGUAGES = CHARACTER_VOICE_LANGUAGES - {"auto"}
+# Speech models that clone a character voice from a reference recording and its transcript.
+# Drama 3 clone is the same shape and requires the transcript; it takes no style direction.
+REFERENCE_VOICE_MODELS = ("qwen3_tts_base", "voxcpm2_base", "drama3_base")
+# Reference voices that may also carry a style direction (VoxCPM2 controllable cloning).
+STYLED_REFERENCE_VOICE_MODELS = ("voxcpm2_base",)
+# A designed voice with no recording. Drama 3 Voice Design takes an optional direction, never a sample.
+DESIGN_VOICE_MODELS = ("drama3_voicedesign",)
+VOICE_STYLE_MAX_CHARS = 300
+
+
+# Voices whose engine takes a spoken direction («whispering», «very slowly»): VoxCPM2 references (as a style) and
+# Qwen3 presets (as instructions). A line's direction reaches only these; other voices say the line as written.
+DIRECTED_VOICE_MODELS = (*STYLED_REFERENCE_VOICE_MODELS, "qwen3_tts_customvoice")
+# Library normalize and the H3 prompt fill these when a beat has no direction. They are not spoken direction.
+PLACEHOLDER_EMOTION = "natural"
+PLACEHOLDER_DELIVERY = "natural delivery"
+_PLACEHOLDER_DIRECTION = {"emotion": PLACEHOLDER_EMOTION, "delivery": PLACEHOLDER_DELIVERY}
+
+
+def is_reference_voice(voice):
+    return isinstance(voice, dict) and voice.get("model") in REFERENCE_VOICE_MODELS
+
+
+def line_delivery(beat, voice):
+    """How a dialogue beat is said (its ``emotion`` and ``delivery``), when its voice can take a direction; else ""."""
+    if not isinstance(voice, dict) or voice.get("model") not in DIRECTED_VOICE_MODELS or not isinstance(beat, dict):
+        return ""
+    parts = []
+    for key in ("emotion", "delivery"):
+        text = " ".join(str(beat.get(key) or "").split())
+        if text and text.lower() != _PLACEHOLDER_DIRECTION[key]:
+            parts.append(text)
+    return ", ".join(parts)[:VOICE_STYLE_MAX_CHARS]
+
+
+def voice_direction(voice, limit=None):
+    """The voice's own instructions followed by the line's direction (``lineDelivery``), as one text. Within
+    ``limit`` the line's direction is kept whole and the instructions are shortened to make room."""
+    instructions = str(voice.get("instructions") or "").strip()
+    delivery = str(voice.get("lineDelivery") or "").strip()
+    if limit is not None and delivery and len(instructions) + len(delivery) + 2 > limit:
+        instructions = instructions[:max(0, limit - len(delivery) - 2)].rstrip(" ,")
+    text = ", ".join(part for part in (instructions, delivery) if part)
+    return text if limit is None else text[:limit]
 
 
 def _voice_reference_query(kind, raw):
@@ -133,20 +177,91 @@ def _voice_text(value, limit):
     return isinstance(value, str) and bool(value.strip()) and len(value) <= limit
 
 
+def _voice_style(value):
+    style = value.get("instructions")
+    if style is None:
+        return {}
+    if value.get("model") not in STYLED_REFERENCE_VOICE_MODELS:
+        raise ValueError("This reference voice takes no style direction.")
+    if not isinstance(style, str) or len(style) > VOICE_STYLE_MAX_CHARS:
+        raise ValueError("Voice instructions are too long.")
+    return {"instructions": style.strip()} if style.strip() else {}
+
+
+def _design_direction(value):
+    direction = value.get("instructions")
+    if direction is None:
+        return {}
+    if not isinstance(direction, str) or len(direction) > VOICE_STYLE_MAX_CHARS:
+        raise ValueError("Voice instructions are too long.")
+    return {"instructions": direction.strip()} if direction.strip() else {}
+
+
+_BAND_KEYS = {"pitchBandHz", "maxBrightness", "voiceType", "maxCentroidHz"}
+_VOICE_TYPES = {"man", "woman", "child", "robot"}
+
+
+def _band_number(value, name: str, low: float, high: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= float(value) <= high:
+        raise ValueError(f"{name} must be a number from {low:g} to {high:g}.")
+    return float(value)
+
+
+def _band_fields(value: dict) -> dict:
+    """Optional pitch band. Absent fields stay absent, so a voice without them round-trips unchanged."""
+    if not _BAND_KEYS & set(value):
+        return {}
+    kept = {}
+    if "voiceType" in value:
+        if value["voiceType"] not in _VOICE_TYPES:
+            raise ValueError("voiceType must be man, woman, child or robot.")
+        kept["voiceType"] = value["voiceType"]
+    if "pitchBandHz" in value:
+        band = value["pitchBandHz"]
+        if not isinstance(band, (list, tuple)) or len(band) != 2:
+            raise ValueError("pitchBandHz must be [low, high] in Hz.")
+        low, high = _band_number(band[0], "pitchBandHz low", 40, 600), _band_number(band[1], "pitchBandHz high", 40, 600)
+        if low >= high:
+            raise ValueError("pitchBandHz must be [low, high] in Hz.")
+        kept["pitchBandHz"] = [low, high]
+    if "maxBrightness" in value:
+        kept["maxBrightness"] = _band_number(value["maxBrightness"], "maxBrightness", 0, 1)
+    if "maxCentroidHz" in value:
+        kept["maxCentroidHz"] = _band_number(value["maxCentroidHz"], "maxCentroidHz", 40, 8000)
+    return kept
+
+
+def _normalize_design_voice(value):
+    """Drama 3 Voice Design: a name, a language and an optional direction. No recording."""
+    required = {"provider", "model", "voiceId", "name", "language"}
+    if not required <= set(value) <= required | {"instructions"} | _BAND_KEYS:
+        raise ValueError("Drama 3 Voice Design takes no recording. Use drama3_base to clone a voice.")
+    if (value.get("provider") != "local" or value.get("model") not in DESIGN_VOICE_MODELS or value.get("voiceId") != "design"
+            or not _voice_text(value.get("name"), 120)
+            or not isinstance(value.get("language"), str) or value["language"] not in CHARACTER_VOICE_LANGUAGES):
+        raise ValueError("Add a name and a supported language for this Drama 3 voice.")
+    return {**{key: value[key] for key in required}, "name": value["name"].strip(), **_design_direction(value), **_band_fields(value)}
+
+
 def _normalize_reference_voice(value):
-    if (set(value) != {"provider", "model", "voiceId", "name", "referenceAudio", "transcript", "language"}
+    required = {"provider", "model", "voiceId", "name", "referenceAudio", "transcript", "language"}
+    if (not required <= set(value) <= required | {"instructions"} | _BAND_KEYS
             or value.get("provider") != "local" or value.get("voiceId") != "reference"
             or not _voice_text(value.get("name"), 120) or not _voice_text(value.get("transcript"), 4000)
             or not isinstance(value.get("language"), str) or value["language"] not in CHARACTER_VOICE_LANGUAGES):
         raise ValueError("Add a named local reference recording, its transcript and a supported language.")
-    return {**value, "name": value["name"].strip(), "transcript": value["transcript"].strip(),
-            "referenceAudio": normalize_character_voice_reference(value["referenceAudio"])}
+    base = {key: value[key] for key in required}
+    return {**base, "name": value["name"].strip(), "transcript": value["transcript"].strip(),
+            "referenceAudio": normalize_character_voice_reference(value["referenceAudio"]), **_voice_style(value),
+            **_band_fields(value)}
 
 
 def normalize_character_voice(value):
-    if isinstance(value, dict) and value.get("model") == "qwen3_tts_base":
+    if is_reference_voice(value):
         return _normalize_reference_voice(value)
-    if not isinstance(value, dict) or set(value) - {"provider", "model", "voiceId", "instructions"}:
+    if isinstance(value, dict) and value.get("model") in DESIGN_VOICE_MODELS:
+        return _normalize_design_voice(value)
+    if not isinstance(value, dict) or set(value) - {"provider", "model", "voiceId", "instructions"} - _BAND_KEYS:
         raise ValueError("Store voice preferences only, never credentials.")
     if value.get("provider") != "local" or value.get("model") != "qwen3_tts_customvoice":
         raise ValueError("Choose a supported local character voice.")
@@ -154,7 +269,8 @@ def normalize_character_voice(value):
         raise ValueError("Invalid voice preset.")
     if "instructions" in value and (not isinstance(value["instructions"], str) or len(value["instructions"]) > 1000):
         raise ValueError("Voice instructions are too long.")
-    return dict(value)
+    kept = {key: value[key] for key in ("provider", "model", "voiceId", "instructions") if key in value}
+    return {**kept, **_band_fields(value)}
 
 
 def normalize_character_voices_by_language(value):
@@ -166,7 +282,9 @@ def normalize_character_voices_by_language(value):
         if language not in CHARACTER_VOICE_DUB_LANGUAGES:
             raise ValueError("Unsupported voice language.")
         normalized = normalize_character_voice(voice)
-        if normalized.get("model") == "qwen3_tts_base" and normalized["language"] not in {language, "auto"}:
+        speaks = normalized.get("language")
+        designed = normalized.get("model") in DESIGN_VOICE_MODELS
+        if (is_reference_voice(normalized) or designed) and speaks not in {language, "auto"}:
             raise ValueError("A reference voice must speak the language it is assigned to.")
         result[language] = normalized
     return result

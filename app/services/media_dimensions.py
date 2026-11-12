@@ -163,6 +163,24 @@ def probe_video_size(path: str) -> tuple[int, int] | None:
     return (height, width) if abs(rotation) % 180 == 90 else (width, height)
 
 
+def produced_resolution(path: str, requested: object) -> str | None:
+    """``"WxH"`` of the file when it is not the size that was asked for, else ``None``.
+
+    WanGP fits the canvas to a start image (a 640x480 request with a square image gives 480x480), so what a job
+    asked for and what it made can differ. The sidecar keeps the request in ``params`` and, through this, the real
+    size beside it (validation gen-06). Nothing to compare against (``"auto"``, no request) or a file that cannot
+    be read gives ``None``.
+    """
+    wanted = parse_resolution(requested)
+    kind = media_kind(path)
+    if wanted is None or not kind:
+        return None
+    made = image_header_size(path) if kind == "image" else probe_video_size(path)
+    if made is None or made == wanted:
+        return None
+    return f"{made[0]}x{made[1]}"
+
+
 def average_color(preview_path: str) -> str:
     """``#rrggbb`` of the visible pixels, or ``""`` for a blank/transparent preview."""
     try:

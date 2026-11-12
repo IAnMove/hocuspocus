@@ -1,4 +1,5 @@
 import { bindAtmosExtra } from './registryIds.ts'
+import { effectivePalette } from './night.ts'
 import type { AtmosQuality, AtmosSettings, ResolvedAtmos } from './params.ts'
 import type { AtmosSetDefinition, AtmosVec3 } from './definition.ts'
 import { beachSet } from './sets/beach.ts'
@@ -89,12 +90,14 @@ export function parseAtmosSettings(raw: unknown, setId?: string): AtmosSettings 
 export function resolveAtmos(settings: AtmosSettings | undefined, quality: AtmosQuality, setId?: string): ResolvedAtmos {
   const set = atmosSet(setId) ?? clearingSet
   const base = settings ?? set.defaults
-  const look = set.palettes[base.palette] ?? set.palettes[set.defaults.palette]
+  const paletteKey = effectivePalette(base)
+  const look = set.palettes[paletteKey] ?? set.palettes[base.palette] ?? set.palettes[set.defaults.palette]
   const day = set.times[base.timeOfDay] ?? set.times[set.defaults.timeOfDay]
   const high = quality === 'high'
   const count = high ? set.high : set.low
   return {
     ...base,
+    palette: set.palettes[paletteKey] ? paletteKey : base.palette,
     seed: set.seed,
     sun: normalize(day.sun),
     sunColor: day.sunColor,

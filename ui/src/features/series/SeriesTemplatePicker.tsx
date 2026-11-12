@@ -19,7 +19,7 @@ export function SeriesTemplatePicker({ disabled, onCreate }: { disabled?: boolea
   return <details className="rounded-lg border border-border p-2 text-left" data-testid="series-template-picker">
     <summary className="cursor-pointer text-[11px] font-semibold">{t('templates.title')}</summary>
     <label className="mt-2 block text-[10px] text-text-muted">{t('templates.language')}
-      <select className="ml-1 rounded border border-border bg-bg-primary px-1" value={language} onChange={event => setLanguage(event.target.value as 'es' | 'en')}>
+      <select aria-label={t('templates.language')} className="ml-1 rounded border border-border bg-bg-primary px-1" value={language} onChange={event => setLanguage(event.target.value as 'es' | 'en')}>
         <option value="es">{t('languages.names.spanish')}</option>
         <option value="en">{t('languages.names.english')}</option>
       </select></label>

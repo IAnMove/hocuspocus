@@ -23,7 +23,7 @@ export function StoryMusicHeader(props: StoryMusicTabProps) {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 xl:max-w-[920px]">
-          <input className={`${input} sm:w-72`} value={instruction}
+          <input aria-label={t('music.directionPlaceholder')} className={`${input} sm:w-72`} value={instruction}
             onChange={event => setInstruction(event.target.value)}
             placeholder={t('music.directionPlaceholder')} />
           {project.projectType === 'music_video' ? <>

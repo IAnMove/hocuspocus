@@ -1,3 +1,5 @@
+import { useFieldIds } from '../common/fieldIds'
+import { controlLabel } from '../../i18n/controlLabel'
 import { useCallback, useState } from 'react'
 import { X, UserRoundPen, Loader2, Eye, Plus } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -47,6 +49,8 @@ function emptyMapping(index: number): RecastCharacterMapping {
  * reuse the same color and therefore describe another view of the same person.
  */
 export function RecastControls() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const editVideoFile = useStore(s => s.editVideoFile)
   const editVideoPath = useStore(s => s.editVideoPath)
@@ -209,7 +213,7 @@ export function RecastControls() {
               resetPreview()
             }}
             className="absolute top-1.5 right-1.5 z-20 p-1 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80 transition-colors"
-          >
+           title={controlLabel('a11y.clearVideo')} aria-label={controlLabel('a11y.clearVideo')}>
             <X size={14} />
           </button>
           <VideoTimelineSelector
@@ -271,7 +275,7 @@ export function RecastControls() {
                   <button
                     onClick={() => removeMapping(mappingIndex)}
                     className="ml-auto p-0.5 text-text-muted hover:text-status-error"
-                    title={t('recast.removeMapping')}
+                    title={t('recast.removeMapping')} aria-label={t('recast.removeMapping')}
                   >
                     <X size={12} />
                   </button>
@@ -279,8 +283,8 @@ export function RecastControls() {
               </div>
 
               <div>
-                <label className="text-[9px] text-text-muted block mb-0.5">{t('recast.who')}</label>
-                <input
+                <label htmlFor={fieldIds(`f0-${mappingIndex}`)} className="text-[9px] text-text-muted block mb-0.5">{t('recast.who')}</label>
+                <input aria-label={t('recast.who')} id={fieldIds(`f0-${mappingIndex}`)}
                   type="text"
                   value={mapping.target}
                   onChange={event => updateMapping(mappingIndex, { target: event.target.value })}
@@ -321,7 +325,7 @@ export function RecastControls() {
                         referenceAlignedToSource: false,
                       })}
                       className="absolute top-1 right-1 p-0.5 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80"
-                    >
+                     title={controlLabel('a11y.clearReference')} aria-label={controlLabel('a11y.clearReference')}>
                       <X size={12} />
                     </button>
                   </div>
@@ -351,7 +355,7 @@ export function RecastControls() {
                             additionalRefs: mapping.additionalRefs.filter((_, index) => index !== referenceIndex),
                           })}
                           className="absolute -top-1 -right-1 p-0.5 rounded-full bg-black/70 text-white"
-                        >
+                         title={controlLabel('a11y.removeReference')} aria-label={controlLabel('a11y.removeReference')}>
                           <X size={9} />
                         </button>
                       </div>
@@ -459,7 +463,7 @@ export function RecastControls() {
 
       <div className="flex items-center gap-1">
         <label className="flex cursor-pointer items-center gap-1.5 text-[9px] text-text-secondary">
-          <input
+          <input aria-label={t('recast.matchLighting')}
             type="checkbox"
             checked={useRelighting}
             onChange={event => useStore.setState({ editRecastUseRelighting: event.target.checked })}

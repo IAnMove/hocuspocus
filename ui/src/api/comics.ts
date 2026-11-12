@@ -1,5 +1,6 @@
 import { BASE } from './http'
 import type { VideoEditorExportJob } from './video-editor'
+import { documentSaveHeaders } from '../lib/documentSaveActor'
 
 export interface MiniMaxImageJob {
   jobId: string
@@ -60,7 +61,7 @@ export async function saveComicProject(
     : `${BASE}/api/v1/comics`
   const res = await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...documentSaveHeaders() },
     body: JSON.stringify({ project, preview }),
   })
   if (!res.ok) {

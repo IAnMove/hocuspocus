@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 
+from services import mcp_intent
 from services.mcp_compact import summarize_model_catalog
 from services.scene2d_validate import OPERATION as VALIDATE, command_handlers as validate_handlers
 from services.scene_documents import command_handlers as save_handlers, save_document
@@ -147,3 +150,71 @@ def test_same_intent_id_does_not_save_twice(tmp_path, monkeypatch):
     assert error.value.status_code == 409
     assert calls["n"] == 1
     assert len(list((tmp_path / WORKSPACE).glob("*.scene.json"))) == 1
+
+
+def _counted_save(tmp_path, monkeypatch):
+    calls = {"n": 0}
+    real = save_document
+
+    def wrapped(*args, **kwargs):
+        calls["n"] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr("services.scene_documents.save_document", wrapped)
+    handler = save_handlers(_workspace_dir(tmp_path))["scenes.document.save"]
+    command = {"version": 1, "intent_id": "save-after-power-cut",
+               "input": {"workspace": WORKSPACE, "name": "Intro", "document": _document()}}
+    record = tmp_path / WORKSPACE / ".mcp-intents" / "scenes.document.save" / "save-after-power-cut.json"
+    return calls, (lambda: asyncio.run(handler(command))), record
+
+
+def test_an_empty_intent_record_after_a_power_cut_saves_again(tmp_path, monkeypatch):
+    calls, save, record = _counted_save(tmp_path, monkeypatch)
+    save()
+    record.write_text("", encoding="utf-8")
+    again = save()
+    assert calls["n"] == 2
+    assert "replayed" not in again["result"]
+    assert len(list((tmp_path / WORKSPACE).glob("*.scene.json"))) == 2
+    assert json.loads(record.read_text(encoding="utf-8"))["result"]["name"] == again["result"]["name"]
+    replay = save()
+    assert calls["n"] == 2
+    assert replay["result"]["replayed"] is True
+    assert replay["result"]["name"] == again["result"]["name"]
+    record.write_text(" \n", encoding="utf-8")
+    assert mcp_intent.load_intent(tmp_path / WORKSPACE, "scenes.document.save", "save-after-power-cut", "any") is None
+
+
+def test_a_corrupt_intent_record_still_conflicts(tmp_path, monkeypatch):
+    calls, save, record = _counted_save(tmp_path, monkeypatch)
+    save()
+    record.write_text('{"digest": "', encoding="utf-8")
+    with pytest.raises(HTTPException) as error:
+        save()
+    assert error.value.status_code == 409
+    assert calls["n"] == 1
+    with pytest.raises(json.JSONDecodeError):
+        mcp_intent.load_intent(tmp_path / WORKSPACE, "scenes.document.save", "save-after-power-cut", "any")
+
+
+def test_an_intent_record_is_synced_before_and_after_its_rename(tmp_path, monkeypatch):
+    synced = []
+    real_fsync = os.fsync
+
+    def fsync(descriptor):
+        synced.append("folder" if stat.S_ISDIR(os.fstat(descriptor).st_mode) else "file")
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(mcp_intent.os, "fsync", fsync)
+    mcp_intent.store_intent(tmp_path, "scenes.document.save", "kept", "d1", {"name": "a.scene.json"})
+    assert synced == (["file"] if os.name == "nt" else ["file", "folder"])
+    assert mcp_intent.load_intent(tmp_path, "scenes.document.save", "kept", "d1") == {"name": "a.scene.json"}
+    folder = tmp_path / ".mcp-intents" / "scenes.document.save"
+    assert sorted(path.name for path in folder.iterdir()) == ["kept.json"]
+
+    def no_folder(*args, **kwargs):
+        raise PermissionError("a folder cannot be opened here")
+
+    monkeypatch.setattr(mcp_intent.os, "open", no_folder)
+    mcp_intent.store_intent(tmp_path, "scenes.document.save", "kept", "d1", {"name": "b.scene.json"})
+    assert mcp_intent.load_intent(tmp_path, "scenes.document.save", "kept", "d1") == {"name": "b.scene.json"}

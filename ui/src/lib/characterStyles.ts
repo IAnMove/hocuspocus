@@ -4,9 +4,13 @@ import catalog from '../../../app/shared/character_styles.json' with { type: 'js
 export type CharacterStyleId = string
 export type ChromaScreen = 'green' | 'blue' | 'magenta'
 export type CharacterStyleKind = 'character' | 'pose' | 'prop'
-export type CharacterStyle = (typeof catalog.styles)[number]
+/** The preset's default look for characters.rig.flat (`style`): paper mouths for paper cutouts, warp mouths for
+ * graphic-novel art. */
+export type CharacterStyleRig = Record<string, number | boolean | string>
+export type CharacterStyle = Omit<(typeof catalog.styles)[number], 'rig'> & { rig: CharacterStyleRig }
 
-export const characterStyles: CharacterStyle[] = catalog.styles
+export const characterStyles: CharacterStyle[] = catalog.styles.map(style => ({ ...style,
+  rig: Object.fromEntries(Object.entries(style.rig).filter(([, value]) => value !== undefined)) as CharacterStyleRig }))
 
 export function characterStyle(id: CharacterStyleId): CharacterStyle | undefined {
   return characterStyles.find(style => style.id === id)
@@ -30,7 +34,8 @@ export function screenFor(description: string): ChromaScreen {
 
 export function characterStylePrompt(style: CharacterStyle, kind: CharacterStyleKind, description: string,
   screen: ChromaScreen = screenFor(description)): { prompt: string; negative: string; screen: ChromaScreen } {
-  const background = style.background.replace('{screen}', catalog.screens[screen])
-  const prompt = style[kind].replace('{description}', description.split(/\s+/).filter(Boolean).join(' ')).trim()
+  // Every placeholder, not the first: the background names the screen twice, and a `{screen}` left in the prompt makes the server skip the job.
+  const background = style.background.replaceAll('{screen}', () => catalog.screens[screen])
+  const prompt = style[kind].replaceAll('{description}', () => description.split(/\s+/).filter(Boolean).join(' ')).trim()
   return { prompt: `${prompt} ${background}`, negative: style.negative, screen }
 }

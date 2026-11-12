@@ -6,7 +6,7 @@ import { sampleMouthCues } from './sampleMouthCues'
 
 /** Ships with the app: no upload, speech job, model download or library write. */
 export function FaceRigSamplePreview({ kit, disabled, onStart, onViseme, stopRef }: {
-  kit: CharacterKit; disabled: boolean; onStart: () => void; onViseme: (viseme?: FaceRigDialogueViseme) => void
+  kit: CharacterKit; disabled: boolean; title?: string; onStart: () => void; onViseme: (viseme?: FaceRigDialogueViseme) => void
   stopRef: RefObject<(() => void) | null>
 }) {
   const { t } = useUiTranslation('characters')

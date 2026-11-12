@@ -41,9 +41,25 @@ def _prepare_native_processors(body):
         body['wangp_processor_settings'] = validated_settings(body.get('spatial_upsampling', ''), body.get('wangp_processor_settings'))
 
 
+def _native_image_selectors(body):
+    """An image request carries the selectors WanGP reads, whichever door it came through.
+
+    WanGP decides picture or clip from ``image_mode`` alone (``image_mode > 0``); a body that only said
+    ``generation_mode: "image"`` rendered, and saved, an MP4 (validation gen-01). The typed image command already
+    adds ``image_mode=1`` and ``video_length=1`` (``NATIVE_IMAGE_DEFAULTS``); REST and MCP ``generate`` get the same
+    here, before any check below reads ``image_mode``. A stated positive ``image_mode`` (1, 2 ...) is kept as it is,
+    like WanGP's own ``image_mode > 0``; absent, ``null``, 0 or a non-number becomes the image request it sits in.
+    """
+    mode = body.get('image_mode')
+    if body.get('generation_mode') == 'image' and not (isinstance(mode, int) and not isinstance(mode, bool) and mode > 0):
+        body['image_mode'] = 1
+        body['video_length'] = 1
+
+
 def prepare_generation_inputs(body, model_def, workspace, *, uploads_dir, workspace_dir,
                               prepared_images=False, prepared_speech=False):
     """Validate processor options and resolve new-family media before admission."""
+    _native_image_selectors(body)
     _prepare_canonical_image_references(body, model_def, workspace,
                                         uploads_dir=uploads_dir, workspace_dir=workspace_dir)
     _prepare_native_processors(body)

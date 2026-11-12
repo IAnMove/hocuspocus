@@ -1,6 +1,6 @@
 import { rememberPrompt } from '../lib/promptHistory'
-import type { DirectorModelCompatibility, GenerationDetails, H3WindowPlan, ModelResourceRequirements, ScailResolutionProfile } from '../types'
-import { BASE } from './http'
+import type { DirectorModelCompatibility, GenerationDetails, H3WindowPlan, ModelLicence, ModelResourceRequirements, ScailResolutionProfile } from '../types'
+import { BASE, httpError } from './http'
 
 export interface ApiModel {
   model_type: string
@@ -34,12 +34,18 @@ export interface ApiModel {
   // Weight-managed tool models (e.g. UniRig): shown in the settings
   // catalog for download/delete, but never selectable for generation.
   tool_only?: boolean
+  /** Id of the family licence. The full record lives on ApiFamily.licence. */
+  licenceId?: string
 }
 
 export interface ApiFamily {
   id: string
   label: string
   order: number
+  /** Set when every model in this family shares one territory licence. */
+  licence?: ModelLicence | null
+  /** Records used by some models when the family mixes products. */
+  licenceRecords?: ModelLicence[] | null
 }
 
 export interface ApiResolution {
@@ -51,11 +57,13 @@ export interface ApiJobStatus {
   job_id: string
   task_id?: string | null
   root_task_id?: string | null
-  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
+  /** `leftover`/`interrupted` come from the recovery queue after a restart:
+   *  the job is not running and waits for resume or discard. */
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'leftover' | 'interrupted'
   progress: number
-  step: number
-  total_steps: number
-  phase: string
+  step?: number
+  total_steps?: number
+  phase?: string
   message: string
   output_files: string[]
   error: string | null
@@ -143,6 +151,8 @@ export async function updateModelSelections(
 export interface ProductionProfileSettings {
   configured: boolean
   profile: import('../types').ProductionProfile
+  /** Why the saved profile could not be read; the defaults stand in until it is saved again. */
+  invalid_reason?: string
 }
 
 export async function fetchProductionProfile(): Promise<ProductionProfileSettings> {
@@ -243,7 +253,7 @@ export async function submitGeneration(params: Record<string, unknown>): Promise
 
 export async function fetchJobStatus(jobId: string): Promise<ApiJobStatus> {
   const res = await fetch(`${BASE}/api/v1/status/${encodeURIComponent(jobId)}`)
-  if (!res.ok) throw new Error('Failed to fetch job status')
+  if (!res.ok) throw await httpError(res, res.status === 404 ? 'Job not found' : 'Failed to fetch job status')
   return res.json()
 }
 
@@ -460,6 +470,7 @@ export async function segmentPreview(params: {
   video_path: string; text: string; frame_index?: number;
   start_time?: number; end_time?: number;
   full_video?: boolean; invert_mask?: boolean;
+  workspace?: string;
 }): Promise<{ mask_preview: string; target: string; frame_index: number; masks_path?: string; prompt?: string; negative_prompt?: string }> {
   const res = await fetch(`${BASE}/api/v1/segment/preview`, {
     method: 'POST',
@@ -835,7 +846,8 @@ export async function submitBlend(params: {
   num_inference_steps?: number;
   guidance_scale?: number;
   negative_prompt?: string;
-  /** @deprecated no longer used; kept for back-compat with existing call sites */
+  /** Insert mode: seconds of generated footage added between A and B (the "Transition Duration" slider).
+   *  Overlap mode ignores it; the server falls back to `overlap_sec` when it is missing. */
   transition_sec?: number;
   /** @deprecated bell-curve weighting is applied automatically */
   strength_a?: number;

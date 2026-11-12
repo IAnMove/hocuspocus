@@ -1,0 +1,4 @@
+These pictures are original filler art for the comic-page Video 3D templates.
+The paper, grain, ink borders and shadows are drawn by ui/src/features/scene3d/comicLayout.ts.
+The panel pictures and cutouts are drawn by ui/scripts/generate-comic-fillers.py.
+No third-party asset was copied. You may use them with Hocuspocus, including commercially.

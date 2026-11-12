@@ -54,23 +54,41 @@ def _number(value: Any, label: str, low: float = 0.0, high: float = 600.0) -> fl
     return float(value)
 
 
+CUE_DOC = ("A cue is {start, end, value} in seconds from its line's start, as audio.mouth_cues returns it: value is a Rhubarb "
+           "letter A-H or X, or a phonetic name (rest, M, I, E, A, O, U, F, L). Anything else is refused.")
+
+
+def _sound(cue, label: str, mapping: dict | None) -> str:
+    """The cue's sound name; a cue that is not ``{start, end, value}`` or names no known sound is refused."""
+    if not isinstance(cue, dict):
+        raise TalkError("invalid_cue", f"{label} is not an object; {CUE_DOC}")
+    sound = cue.get("value", cue.get("shape", cue.get("viseme")))
+    if not isinstance(sound, str) or not (sound in RHUBARB or sound in PHONETIC or sound in (mapping or {})):
+        raise TalkError("invalid_cue", f"{label}.value {sound!r} is not a mouth sound; {CUE_DOC}")
+    return sound
+
+
 def _line_cues(line: dict, index: int, mapping: dict | None, mouths: dict[str, str]) -> list[dict]:
     start = _number(line.get("start", 0), f"lines[{index}].start")
     raw = line.get("cues") if isinstance(line.get("cues"), list) else (line.get("mouthCues") or [])
     cues = []
-    for cue in raw if isinstance(raw, list) else []:
-        if not isinstance(cue, dict):
-            continue
-        state = kit_state(str(cue.get("value") or cue.get("shape") or cue.get("viseme") or ""), mapping, mouths)
-        begin, end = _number(cue.get("start"), "cue start"), _number(cue.get("end"), "cue end")
-        if state and end > begin:
+    for number, cue in enumerate(raw if isinstance(raw, list) else []):
+        label = f"lines[{index}].cues[{number}]"
+        sound = _sound(cue, label, mapping)
+        begin, end = _number(cue.get("start"), f"{label}.start"), _number(cue.get("end"), f"{label}.end")
+        if end < begin:
+            raise TalkError("invalid_cue", f"{label} ends ({end:g} s) before it starts ({begin:g} s); {CUE_DOC}")
+        state = kit_state(sound, mapping, mouths)
+        if state and end > begin:          # a kit without that drawing, or a zero-length cue, shows the mouth before it
             cues.append({"start": round(start + begin, 3), "end": round(start + end, 3), "state": state})
     return cues
 
 
 def blink_times(seed: str, duration: float) -> list[float]:
-    """A blink every 2.6-4.6 s, the same for the same seed (like the 2D series shots)."""
-    times, at, step = [], 0.9, 0
+    """A blink every 2.6-4.6 s, the same for the same seed. The first one falls 0.9-2.5 s in, also by seed: with a fixed first blink every
+    face of a scene (and of every shot, which starts at 0) closed its eyes at the same frame."""
+    first = hashlib.sha256(f"{seed}:first".encode()).digest()[0] / 255
+    times, at, step = [], 0.9 + 1.6 * first, 0
     while at < duration - 0.2 and len(times) < 400:
         times.append(round(at, 3))
         digest = hashlib.sha256(f"{seed}:{step}".encode()).digest()
@@ -79,12 +97,25 @@ def blink_times(seed: str, duration: float) -> list[float]:
     return times
 
 
+def pose_mouth_source(kit: dict, pose: str, state: str) -> str | None:
+    """The drawing ``pose`` shows for ``state`` (ui/src/lib/characterKit.ts characterKitMouthSource). Flat-rig warp
+    mouths are cut from each pose's own drawing (``anchors.<pose>.mouthSources``) and the kit's mouth holds the base
+    pose's: while it does, each pose shows its own and a pose without any shows none, never another pose's face."""
+    item = (kit.get("mouth") or {}).get(state) or {}
+    anchors = kit.get("anchors") or {}
+    rigged = ((anchors.get("base") or {}).get("mouthSources") or {}).get(state)
+    if rigged != item.get("source") or pose == "base":
+        return item.get("source")
+    return ((anchors.get(pose) or {}).get("mouthSources") or {}).get(state)
+
+
 def _ready_art(kit: dict, pose: str) -> tuple[dict, dict[str, str]]:
-    """The approved pose asset and the approved mouth drawings by state."""
+    """The approved pose asset and the approved mouth drawings by state, each the pose's own when it has them."""
     asset = kit.get("base") if pose == "base" else (kit.get("poses") or {}).get(pose)
     if not _approved(asset):
         raise TalkError("pose_not_ready", f"Character Kit {kit.get('name') or kit.get('id')} has no approved {pose} pose")
-    mouths = {state: item["source"] for state, item in (kit.get("mouth") or {}).items() if _approved(item)}
+    mouths = {state: pose_mouth_source(kit, pose, state) for state, item in (kit.get("mouth") or {}).items() if _approved(item)}
+    mouths = {state: source for state, source in mouths.items() if source}
     if not mouths:
         raise TalkError("mouths_not_ready", "Approve the kit's mouth drawings in the Face Rig before making it talk")
     return asset, mouths
@@ -101,7 +132,8 @@ def _blink(kit: dict, anchors: dict, duration: float) -> dict:
     eyes = (kit.get("eyes") or {}).get("blink")
     if not _approved(eyes):
         return {}
-    return {"blink": {"source": eyes["source"], "anchor": dict(anchors.get("eyes") or DEFAULT_BLINK)},
+    source = anchors.get("blinkSource") if isinstance(anchors.get("blinkSource"), str) else eyes["source"]
+    return {"blink": {"source": source, "anchor": dict(anchors.get("eyes") or DEFAULT_BLINK)},
             "blinks": blink_times(str(kit.get("id") or ""), duration)}
 
 
@@ -115,7 +147,8 @@ def talk_block(kit: dict, lines: list[dict], *, pose: str = "base", duration: fl
     per_state = {state: dict(anchor) for state, anchor in (anchors.get("mouthStates") or {}).items() if state in mouths}
     if per_state:
         talk["mouthAnchors"] = per_state
-    return {**talk, **(_blink(kit, anchors, duration) if blink else {})}
+    # A pose with hidden eyes (sunglasses) is marked ``blink: false`` by the rig and keeps them still.
+    return {**talk, **(_blink(kit, anchors, duration) if blink and anchors.get("blink") is not False else {})}
 
 
 def _audio(line: dict, index: int, workspace: str) -> dict | None:
@@ -157,10 +190,34 @@ def _replace_tracks(document: dict, prefix: str, lines: list[dict], workspace: s
     return [track["id"] for track in added]
 
 
+def _nine_mouths(kit: dict) -> None:
+    missing = [state for state in ("closed", "small", "wide", "round", "pressed", "medium", "pucker", "bite", "tongue")
+               if not _approved((kit.get("mouth") or {}).get(state))]
+    if missing:
+        raise TalkError("mouths_not_ready", "The kit needs nine approved mouths before it can talk on a model: " + ", ".join(missing))
+
+
+def _apply_model_face(document: dict, slot: dict, kit: dict, lines: list[dict], *, workspace: str, pose: str, blink: bool) -> dict:
+    """Same cues, blink and soundtrack as a cutout. The slot stays a model; the cap reads ``faceDecal.art``."""
+    _nine_mouths(kit)
+    talk = talk_block(kit, lines, pose=pose, duration=float(document.get("duration") or 10), blink=blink)
+    decal = slot["faceDecal"]
+    art = dict(decal.get("art") or {})
+    art.update({"mouths": talk["mouths"], "rest": talk["rest"], "cues": talk["cues"], "blinks": talk.get("blinks") or []})
+    decal["art"] = art
+    tracks = _replace_tracks(document, f"{TRACK_PREFIX}{slot.get('id')}-", lines, workspace)
+    character = slot.get("character") if isinstance(slot.get("character"), dict) else {}
+    slot["character"] = {**character, "id": str(kit.get("id")), "name": str(kit.get("name") or kit.get("id"))[:300]}
+    return {"objectId": slot.get("id"), "cues": len(talk["cues"]), "mouths": sorted(talk["mouths"]),
+            "blinks": len(talk.get("blinks") or []), "tracks": tracks, "talk": deepcopy(talk)}
+
+
 def apply_talk(document: dict, slot: dict, kit: dict, lines: list[dict], *, workspace: str, pose: str = "base", blink: bool = True) -> dict:
-    """Make an image object talk: its screen paints the kit, the soundtrack plays each line's audio."""
+    """Make an image object talk, or a model that already wears a 2D face (``world3d.scene.face``)."""
     if slot.get("media") != "image":
-        raise TalkError("not_a_cutout", f"Object {slot.get('id')} is {slot.get('media')}; a talking cutout needs an image object")
+        if slot.get("media") == "model3d" and isinstance(slot.get("faceDecal"), dict):
+            return _apply_model_face(document, slot, kit, lines, workspace=workspace, pose=pose, blink=blink)
+        raise TalkError("not_a_cutout", f"Object {slot.get('id')} is {slot.get('media')}; a talking cutout needs an image, or world3d.scene.face on a model first")
     talk = talk_block(kit, lines, pose=pose, duration=float(document.get("duration") or 10), blink=blink)
     tracks = _replace_tracks(document, f"{TRACK_PREFIX}{slot.get('id')}-", lines, workspace)
     _bind_screen(slot, kit, talk)

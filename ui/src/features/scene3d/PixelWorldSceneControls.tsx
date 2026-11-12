@@ -30,17 +30,17 @@ export function PixelWorldSceneControls({ kind, pixelWorld, onChange }: {
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="flex items-center justify-between gap-2">{t('pixelWorld.scene.body')}
-          <select value={scene.body} onChange={e => patch({ body: e.target.value as PixelScene['body'] })} className="min-h-9 rounded border border-border bg-bg-tertiary px-2">
+          <select aria-label={t('pixelWorld.scene.body')} value={scene.body} onChange={e => patch({ body: e.target.value as PixelScene['body'] })} className="min-h-9 rounded border border-border bg-bg-tertiary px-2">
             {(['moon', 'sun', 'planet', 'none'] as const).map(body => <option key={body} value={body}>{t(`pixelWorld.scene.bodyKind.${body}`)}</option>)}
           </select></label>
         <label className="flex items-center justify-between gap-2">{t('pixelWorld.scene.meteorDirection')}
-          <select value={scene.meteorDirection} onChange={e => patch({ meteorDirection: e.target.value as PixelScene['meteorDirection'] })} className="min-h-9 rounded border border-border bg-bg-tertiary px-2">
+          <select aria-label={t('pixelWorld.scene.meteorDirection')} value={scene.meteorDirection} onChange={e => patch({ meteorDirection: e.target.value as PixelScene['meteorDirection'] })} className="min-h-9 rounded border border-border bg-bg-tertiary px-2">
             {(['both', 'left', 'right'] as const).map(way => <option key={way} value={way}>{t(`pixelWorld.scene.meteor.${way}`)}</option>)}
           </select></label>
         {slidersFor(kind, scene).map(key => <label key={key} className="flex items-center justify-between gap-2">{t(`pixelWorld.scene.${key}`)}
           <input type="range" aria-label={t(`pixelWorld.scene.${key}`)} min={key === 'bodySize' ? .4 : 0} max={key === 'bodySize' ? 2.5 : 1} step={.01}
             value={scene[key]} onChange={e => patch({ [key]: e.target.valueAsNumber })} className="w-32" /></label>)}
-        <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={scene.reeds} onChange={e => patch({ reeds: e.target.checked })} />{t('pixelWorld.scene.reeds')}</label>
+        <label className="flex min-h-9 items-center gap-2"><input aria-label={t('pixelWorld.scene.reeds')} type="checkbox" checked={scene.reeds} onChange={e => patch({ reeds: e.target.checked })} />{t('pixelWorld.scene.reeds')}</label>
       </div>
       <p className="text-text-muted">{t('pixelWorld.scene.lightHelp')}</p>
     </div>
@@ -66,7 +66,7 @@ export function PixelWorldColorControls({ pixelWorld, onChange }: { pixelWorld: 
     <div className="mt-2 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2">{t('pixelWorld.colors.mood')}
-          <select value={mood} onChange={e => setChosen(e.target.value as PixelPaletteId)} className="min-h-9 rounded border border-border bg-bg-tertiary px-2">
+          <select aria-label={t('pixelWorld.colors.mood')} value={mood} onChange={e => setChosen(e.target.value as PixelPaletteId)} className="min-h-9 rounded border border-border bg-bg-tertiary px-2">
             {moods.map(id => <option key={id} value={id}>{t(`pixelWorld.palette.${id}`)}</option>)}
           </select></label>
         {colors && <button type="button" onClick={reset} className="min-h-9 rounded border border-border px-3 hover:bg-bg-hover">{t('pixelWorld.colors.reset')}</button>}

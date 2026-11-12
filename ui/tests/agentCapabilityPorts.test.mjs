@@ -31,6 +31,12 @@ const LEGACY_EXECUTE_ALLOWLIST = [
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
+  // Translation catalogs for Wizard replies and errors; no store, transport or execution port.
+  '../../i18n',
+  // Pure helper: the content language of new work follows the UI language.
+  '../../lib/contentLanguage',
+  // Pure sentence for a family's territory licence. No store write, transport or execution port.
+  '../../lib/licenceNotice',
   '../../stores/useStore',
   '../../types',
   '../comics/generateArtwork',
@@ -43,22 +49,47 @@ const AGENT_ACTIONS_IMPORTS = [
   './applicationAdapters',
   './capabilityRegistry',
   './capabilityRunner',
+  // Action type only. Execution stays on the characterAnimations adapter.
+  './characterAnimationCapabilities',
+  './characterFaceCapabilities',
   './characterKitActions',
   './commandContract',
+  // Action type only. Execution stays on the lipsyncRedo adapter.
+  './lipsyncRedoCapabilities',
+  // Action type only. Execution stays on the mediaTools adapter.
+  './mediaToolCapabilities',
   // Action type only. Execution stays on the productionWorks adapter.
   './productionWorkCapabilities',
+  // Action type only. Execution stays on the realCharacter adapter.
+  './realCharacterCapability',
+  // Action type only. Execution stays on the roomSets adapter.
+  './roomSetsCapabilities',
+  // Action type only. Execution stays on the seriesShots adapter.
+  './seriesShotCardCapabilities',
+  // Action types only. Execution stays on the seriesShots adapter.
+  './seriesShotEditCapabilities',
+  // Action type only. Execution stays on the seriesShots adapter.
+  './seriesStageCapabilities',
   './sfxPack',
   // Pure request filtering; no new UI/API/store-writing port is authorized.
   './storyVisualRequest',
   './storyWorkflowIdentity',
   './toolCapabilities',
+  // Action type only. Execution stays on the video2dTemplates adapter.
+  './video2dTemplateCapabilities',
   './videoEditorActions',
+  // Action type only. Execution stays on the characterKit adapter.
+  './voiceBandCapabilities',
   './wizardContext',
   './wizardIntent',
   // Pure validation/result formatting; no store, transport or execution port.
   './wizardTurnReport',
   // Action type only. Execution stays on the world3dTemplates adapter.
   './world3dTemplateCapabilities',
+  // Action type only. The plan runs through the same world3dTemplates adapter.
+  './world3dTemplatePlanCapability',
+  // Type only (ParseKeys for catalog progress keys).
+  'i18next',
 ]
 
 const LAB_ACTIONS_IMPORTS = [
@@ -205,7 +236,8 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 85) // speech_analysis_engine uses the Video3D adapter and shared native installer.
+  assert.equal(registered.length, 104) // plan_3d_templates uses the world3dTemplates adapter; make_real_character, make_character_face, blob_make and anime_make use the Character Kit and model3d doors; room_sets stores a metric room; speech_analysis_engine uses the Video3D adapter; set_voice_band and make_character_animation_set use the Character Kit adapter; the two stage actions use the Series stage adapter; lipsync_redo uses the lipsyncRedo adapter.
+  assert.ok(registered.some(item => item.name === 'set_voice_band'))
   assert.equal(legacy.length, 0)
 })
 

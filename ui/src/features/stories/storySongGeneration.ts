@@ -1,7 +1,7 @@
 import { compileProviderPrompt } from '../../lib/languageIntent'
 import * as api from '../../api/client'
 import type { MiniMaxMusicJob } from '../../api/stories'
-import { clampStoryMusicDuration, isLocalMusicModel } from './musicModel'
+import { clampStoryMusicDuration, isLocalMusicModel, paidMusicDisabledError } from './musicModel'
 import {
   buildPendingSongCandidate,
   patchSongCandidateFailed,
@@ -25,6 +25,7 @@ import {
   useStoryStore,
 } from './store'
 import type { StoryMusicCandidate, StoryMusicCue, StoryProject } from './types'
+import i18n from '../../i18n'
 
 export interface GenerateStoryCueSongInput {
   workspace: string
@@ -32,6 +33,8 @@ export interface GenerateStoryCueSongInput {
   cueId: string
   actor: 'user' | 'wizard'
   capability?: string
+  /** The person confirmed the paid MiniMax API cost in Story Lab; without it no paid request is sent. */
+  paidMusicConfirmed?: boolean
   onJobSubmitted?: (job: MiniMaxMusicJob) => void | Promise<void>
   onProgress?: (job: MiniMaxMusicJob) => void | Promise<void>
 }
@@ -97,7 +100,7 @@ function requireSavedCandidate(
   jobId?: string,
 ): GenerateStoryCueSongResult {
   const candidate = cueCandidate(project, cueId, candidateId)
-  if (!candidate) throw new Error('Story Lab guardó la canción sin devolver el candidato generado.')
+  if (!candidate) throw new Error(i18n.t('storyLab:errors.songSavedWithoutCandidate'))
   return {
     project,
     cueId,
@@ -125,7 +128,7 @@ async function persistCueCandidate(
     projectId,
     source => {
       const latestCue = source.music.cues.find(item => item.id === cueId)
-      if (!latestCue) throw new Error('El cue desapareció mientras se generaba el audio.')
+      if (!latestCue) throw new Error(i18n.t('storyLab:errors.cueDisappeared'))
       const existing = latestCue.candidates.find(item => item.id === candidateId)
       const candidate = patch(source)
       const next = upsertCueMusicCandidate(
@@ -176,21 +179,22 @@ async function persistCueCandidate(
 }
 
 function requireOpenCue(project: StoryProject | undefined, cueId: string): { project: StoryProject; cue: StoryMusicCue } {
-  if (!project) throw new Error('La historia activa desapareció antes de generar la canción.')
+  if (!project) throw new Error(i18n.t('storyLab:errors.storyDisappearedBeforeSong'))
   const cue = project.music.cues.find(item => item.id === cueId)
-  if (!cue) throw new Error(`No existe el cue con ID “${cueId}” en “${project.title}”.`)
-  if (!cue.style.trim()) throw new Error(`“${cue.title}” necesita un estilo musical antes de generarse.`)
+  if (!cue) throw new Error(i18n.t('storyLab:errors.cueMissingById', { cueId, title: project.title }))
+  if (!cue.style.trim()) throw new Error(i18n.t('storyLab:errors.cueNeedsStyle', { title: cue.title }))
   if (!cue.instrumental && !cue.lyrics.trim()) {
-    throw new Error(`“${cue.title}” necesita letra antes de generarse.`)
+    throw new Error(i18n.t('storyLab:errors.cueNeedsLyrics', { title: cue.title }))
   }
   const blocked = musicCueBlock(cue, project.music.model)
   if (blocked?.key === 'music.promptOverLimit') {
-    throw new Error(
-      `“${cue.title}” supera el límite de ${musicPromptLimit(project.music.model)} caracteres del modelo seleccionado.`,
-    )
+    throw new Error(i18n.t('storyLab:errors.cuePromptOverLimit', {
+      title: cue.title,
+      limit: musicPromptLimit(project.music.model),
+    }))
   }
   if (blocked?.key === 'notice.needsSectionTags') {
-    throw new Error(`“${cue.title}” necesita etiquetas de sección compatibles con MiniMax antes de generarse.`)
+    throw new Error(i18n.t('storyLab:errors.cueNeedsSectionTags', { title: cue.title }))
   }
   return { project, cue }
 }
@@ -261,11 +265,13 @@ async function generateLocalStorySong(
     duration_seconds: clampStoryMusicDuration(cue.durationSeconds, project.music.model),
     model_type: project.music.model,
     workspace: input.workspace,
-    initiator: `Story Lab · ${project.projectType === 'music_video' ? 'Videoclip' : 'Story song'}`,
+    initiator: `Story Lab · ${project.projectType === 'music_video'
+      ? i18n.t('storyLab:replies.initiatorMusicVideo')
+      : i18n.t('storyLab:replies.initiatorStorySong')}`,
     provenance: songGenerationProvenance(input, pending.id, version),
   })
   if (!rendered.filename || !rendered.audio_path) {
-    throw new Error('El modelo local terminó sin devolver un archivo de audio verificable.')
+    throw new Error(i18n.t('storyLab:errors.localModelNoAudio'))
   }
   const saved = await persistReadyCandidate(input, pending, {
     filename: rendered.filename,
@@ -335,6 +341,7 @@ async function generateRemoteStorySong(
       instrumental: cue.instrumental,
       count: 1,
       model,
+      paid_music_confirmed: true,
       workspace: input.workspace,
       idempotency_key: storySongIdempotencyKey(
         input.workspace,
@@ -346,7 +353,7 @@ async function generateRemoteStorySong(
     }, watchers)
   const rendered = result.candidates[0]
   if (!rendered?.filename || !rendered.source) {
-    throw new Error(result.message || 'MiniMax Music terminó sin devolver un archivo de audio verificable.')
+    throw new Error(result.message || i18n.t('storyLab:errors.minimaxNoAudio'))
   }
   const saved = await persistReadyCandidate(input, pending, {
     filename: rendered.filename,
@@ -392,6 +399,16 @@ function resolvePendingCandidate(
   }
 }
 
+/** A new paid request needs the person's confirmation; watching a job they already started does not. */
+function requirePaidMusicConfirmation(
+  input: GenerateStoryCueSongInput,
+  model: StoryProject['music']['model'],
+  pending: StoryMusicCandidate,
+): void {
+  if (isLocalMusicModel(model) || input.paidMusicConfirmed === true || pending.provenance?.jobId?.trim()) return
+  throw paidMusicDisabledError(model)
+}
+
 function cueSongKey(input: GenerateStoryCueSongInput): string {
   return `${input.workspace}:${input.projectId}:${input.cueId}`
 }
@@ -401,6 +418,7 @@ async function generateStoryCueSongOnce(
 ): Promise<GenerateStoryCueSongResult> {
   const { project, cue } = requireOpenCue(useStoryStore.getState().projects[input.projectId], input.cueId)
   const minted = resolvePendingCandidate(input, project, cue)
+  requirePaidMusicConfirmation(input, project.music.model, minted.pending)
   if (!minted.reused) {
     await persistCueCandidate(input.workspace, input.projectId, input.cueId, minted.candidateId, () => minted.pending)
   }

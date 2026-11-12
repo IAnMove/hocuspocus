@@ -1,5 +1,7 @@
 import * as api from '../api/client'
+import { contentLanguageForUi } from './contentLanguage'
 import { useStore } from '../stores/useStore'
+import { PREFERRED_SPEECH_MODEL } from './preferredModels'
 import { generateImageAsset } from './imageGeneration'
 import type { SceneRecipe, SceneRecipeAsset, SceneRecipeAudio } from './sceneRecipe'
 import { aspectRatioForScene, h3FramesForDuration, h3ResolutionForScene, recipeAssetDuration, recipeAudioDuration } from './sceneRecipe'
@@ -103,7 +105,7 @@ async function resolveVideo(asset: SceneRecipeAsset, recipe: SceneRecipe, onStat
     resolution: h3ResolutionForScene(recipe.scene.width || 1280, recipe.scene.height || 720),
     video_length: h3FramesForDuration(recipeAssetDuration(recipe, asset.id)),
     generation_mode: 'video',
-    spoken_language: 'Español de España',
+    spoken_language: contentLanguageForUi().spokenLanguage,
   })
   const status = await pollUntil(
     `H3 “${asset.id}”`,
@@ -167,7 +169,7 @@ async function resolveModel(asset: SceneRecipeAsset, workspace: string, onStatus
 }
 
 const RECIPE_AUDIO_DEFAULT_MODELS: Record<SceneRecipeAudio['kind'], string> = {
-  speech: 'qwen3_tts_voicedesign',
+  speech: PREFERRED_SPEECH_MODEL,
   sfx: 'mmaudio_v2',
   music: 'ace_step_v1_5_xl_sft_lm_4b',
   audio: 'mmaudio_v2',

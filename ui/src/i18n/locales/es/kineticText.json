@@ -49,16 +49,14 @@
   "lyricsPaste": "Pega LRC, SRT o letra suelta",
   "lyricsImport": "Importar letra",
   "finishTitle": "Acabado",
-  "finishWarm": "Cine cálido",
-  "finishDoc": "Documental antiguo",
-  "finishNeon": "Neón nocturno",
-  "finishPaper": "Papel / cómic",
-  "finishRiso": "Prensa riso",
+  "finishes": { "warmCinema": "Cine cálido", "oldDoc": "Documental antiguo", "nightNeon": "Neón nocturno", "paperComic": "Papel / cómic", "risoPress": "Prensa riso", "natural": "Natural", "teal_orange": "Verde azulado y naranja", "bleach": "Blanqueo", "noir": "Cine negro", "sepia": "Sepia", "flashback": "Recuerdo", "dream": "Sueño", "giallo": "Giallo", "cold": "Frío", "warm": "Cálido", "vhs": "VHS", "film": "Película" },
   "finishClear": "Quitar acabado",
   "finalPreview": "Vista final",
   "pathTitle": "Trayectoria",
   "pathAdd": "Añadir una curva",
   "pathOrient": "Orientar con la tangente",
   "sequenceSources": "Fotogramas, una URL por línea",
-  "rhythmLive": "Guardar el ritmo en la escena"
+  "rhythmLive": "Guardar el ritmo en la escena",
+  "templates": { "lower-third-date": "Rótulo inferior con fecha", "chorus-banner": "Pancarta de estribillo", "title-card": "Tarjeta de título", "end-card": "Tarjeta final", "year-counter": "Contador de años", "quote": "Cita", "trailer-slam": "Golpes de tráiler", "chapter": "Título de capítulo", "social-caption": "Subtítulo social", "ransom": "Nota de rescate", "dymo": "Etiqueta Dymo", "card": "Tarjeta", "desktop": "Escritorio" },
+  "fields": { "date": "Fecha", "caption": "Pie", "line": "Línea", "title": "Título", "subtitle": "Subtítulo", "cta": "Llamada a la acción", "from": "Desde", "to": "Hasta", "label": "Etiqueta", "quote": "Cita", "author": "Autor", "lines": "Palabras (separadas por |)", "kicker": "Antetítulo", "background": "Cinta (paper o dark)", "theme": "Tema", "layout": "Disposición", "apps": "Aplicaciones", "focus": "Ventana activa", "workspace": "Espacio de trabajo", "switch": "Cambio de espacio" }
 }

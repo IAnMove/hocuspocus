@@ -11,11 +11,11 @@ from urllib.parse import quote
 
 
 ROOT = Path(__file__).parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
+LISTING = ROOT / "app" / "services" / "output_listing.py"
 
 
 def load_list_outputs(namespace: dict):
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+    tree = ast.parse(LISTING.read_text(encoding="utf-8"), filename=str(LISTING))
     node = copy.deepcopy(next(
         item for item in tree.body
         if isinstance(item, ast.FunctionDef) and item.name == "list_outputs"
@@ -23,10 +23,10 @@ def load_list_outputs(namespace: dict):
     node.decorator_list = []
     module = ast.Module(body=[node], type_ignores=[])
     ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
+    exec(compile(module, str(LISTING), "exec"), namespace)
 
 
-def list_test_outputs(tmp_path, favorites=(), **kwargs):
+def list_test_outputs(tmp_path, favorites=(), cache=None, **kwargs):
     namespace = {
         "os": os,
         "re": re,
@@ -38,9 +38,10 @@ def list_test_outputs(tmp_path, favorites=(), **kwargs):
         "wgp": SimpleNamespace(server_config={"save_path": str(tmp_path)}),
         "_workspace_dir": lambda workspace=None: str(tmp_path),
         "_load_favorites": lambda: set(favorites),
-        "_output_scan_cache": {},
+        "_output_scan_cache": {} if cache is None else cache,
         "_output_scan_cache_lock": threading.Lock(),
         "_OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS": 5.0,
+        "_OUTPUT_SCAN_QUIET_NS": 1_000_000_000,
     }
     load_list_outputs(namespace)
 
@@ -48,6 +49,17 @@ def list_test_outputs(tmp_path, favorites=(), **kwargs):
         headers = {}
 
     return namespace["list_outputs"](Response(), **kwargs)["outputs"]
+
+
+def test_scan_snapshot_waits_for_a_quiet_directory(tmp_path):
+    (tmp_path / "a.png").write_bytes(b"a")
+    cache: dict = {}
+    list_test_outputs(tmp_path, cache=cache)
+    assert cache == {}, "a directory touched a moment ago may still gain files in the same clock tick"
+    old = time.time() - 60
+    os.utime(tmp_path, (old, old))
+    list_test_outputs(tmp_path, cache=cache)
+    assert len(cache) == 1
 
 
 def test_output_list_exposes_exact_sidecar_completion_time(tmp_path):

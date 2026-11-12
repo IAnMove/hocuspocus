@@ -17,6 +17,17 @@ test('SFX submit uses MMAudio prompt and does not keep leftover lyrics', () => {
   assert.equal(params.duration_seconds, 8)
 })
 
+test('text-only SFX submit sends the 1-20 s its slider can show', () => {
+  const submit = (durationSeconds: number, extra: Record<string, unknown> = {}) => applyStudioSfxSubmitParams(
+    { model_type: 'mmaudio_v2', MMAudio_prompt: 'whoosh', ...extra },
+    { generationMode: 'audio', audioSubMode: 'sfx', durationSeconds },
+  ).duration_seconds
+  assert.equal(submit(60), 20, 'a Speech duration left over in the store')
+  assert.equal(submit(0), 1, 'a DramaBox "auto" duration left over in the store')
+  assert.equal(submit(8), 8)
+  assert.equal(submit(60, { video_guide: '/api/v1/uploads/clip.mp4' }), 60, 'with a video guide the clip sets the length')
+})
+
 test('Speech submit maps character names to Speaker N and keeps guides', () => {
   const params = applyStudioSpeechSubmitParams(
     { prompt: 'Alice: hello\nBob: hi', model_type: 'multitalk' },
@@ -38,6 +49,24 @@ test('Speech submit maps character names to Speaker N and keeps guides', () => {
   assert.equal(params.audio_guide2, '/voices/b.wav')
   assert.equal(params.duration_seconds, 20)
   assert.equal(params.sliding_window_size, undefined)
+})
+
+test('Drama keeps literal speech and its selected reference when older voice slots remain in the form', () => {
+  const state = { generationMode: 'audio', audioSubMode: 'speech', durationSeconds: 60,
+    ttsVoiceCount: 2, ttsVoices: [{ name: 'Alice', path: '/old/a.wav' }, { name: 'Bob', path: '/old/b.wav' }],
+    modelOptions: { audio_only: true, default_num_inference_steps: 0 } }
+  const clone = applyStudioSpeechSubmitParams({ model_type: 'drama3_base', prompt: 'Alice: Hola.',
+    audio_guide: '/selected/reference.flac', audio_guide2: '/old/b.wav', alt_prompt: 'Original words.' }, state)
+  assert.equal(clone.prompt, 'Alice: Hola.')
+  assert.equal(clone.audio_guide, '/selected/reference.flac')
+  assert.equal(clone.audio_guide2, undefined)
+  assert.equal(clone._tts_voice_count, 0)
+  assert.equal(clone.alt_prompt, 'Original words.')
+  assert.equal(clone.audio_prompt_type, 'A')
+  const design = applyStudioSpeechSubmitParams({ model_type: 'drama3_voicedesign', prompt: 'Hello.',
+    audio_guide: '/old/a.wav' }, state)
+  assert.equal(design.audio_guide, undefined)
+  assert.equal(design.audio_prompt_type, '')
 })
 
 test('audio dispatcher stamps sub-mode and leaves video untouched', () => {

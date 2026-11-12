@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { musicProductionFileUrl } from './fileUrl'
@@ -138,19 +139,19 @@ function ReviewShot({
     <p className="text-[11px] text-text-secondary">{t('musicProductions.framePrompt')}: {shot.frame_prompt || '—'}</p>
     <p className="text-[11px] text-text-secondary">{t('musicProductions.action')}: {shot.action || '—'}</p>
     <div className="flex flex-wrap gap-1">
-      <button type="button" className={buttonClass} disabled={busy} onClick={onApprove}>{t('musicProductions.approve')}</button>
+      <button type="button" className={buttonClass} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={onApprove}>{t('musicProductions.approve')}</button>
       <button type="button" className={buttonClass} disabled={busy || !shot.scene_doc} onClick={() => shot.scene_doc && onOpenScene(shot.scene_doc)}>
         {t('musicProductions.openScene')}
       </button>
       <button type="button" className={buttonClass} disabled={busy || locked || !shot.review?.history_id} onClick={onUndo}>{t('musicProductions.undo')}</button>
-      <button type="button" className={buttonClass} disabled={busy} onClick={() => onLock(shot.key, !locked)}>
+      <button type="button" className={buttonClass} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onLock(shot.key, !locked)}>
         {locked ? t('musicProductions.unlock') : t('musicProductions.lock')}
       </button>
     </div>
     <TakeList shot={shot} busy={busy} onUseTake={onUseTake} />
     <label className="flex flex-col gap-1 text-[11px] text-text-secondary" htmlFor="shot-review-note">
       {t('musicProductions.instruction')}
-      <textarea id="shot-review-note" className="rounded border border-border bg-bg-secondary p-2 text-xs text-text-primary" value={instruction} onChange={event => onInstruction(event.target.value)} />
+      <textarea aria-label={t('musicProductions.instruction')} id="shot-review-note" className="rounded border border-border bg-bg-secondary p-2 text-xs text-text-primary" value={instruction} onChange={event => onInstruction(event.target.value)} />
     </label>
     <button type="button" className={buttonClass} disabled={busy || !instruction.trim()} onClick={onAsk}>{t('musicProductions.requestChange')}</button>
     {plan ? <PlanDiff plan={plan} busy={busy} onApply={onApply} /> : null}
@@ -163,7 +164,7 @@ function TakeList({ shot, busy, onUseTake }: { shot: MusicProductionShot; busy?:
   if (takes.length === 0) return null
   return <div className="flex flex-col gap-1">
     <span className="text-[11px] text-text-secondary">{t('musicProductions.otherTake')}</span>
-    {takes.map(take => <button key={take.file} type="button" className={buttonClass} disabled={busy} onClick={() => onUseTake(shot.key, take.file)}>
+    {takes.map(take => <button key={take.file} type="button" className={buttonClass} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onUseTake(shot.key, take.file)}>
       {t('musicProductions.useTake')} {take.file}
     </button>)}
   </div>
@@ -177,6 +178,6 @@ function PlanDiff({ plan, busy, onApply }: { plan: ReviewPlan; busy?: boolean; o
     <p className="text-xs text-text-primary">{plan.plan?.summary || ''}</p>
     <pre className="overflow-auto text-[11px] text-text-secondary">{JSON.stringify(plan.diff || [], null, 2)}</pre>
     <p className="text-[11px] text-text-secondary">{t('musicProductions.cost')}: {cost?.image_jobs ?? 0} / {cost?.clip_jobs ?? 0} / {cost?.scene_exports ?? 0}</p>
-    <button type="button" className={buttonClass} disabled={busy} onClick={onApply}>{t('musicProductions.applyPlan')}</button>
+    <button type="button" className={buttonClass} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={onApply}>{t('musicProductions.applyPlan')}</button>
   </section>
 }

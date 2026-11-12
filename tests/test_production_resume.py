@@ -387,6 +387,26 @@ def test_resume_repeats_a_crashed_animatic_not_a_full_gpu_run(tmp_path, monkeypa
     assert resume_through({}) == "all"
 
 
+def test_internal_resume_uses_server_context_without_external_mcp_access(tmp_path, monkeypatch):
+    from services.agent_activity import current_actor, is_external_agent
+    from services.local_mcp import LocalMcp
+
+    seen = []
+    local = LocalMcp(lambda: {"demo": lambda _: seen.append((current_actor(), is_external_agent())) or {}})
+    monkeypatch.setattr(Production, "run", lambda self, *args: self.mcp("demo", {}))
+    monkeypatch.setattr(music_production, "loopback_mcp", lambda *_: pytest.fail("internal resume must not use HTTP"))
+    workspace = tmp_path / "preview"
+    _running(workspace, "show", auto_resume=True, through="animatic")
+    workspace_dir, uploads_dir = _dirs(tmp_path)
+    try:
+        assert resume_on_startup(lambda: [{"name": "preview", "path": str(workspace)}], workspace_dir, uploads_dir,
+                                 lambda: "", lambda: "", mcp=local.call) == ["preview/show"]
+        music_production._threads["preview/show"].join(timeout=2)
+    finally:
+        _forget("preview/show")
+    assert seen == [("server", False)]
+
+
 def test_a_running_production_that_did_not_ask_to_resume_stays_stopped(tmp_path, monkeypatch):
     monkeypatch.setattr(Production, "run", lambda self, spec, retake=(), through="all": None)
     workspace = tmp_path / "quiet"

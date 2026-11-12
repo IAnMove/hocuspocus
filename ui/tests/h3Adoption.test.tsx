@@ -69,3 +69,61 @@ test('catalog labels preserve unrelated models and do not infer measurements for
     assert.doesNotMatch(view.container.textContent ?? '', /GiB/)
   } finally { cleanup() }
 })
+
+test('FastH3 is a fixed 8-step distilled model, not the fused fast mode', async () => {
+  const { H3ModelInfo, H3ModelName } = await import('../src/components/Sidebar/H3ModelInfo.tsx')
+  const { h3FramesModelId, h3FusedStepRange } = await import('../src/lib/h3Catalog.ts')
+  try {
+    const name = render(<H3ModelName modelType="minimax_h3_fasth3_v2" fallback="FastH3 V2" />)
+    assert.equal(name.container.textContent, 'FastH3 V2')
+    cleanup()
+    const view = render(<H3ModelInfo modelType="minimax_h3_fasth3_v2" />)
+    const text = view.container.textContent ?? ''
+    assert.match(text, /8 steps|8 pasos/)
+    assert.match(text, /not measured|No se midió/)
+    assert.doesNotMatch(text, /GiB/)
+  } finally { cleanup() }
+  assert.deepEqual(h3FusedStepRange('minimax_h3_fasth3_trim'), { min: 8, max: 8, fallback: 8 })
+  assert.deepEqual(h3FusedStepRange('minimax_h3_fused_turbo'), { min: 4, max: 8, fallback: 4 })
+  assert.equal(h3FramesModelId('minimax_h3_fasth3_trim'), 'minimax_h3_fasth3_trim')
+  assert.equal(h3FramesModelId('minimax_h3_ref2va_fused_turbo'), 'minimax_h3_fused_turbo')
+})
+
+test('FastH3 offers dense attention by default while fused keeps SLA', () => {
+  const before = useStore.getState()
+  const select = (view: ReturnType<typeof render>) =>
+    view.getByLabelText(/Attention|Atención/) as HTMLSelectElement
+  try {
+    useStore.setState({ modelOptions: { ...before.modelOptions, minimax_h3_fused_turbo: true, minimax_h3_fasth3: true } as typeof before.modelOptions,
+      params: { ...before.params, model_type: 'minimax_h3_fasth3_v2', override_attention: '' } })
+    let view = render(<H3PromptControls />)
+    assert.equal(select(view).value, '')
+    assert.deepEqual([...select(view).options].map(option => option.value), ['', 'sdpa', 'sla'])
+    cleanup()
+    useStore.setState({ modelOptions: { ...before.modelOptions, minimax_h3_fused_turbo: true, minimax_h3_fasth3: false } as typeof before.modelOptions,
+      params: { ...before.params, model_type: 'minimax_h3_fused_turbo', override_attention: '' } })
+    view = render(<H3PromptControls />)
+    assert.equal(select(view).value, 'sla')
+    assert.deepEqual([...select(view).options].map(option => option.value), ['sdpa', 'sla'])
+  } finally { cleanup(); useStore.setState(before) }
+})
+
+test('FastH3 entries are added to existing installs once', async () => {
+  const { DEFAULT_ENABLED_MODELS, DEFAULTS_ADDED_IN, DEFAULTS_VERSION } = await import('../src/stores/modelVisibility.ts')
+  for (const modelType of ['minimax_h3_fasth3_v2', 'minimax_h3_fasth3_trim']) {
+    assert.ok(DEFAULT_ENABLED_MODELS.has(modelType), modelType)
+    assert.ok(DEFAULTS_ADDED_IN[DEFAULTS_VERSION].includes(modelType), modelType)
+  }
+})
+
+test('switching to FastH3 clears SLA and Sol, keeps SDPA, and fused still forces SLA', async () => {
+  const { h3ModelSwitchSettings } = await import('../src/lib/h3OptionalSettings.ts')
+  const base = { ...useStore.getState().params, model_type: 'minimax_h3' }
+  const attention = (override: string, target: string) =>
+    h3ModelSwitchSettings({ ...base, override_attention: override } as typeof base, target).override_attention
+  assert.equal(attention('sla', 'minimax_h3_fasth3_v2'), undefined)
+  assert.equal(attention('sol', 'minimax_h3_fasth3_trim'), undefined)
+  assert.equal(attention('sdpa', 'minimax_h3_fasth3_v2'), 'sdpa')
+  assert.equal(attention('', 'minimax_h3_fused_turbo'), 'sla')
+  assert.equal(attention('sol', 'minimax_h3'), 'sol')
+})

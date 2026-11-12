@@ -191,7 +191,7 @@ UI mapping: `ui/src/lib/galleryListQuery.ts`. Completing a clip shows a toast in
 - Probe/export with a gallery URL that still has `?workspace=` → `Video source could not be found`.
 - Expecting a Video Editor export under Videoclips/Tráilers/Capítulos → it will not appear; those tabs only list assembled mixes.
 - Rejoin with fewer than 2 clips → rejected.
-- Director rejoin while the pipeline is active → `409` `Pipeline is still active; try again shortly.`
+- Director rejoin while a job is still running → `409` `Pipeline is still active: job <id> is running (<stage>).` A finished run with no live job does not answer 409.
 - Soft join + driving soundtrack → hard concat; the freeze/crossfade path is skipped on purpose so lyrics stay locked to the song.
 - `result_kind` on `GET /api/v1/outputs` is **computed at list time**. Changing a sidecar without an assembled filename will not reclassify a component clip.
 

@@ -78,6 +78,8 @@ export async function encodeWorld3DFrames(options: {
   paint: (seconds: number) => HTMLCanvasElement | Promise<HTMLCanvasElement>
   onProgress?: (index: number, count: number) => void
   overlay?: (context: CanvasRenderingContext2D, width: number, height: number, seconds: number) => void
+  /** Optional last touch of the composited frame. Omitted, the encoder does not read the pixels back. */
+  decorate?: (context: CanvasRenderingContext2D, width: number, height: number, seconds: number) => void
   signal?: AbortSignal
 }): Promise<Blob> {
   throwIfAborted(options.signal)
@@ -114,6 +116,7 @@ export async function encodeWorld3DFrames(options: {
       const source = await options.paint(plan.times[index] ?? 0)
       context.drawImage(source, 0, 0, size.width, size.height)
       options.overlay?.(context, size.width, size.height, plan.times[index] ?? 0)
+      options.decorate?.(context, size.width, size.height, plan.times[index] ?? 0)
       await nextPaint()
       throwIfAborted(options.signal)
       const frame = new VideoFrame(copy, { timestamp: index * frameDurationUs, duration: frameDurationUs })

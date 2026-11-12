@@ -71,7 +71,7 @@ export interface ResolvedModelCatalog {
 const IMAGE_FAMILIES = new Set(['flux', 'flux2', 'qwen', 'z_image', 'krea2', 'hidream', 'minimax'])
 const IMAGE_ARCH = /^(flux|pi_flux2|qwen_image|z_image|krea2|hidream|minimax_image)/
 const MUSIC_ARCH = /^(ace_step|minimax_music|heartmula|yue2)/
-const SPEECH_ARCH = /^(chatterbox|qwen3_tts|kugelaudio|index_tts2|auk)/
+const SPEECH_ARCH = /^(chatterbox|qwen3_tts|voxcpm2|drama3|kugelaudio|index_tts2|auk)/
 const TALKING = /multitalk|infinitetalk|fantasy|avatar|steadydancer|longcat_avatar|animate/
 const VIDEO_EDIT = /lucy_edit|kiwi_edit|chrono_edit|viggle|scail|recast|wanmove/
 const VIDEO_CONTROL = /vace|standin|mocha|phantom|sky_df|recam|fun_inp|lynx/
@@ -90,7 +90,7 @@ const VARIANT_TOKENS: Array<[ModelVariant, string[]]> = [
 ]
 
 const EXACT_REQUIREMENTS: Record<string, CatalogRequirements> = {
-  trellis2: { vram_gb: 24, ram_gb: 32 },
+  trellis2: { vram_gb: 24, ram_gb: 32, storage_gb: 40 },
   pixal3d: { vram_gb: 12, ram_gb: 16 },
   unirig: { vram_gb: 8, ram_gb: 16 },
   'hunyuan3d-2.1': { vram_gb: 10, ram_gb: 16 },
@@ -103,6 +103,9 @@ const ARCH_REQUIREMENTS: Array<[string, CatalogRequirements]> = [
   ['minimax_music3', { vram_gb: 24, ram_gb: 32, storage_gb: 28, comfortable_vram_gb: 24 }],
   ['h3_advanced', { vram_gb: 24, ram_gb: 32, comfortable_vram_gb: 24 }],
   ['minimax_h3', { vram_gb: 24, ram_gb: 32, comfortable_vram_gb: 24 }],
+  // INT8 assets; Drama keeps its experts in system RAM (upstream guidance).
+  ['drama3', { vram_gb: 8, ram_gb: 48, storage_gb: 41, comfortable_vram_gb: 24 }],
+  ['flux3', { storage_gb: 11 }],
   ['flux2_klein_4b', { vram_gb: 6, ram_gb: 16 }],
   ['flux2_klein_9b', { vram_gb: 8, ram_gb: 16 }],
   ['pi_flux2', { vram_gb: 8, ram_gb: 32, comfortable_vram_gb: 16 }],
@@ -155,6 +158,7 @@ const ARCH_REQUIREMENTS: Array<[string, CatalogRequirements]> = [
   ['heartmula', { vram_gb: 6, ram_gb: 16 }],
   ['chatterbox', { vram_gb: 4, ram_gb: 16 }],
   ['qwen3_tts', { vram_gb: 6, ram_gb: 16 }],
+  ['voxcpm2', { vram_gb: 8, ram_gb: 16, storage_gb: 5 }],
   ['kugelaudio', { vram_gb: 6, ram_gb: 16 }],
   ['index_tts2', { vram_gb: 8, ram_gb: 16 }],
   ['mmaudio', { vram_gb: 6, ram_gb: 16 }],
@@ -215,6 +219,7 @@ function meshCapability(model: ModelCatalogInput): ModelCapability {
 }
 
 function imageCapability(model: ModelCatalogInput): ModelCapability {
+  if (model.model_type === 'flux3_klein_edit' || model.architecture === 'flux3_klein_edit') return 'imageEdit'
   if (detectVariant(model) === 'edit') return 'imageEdit'
   if ((model.architecture || '').startsWith('qwen_image_21') || model.model_type.startsWith('qwen_image_21')) {
     return 'imageEdit'
@@ -313,8 +318,14 @@ export function resolveModelCatalog(model: ModelCatalogInput): ResolvedModelCata
   return { variant, capability, ...merged }
 }
 
-/** Badge VRAM. H3 keeps its measured-memory block instead of a typical minimum. */
+/** A model that runs on a provider's server (MiniMax Image-01): no GPU and no files to download. */
+export function isRemoteModel(model: { resource_requirements?: { tier?: string } | null }): boolean {
+  return model.resource_requirements?.tier === 'remote'
+}
+
+/** Badge VRAM. H3 keeps its measured-memory block instead of a typical minimum. A remote model needs none. */
 export function catalogVramGb(model: ModelCatalogInput): number | undefined {
+  if (isRemoteModel(model)) return undefined
   if (h3CatalogEntry(model.model_type)) return model.resource_requirements?.vram_gb
   return resolveModelCatalog(model).requirements.vram_gb
 }

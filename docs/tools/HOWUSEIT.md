@@ -197,6 +197,39 @@ Accepted immediately with `job_id`, `task_id`, `root_task_id`, and frozen
 `generation_details.model_type: rembg-u2net`. The sidecar records source
 lineage, timings and transparency metrics (`width`, `height`, `alpha`).
 
+### Auto skip on an already-transparent PNG
+
+`image.remove_background` (MCP tool and `POST /api/v1/image/remove-background`,
+version 1) is the typed path Wizard and agents use. It is not the native
+Tools job above.
+
+```bash
+curl -X POST "$HOCUSPOCUS_URL/api/v1/image/remove-background" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": 1,
+    "intent_id": "cutout-001",
+    "input": {
+      "workspace": "default",
+      "source": "/api/v1/file/figure.png?workspace=default",
+      "method": "auto",
+      "crop": true
+    }
+  }'
+```
+
+| `method` | Effect |
+|---|---|
+| `auto` (default) | If **at least 1 %** of pixels have alpha below 250, copy the picture to a new `{stem}.no-background-<8hex>.png`, record `method: background_already_removed`, and skip rembg. Otherwise pick `screen` when the border is a keyed colour, else `u2net`. |
+| `u2net` | Always run rembg, even on a PNG that already has holes. |
+| `screen` | Green/blue/magenta key (`input.screen`, or the detected border). |
+
+The source file is never overwritten. `crop: true` then tightens the bbox
+(same margin as game cutouts). Replay the same `intent_id` after a lost
+answer. Explicit U2Net or screen requests, and the native Tools video path,
+still segment as before. `instruction` on the native job remains metadata
+only; U2Net does not read it.
+
 For video, choose a clip in the same source selector or supply a video asset ID.
 The app removes the background from each frame, refines foreground colors at
 the edges and gently stabilizes small matte changes. It writes a new **WebM with
@@ -240,6 +273,10 @@ The source file is left in place.
 - Revoice on an image is rejected by both the panel and the HTTP
   `expected_kinds=("video",)` gate.
 - `instruction` will not “preserve hair.” It is stored, not consumed.
+- `method: "auto"` on `image.remove_background` will not re-matte a PNG that
+  already has transparency (≥ 1 % of pixels with alpha < 250). Use
+  `method: "u2net"` if you really want another pass. The skip still writes a
+  **new** file and tags `background_already_removed`.
 - Two different `source` / `video_path` values fail with `409`, not a silent
   pick-one.
 - Gallery URLs look like `/api/v1/file/clip.mp4?workspace=default`. Keep the

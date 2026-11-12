@@ -12,15 +12,15 @@ import {
 import {
   describeTemplateComponents,
   templateComponentPrompt,
-  TEMPLATE_SLOT_LABELS,
+  templateSlotLabels,
 } from '../src/features/sceneTemplates/componentContract.ts'
 import { MUSIC_MOTION_TEMPLATES } from '../src/features/sceneTemplates/musicMotionCatalog.ts'
 
 const keys = contract => contract.components.map(component => component.key)
 
-test('resuelve las 24 plantillas legacy y las 24 musicales sin mezclar roles', () => {
-  assert.equal(CANDIDATE_SCENE_TEMPLATES.length, 24)
-  assert.equal(MUSIC_MOTION_TEMPLATES.length, 24)
+test('resuelve las 48 fichas con un solo vocabulario de slots', () => {
+  assert.equal(CANDIDATE_SCENE_TEMPLATES.length, 17)
+  assert.equal(MUSIC_MOTION_TEMPLATES.length, 22)
   assert.equal(ALL_SCENE_TEMPLATES.length, 48)
 
   for (const template of ALL_SCENE_TEMPLATES) {
@@ -28,8 +28,10 @@ test('resuelve las 24 plantillas legacy y las 24 musicales sin mezclar roles', (
     const contract = describeTemplateComponents(template.id)
     assert.equal(contract.schema, 'hocuspocus.template-components')
     assert.equal(contract.generationPolicy, 'provided_only')
-    assert.equal(contract.status, 'candidate')
+    assert.equal(contract.status, (template.id.startsWith('walk-') || template.id === 'character-reaction') ? 'candidate' : 'approved')
     assert.equal(contract.catalogVersion, templateCatalogVersion(template))
+    const labels = templateSlotLabels()
+    for (const component of contract.components) assert.equal(component.label, labels[component.key], `${template.id}/${component.key} has a label`)
   }
 })
 
@@ -38,7 +40,7 @@ test('versiona por pertenencia explícita al catálogo, no por el nombre de un s
     assert.equal(templateCatalogVersion(template), CATALOG_VERSION)
     assert.equal(describeTemplateComponents(template.id).catalogVersion, CATALOG_VERSION)
   }
-  for (const template of ALL_SCENE_TEMPLATES.slice(CANDIDATE_SCENE_TEMPLATES.length)) {
+  for (const template of MUSIC_MOTION_TEMPLATES) {
     assert.equal(templateCatalogVersion(template), EXPANDED_CATALOG_VERSION)
     assert.equal(describeTemplateComponents(template.id).catalogVersion, EXPANDED_CATALOG_VERSION)
   }
@@ -54,7 +56,7 @@ test('versiona por pertenencia explícita al catálogo, no por el nombre de un s
 
 test('mantiene subject_2 separado de prop_1', () => {
   const duet = describeTemplateComponents('music-orbit-duel')
-  const pass = describeTemplateComponents('music-ricochet-pass')
+  const pass = describeTemplateComponents('music-crowd-surf')
 
   assert.ok(keys(duet).includes('subject_2'))
   assert.ok(!keys(duet).includes('prop_1'))
@@ -67,20 +69,21 @@ test('mantiene subject_2 separado de prop_1', () => {
   assert.notEqual(subjectTwo?.description, propOne?.description)
 })
 
-test('expone required, kinds y descripción en una plantilla legacy', () => {
+test('expone required, kinds y descripción en una plantilla original: la segunda persona es subject_2', () => {
   const contract = describeTemplateComponents('cinema-two-shot')
-  const hero = contract.components.find(component => component.key === 'hero')
-  const prop = contract.components.find(component => component.key === 'prop')
-  const plate = contract.components.find(component => component.key === 'plate')
+  const hero = contract.components.find(component => component.key === 'subject_1')
+  const partner = contract.components.find(component => component.key === 'subject_2')
+  const plate = contract.components.find(component => component.key === 'background')
 
+  assert.deepEqual(keys(contract), ['subject_1', 'background', 'subject_2', 'foreground'])
   assert.deepEqual(hero?.kinds, ['image', 'model3d'])
   assert.equal(hero?.required, true)
   assert.equal(typeof hero?.description, 'string')
   assert.ok((hero?.description.length ?? 0) > 0)
-  assert.deepEqual(plate?.kinds, ['image'])
-  assert.equal(prop?.required, true)
-  assert.deepEqual(prop?.kinds, ['image', 'model3d'])
-  assert.ok((prop?.description.length ?? 0) > 0)
+  assert.deepEqual(plate?.kinds, ['image', 'video'])
+  assert.equal(partner?.required, true)
+  assert.deepEqual(partner?.kinds, ['image', 'model3d'])
+  assert.ok((partner?.description.length ?? 0) > 0)
   assert.deepEqual(contract.limits, [...contract.limits])
 })
 
@@ -100,8 +103,13 @@ test('devuelve objetos frescos y no permite mutar el catálogo mediante el contr
   assert.notEqual(fresh.components[0].description, 'mutated locally')
   assert.deepEqual(fresh.components[0].kinds, ['image'])
   assert.ok(!fresh.limits.includes('mutated locally'))
-  assert.equal(TEMPLATE_SLOT_LABELS.subject_2, 'Sujeto 2')
-  assert.equal(TEMPLATE_SLOT_LABELS.prop_1, 'Accesorio 1')
+  const labels = templateSlotLabels()
+  assert.equal(labels.subject_1, 'Subject 1')
+  assert.equal(labels.subject_2, 'Subject 2')
+  assert.equal(labels.background, 'Background')
+  assert.equal(labels.prop_1, 'Prop 1')
+  assert.equal(labels.prop_2, 'Prop 2')
+  assert.equal(labels.foreground, 'Foreground')
 })
 
 test('rechaza una plantilla desconocida y el prompt no intenta generar ni inventar archivos', () => {

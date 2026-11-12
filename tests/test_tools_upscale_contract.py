@@ -37,10 +37,10 @@ def test_runtime_upscale_service_survives_registration_of_same_named_route(monke
     """
     from services import tools_upscale as service
 
-    tree = ast.parse((ROOT / "app" / "_launch_runtime.py").read_text(encoding="utf-8"))
+    tree = ast.parse((ROOT / "app" / "routers" / "tools.py").read_text(encoding="utf-8"))
     imports = [node for node in tree.body if isinstance(node, ast.ImportFrom)
                and node.module == "services" and any(alias.name == "tools_upscale" for alias in node.names)]
-    definitions = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    definitions = [node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                    and node.name in {"_upscale_tool_image", "_run_tool_upscale", "tools_upscale"}]
     for node in definitions:
         node.decorator_list = []
@@ -167,10 +167,10 @@ def _called_names(node: ast.AST) -> set[str]:
 
 
 @pytest.fixture(scope="module")
-def launch_tree():
+def tools_tree():
     return ast.parse(
-        (ROOT / "app" / "_launch_runtime.py").read_text(encoding="utf-8"),
-        filename="app/_launch_runtime.py",
+        (ROOT / "app" / "routers" / "tools.py").read_text(encoding="utf-8"),
+        filename="app/routers/tools.py",
     )
 
 
@@ -265,8 +265,8 @@ def test_still_adapter_uses_the_existing_upscale_pipeline_in_still_mode(service_
     assert isinstance(still_keyword, ast.Constant) and still_keyword.value is True
 
 
-def test_launch_worker_is_a_thin_facade_over_the_tools_service(launch_tree):
-    worker = _function(launch_tree, "_run_tool_upscale")
+def test_launch_worker_is_a_thin_facade_over_the_tools_service(tools_tree):
+    worker = _function(tools_tree, "_run_tool_upscale")
     calls = _called_names(worker)
     assert "run_tool_upscale" in calls
     assert "_coordinated_generation_slot" not in calls
@@ -278,8 +278,8 @@ def test_upscale_service_does_not_import_the_launch_runtime():
     assert "from fastapi" not in source
 
 
-def test_shared_upscale_route_accepts_both_source_kinds_and_uses_one_worker(launch_tree):
-    route = _function(launch_tree, "tools_upscale")
+def test_shared_upscale_route_accepts_both_source_kinds_and_uses_one_worker(tools_tree):
+    route = _function(tools_tree, "tools_upscale")
     resolver = next(
         node for node in ast.walk(route)
         if isinstance(node, ast.Call)

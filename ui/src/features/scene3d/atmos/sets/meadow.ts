@@ -26,6 +26,7 @@ import { fbm2, hash2 } from '../noise.ts'
 import { CLEARING_SUBJECT, scatter, type Area } from '../layout.ts'
 import { paintedTerrain, ridge } from './kit.ts'
 import { terrainTexture } from '../textures.ts'
+import { NIGHT, addNightSky, effectivePalette, isNight } from '../night.ts'
 
 type Kept = { geometries: BufferGeometry[]; materials: Material[]; textures: Texture[] }
 type Spot = [number, number]
@@ -102,24 +103,27 @@ const CLOUD_SPOTS: Cloud[] = [
   [-0.5, 2.95, -13.4, 5.4, 0.74, 2.4],
 ]
 
-const FIELD: Record<string, string> = { clover: '#2f9a3e', hay: '#c9a044' }
-const BARE: Record<string, string> = { clover: '#b7e38a', hay: '#f0e2a4' }
-const BLADE: Record<string, string> = { clover: '#1d6630', hay: '#8a6424' }
-const TIP: Record<string, string> = { clover: '#c8f270', hay: '#f6e08a' }
-const BLOOM: Record<string, string> = { clover: '#ffe56a', hay: '#fff1b0' }
-const CLOUD: Record<string, string> = { clover: '#f7fbff', hay: '#fff8ea' }
-const CLOUD_GREY: Record<string, string> = { clover: '#d5dee6', hay: '#e4ddd0' }
-const HORIZON: Record<string, string> = { clover: '#bfe3f6', hay: '#f0ddb0' }
-const FALLBACK_GROUND: Record<string, string> = { clover: '#3d8c46', hay: '#c4a04c' }
+const FIELD: Record<string, string> = { clover: '#2f9a3e', hay: '#c9a044', night: '#14281f' }
+const BARE: Record<string, string> = { clover: '#b7e38a', hay: '#f0e2a4', night: '#1d3328' }
+const BLADE: Record<string, string> = { clover: '#1d6630', hay: '#8a6424', night: '#0e2218' }
+const TIP: Record<string, string> = { clover: '#c8f270', hay: '#f6e08a', night: '#2c5a48' }
+const BLOOM: Record<string, string> = { clover: '#ffe56a', hay: '#fff1b0', night: '#6b7ea8' }
+const CLOUD: Record<string, string> = { clover: '#f7fbff', hay: '#fff8ea', night: NIGHT.cloud }
+const CLOUD_GREY: Record<string, string> = { clover: '#d5dee6', hay: '#e4ddd0', night: '#1a2338' }
+const HORIZON: Record<string, string> = { clover: '#bfe3f6', hay: '#f0ddb0', night: NIGHT.horizon }
+const FALLBACK_GROUND: Record<string, string> = { clover: '#3d8c46', hay: '#c4a04c', night: '#16261e' }
 
 const MEADOW_PALETTES = {
   clover: { fog: '#bfe3f6', ground: '#3d8c46', accent: '#8ed45a', sky: ['#bfe3f6', '#6eafdf'] },
   hay: { fog: '#f0ddb0', ground: '#c4a04c', accent: '#e8c86a', sky: ['#f0ddb0', '#b7c6d6'] },
+  night: { fog: NIGHT.horizon, ground: '#16261e', accent: '#2c5a48', sky: [NIGHT.horizon, NIGHT.zenith] },
 } as const
 
 const MEADOW_TIMES = {
   spring: { sun: [0.38, -0.74, -0.5], sunColor: '#fff6d8' },
   overcast: { sun: [0.1, -0.96, -0.22], sunColor: '#d7e0ea' },
+  night: { sun: [0.3, -0.34, 0.9], sunColor: '#9fb4ff' },
+  dawn: { sun: [0.78, -0.22, -0.42], sunColor: '#ffc9a8' },
 } as const
 
 const WIDE_EYE = [0.1, 1.7, 6.2] as const
@@ -150,16 +154,21 @@ function bendOf(variant: number | undefined): number {
 }
 
 function horizonHex(palette: string, time: string): string {
+  if (palette === 'night') return NIGHT.horizon
+  if (time === 'dawn') return '#f2b693'
   if (time === 'overcast') return '#c5ced6'
   return swatch(HORIZON, palette)
 }
 
 function zenithHex(palette: string, time: string): string {
+  if (palette === 'night') return NIGHT.zenith
+  if (time === 'dawn') return '#5f7db3'
   if (time === 'overcast') return palette === 'hay' ? '#a39e94' : '#8e99a6'
   return palette === 'hay' ? '#b7c6d6' : '#6eafdf'
 }
 
 function cloudHex(palette: string, time: string): string {
+  if (time === 'dawn' && palette !== 'night') return '#f6cdb8'
   if (time === 'overcast') return swatch(CLOUD_GREY, palette)
   return swatch(CLOUD, palette)
 }
@@ -240,6 +249,7 @@ function addDisc(root: Group, kept: Kept, name: string, color: string, radius: n
 const SOD: Record<string, { alt: string; hill: string }> = {
   clover: { alt: '#58b24a', hill: '#4f9a4a' },
   hay: { alt: '#dcbc62', hill: '#b99a58' },
+  night: { alt: '#1a3326', hill: '#0f1c2c' },
 }
 
 function sodPaint(palette: string, seed: number) {
@@ -255,7 +265,7 @@ function addGround(root: Group, resolved: ResolvedAtmos, kept: Kept) {
     height: (x, z) => (fbm2(x * 0.05, z * 0.05, resolved.seed) - 0.5) * 1.6 + (fbm2(x * 0.4, z * 0.4, resolved.seed + 2) - 0.5) * 0.12,
     tint: (x, z) => 0.92 + fbm2(x * 0.06 + 4, z * 0.06, resolved.seed + 9) * 0.3,
     flat: { x: CLEARING_SUBJECT[0], z: CLEARING_SUBJECT[2], radius: 6 },
-    emissive: 0x1d3a1c,
+    emissive: resolved.palette === 'night' ? 0x040810 : 0x1d3a1c,
   })
   mesh.userData.palette = resolved.palette
   mesh.frustumCulled = false
@@ -335,11 +345,12 @@ function placeClouds(mesh: InstancedMesh | undefined, seconds: number, bend: num
 }
 
 function addClouds(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const spots = CLOUD_SPOTS.slice(0, resolved.moteCount)
+  // the `motes` setting thins the clouds out (0 = a clear sky); its default (0.3) keeps the full count
+  const spots = CLOUD_SPOTS.slice(0, Math.round(resolved.moteCount * Math.min(1, resolved.motes / 0.3)))
   if (spots.length < 1) return
   const tint = cloudHex(resolved.palette, resolved.timeOfDay)
   const geo = new IcosahedronGeometry(1, 1)
-  const mat = new MeshStandardMaterial({ color: tint, flatShading: true, roughness: 1, emissive: tint, emissiveIntensity: 0.32 })
+  const mat = new MeshStandardMaterial({ color: tint, flatShading: true, roughness: 1, emissive: tint, emissiveIntensity: resolved.palette === 'night' ? 0.08 : 0.32 })
   const mesh = new InstancedMesh(geo, mat, spots.length)
   mesh.name = 'atmos-cloud'
   mesh.frustumCulled = false
@@ -383,6 +394,7 @@ function paintClouds(mesh: InstancedMesh | undefined, palette: string, time: str
   if (!(material instanceof MeshStandardMaterial)) return
   material.color.set(cloudHex(palette, time))
   material.emissive.set(cloudHex(palette, time))
+  material.emissiveIntensity = palette === 'night' ? 0.08 : 0.32
 }
 
 function paintBasic(root: Group, name: string, color: string) {
@@ -420,7 +432,8 @@ function paintFog(root: Group, palette: string, time: string, density: number) {
 }
 
 function syncMeadow(root: Group, seconds: number, resolved: ResolvedAtmos, live?: AtmosSettings) {
-  const settings = live ?? resolved
+  const source = live ?? resolved
+  const settings = { ...source, palette: effectivePalette(source) }
   const bend = bendOf(settings.variant)
   const clouds = root.getObjectByName('atmos-cloud') as InstancedMesh | undefined
   paintGrass(root.getObjectByName('atmos-grass') as InstancedMesh | undefined, seconds, bend, settings.palette)
@@ -454,6 +467,7 @@ export function buildMeadow(resolved: ResolvedAtmos, webgl2: boolean): { root: G
   addGrass(root, resolved, kept)
   addClouds(root, resolved, kept)
   addSky(root, resolved, kept)
+  if (isNight(resolved.timeOfDay)) addNightSky(root, kept, resolved.sun, 48, resolved.seed)
   const handle = liveHandle(root, kept, resolved)
   root.userData.atmos = handle
   return { root, handle }

@@ -22,8 +22,11 @@ _UP_FRAMES = ("Hips", "Spine", "Spine1", "Spine2", "Neck", "Head", "HeadTop_End"
 
 
 def build_skeleton(points: dict, height: float, y_min: float, facing: int = 1, head_region: dict | None = None,
-                   base: float | None = None) -> dict:
-    """Place the standard hierarchy on landmark positions, in original metres."""
+                   base: float | None = None, robe: dict | None = None) -> dict:
+    """Place the standard hierarchy on landmark positions, in original metres.
+
+    ``robe`` (``{"hem": y}``) marks legs hidden in a robe, whose surface the weights hang from the hips.
+    """
     located = {name: np.asarray(value, dtype=np.float64) for name, value in points.items()}
     world = _world_positions(located, height)
     facing_quat = _IDENTITY.copy() if facing >= 0 else rot.axis_angle([0.0, 1.0, 0.0], 180.0)
@@ -41,6 +44,7 @@ def build_skeleton(points: dict, height: float, y_min: float, facing: int = 1, h
         "tips": {"LeftHand": located["left_hand_tip"], "RightHand": located["right_hand_tip"]},
         "head_region": dict(head_region) if head_region else None,
         "base": None if base is None else float(base),
+        "robe": dict(robe) if robe else None,
     }
 
 

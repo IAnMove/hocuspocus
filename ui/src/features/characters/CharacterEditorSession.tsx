@@ -37,7 +37,7 @@ export function CharacterEditorSession({ request }: { request: CharacterEditorRe
       {dirty && <p role="status" className="text-xs text-amber-200">{t('editorSession.saveFirst')}</p>}
     </header>
     <Suspense fallback={<p role="status">{t('speechWorkshop.busy')}</p>}>
-      <Definition saveRef={saveRef} workspace={request.workspace} initialKit={request.kit} lockIdentity spacious initialDraft={request.draft}
+      <Definition saveRef={saveRef} workspace={request.workspace} initialKit={request.kit} initialPoseId={request.poseId} lockIdentity spacious initialDraft={request.draft}
         onDraftChange={draft => { request.draft = draft }}
         onSaved={async kit => {
           await request.onSaved(kit)

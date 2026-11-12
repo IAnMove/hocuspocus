@@ -83,6 +83,13 @@ CLIP_IDS = (
     "bow",
     "point",
     "shrug",
+    "aim",
+    "shoot",
+    "claw",
+    "hit",
+    "hover",
+    "kneel_pray",
+    "crouch",
 )
 
 CLIP_LABELS = {
@@ -106,6 +113,13 @@ CLIP_LABELS = {
     "bow": "Bow",
     "point": "Point",
     "shrug": "Shrug",
+    "aim": "Aim",
+    "shoot": "Shoot",
+    "claw": "Claw",
+    "hit": "Hit",
+    "hover": "Hover",
+    "kneel_pray": "Kneel Pray",
+    "crouch": "Crouch",
 }
 
 # (category, one-line description) for catalogs and the Rig panel.
@@ -130,4 +144,11 @@ CLIP_INFO = {
     "bow": ("Gesture", "A polite bow from the hips and back up."),
     "point": ("Gesture", "Points forward with the right arm and holds."),
     "shrug": ("Gesture", "Shoulders up with open palms: I don't know."),
+    "aim": ("Action", "Two-handed rifle aim at shoulder height, feet in a stance, breathing sway."),
+    "shoot": ("Action", "Rifle aim with a recoil kick on every beat."),
+    "claw": ("Action", "A creature's claw slashes, wind-up and swipe across, alternating arms."),
+    "hit": ("Action", "Staggers back a step from a blow and recovers."),
+    "hover": ("Move", "Hovers in the air: body bob on each beat, legs dangling behind, arms out."),
+    "kneel_pray": ("Gesture", "Kneels down, joins the hands in prayer, bows the head and stays. Play once."),
+    "crouch": ("Action", "Crouches into cover, peeks up over it and stays down. Play once."),
 }

@@ -1,6 +1,7 @@
 import { fxRandom } from './types'
 import { withAlpha } from './color'
 import { glow, ring, star, strokeEnergy, TAU, type FxPainter } from './energyBrush'
+import { smoothstep } from './cinematicPaint'
 
 const aura: FxPainter = (ctx, cue, time, progress) => {
   ctx.globalAlpha = Math.min(1, progress * 6, (1 - progress) * 5); ctx.globalCompositeOperation = 'screen'
@@ -32,12 +33,22 @@ const orb: FxPainter = (ctx, cue, time, progress) => {
     ctx.lineTo(Math.cos(a) * (r + .06), Math.sin(a) * (r + .06)); strokeEnergy(ctx, cue.color, .004)
   }
 }
+/** A beam's body: solid for most of its length, then slabs whose alpha falls to 0 over the last `tail` of it, so the far end is not a flat cut. */
+function fillBeamBody(ctx: CanvasRenderingContext2D, x: number, y: number, length: number, height: number, tail = .3) {
+  const slabs = 16, solid = length * (1 - tail), step = (length - solid) / slabs, base = ctx.globalAlpha
+  ctx.fillRect(x, y, solid + .001, height)
+  for (let slab = 0; slab < slabs; slab++) {
+    ctx.globalAlpha = base * (1 - smoothstep(0, 1, (slab + .5) / slabs))
+    ctx.fillRect(x + solid + slab * step, y, step + .001, height)
+  }
+  ctx.globalAlpha = base
+}
 const beam: FxPainter = (ctx, cue, time, progress) => {
   ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = Math.min(1, progress * 8, (1 - progress) * 5)
   const width = (.055 + Math.sin(time * 20) * .007) * cue.intensity
   const gradient = ctx.createLinearGradient(0, -width * 3, 0, width * 3)
   gradient.addColorStop(0, withAlpha(cue.color, '00')); gradient.addColorStop(.35, cue.color); gradient.addColorStop(.5, '#ffffff'); gradient.addColorStop(.65, cue.color); gradient.addColorStop(1, withAlpha(cue.color, '00'))
-  ctx.fillStyle = gradient; ctx.fillRect(-.32, -width * 3, 1.25, width * 6)
+  ctx.fillStyle = gradient; fillBeamBody(ctx, -.32, -width * 3, 1.25, width * 6)
   for (let i = 0; i < 5; i++) {
     ctx.save(); ctx.translate(-.3 + ((time * 1.2 + i / 5) % 1) * 1.1, 0); ctx.scale(.28, 1); ctx.strokeStyle = '#ffffff'; ring(ctx, width * 1.7, .003); ctx.restore()
   }

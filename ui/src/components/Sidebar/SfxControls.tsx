@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { useState } from 'react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
@@ -6,10 +7,20 @@ import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import { studioMediaPath, useWorkspaceOutputs } from '../../lib/studioAssetPick.ts'
 
 /**
+ * The clips picked in this session, by guide URL. The panel unmounts on every sub-tab change
+ * while the guide stays in the form, and an uploaded clip is not among the workspace outputs
+ * the panel falls back to, so it used to come back as a raw URL. A guide restored from a
+ * sidecar is not here and keeps the visible-and-removable URL fallback below.
+ */
+const pickedGuides = new Map<string, ApiOutput>()
+
+/**
  * SFX mode controls for MMAudio — sound effects generation.
  * User can optionally upload a video clip, plus prompt/neg prompt and duration.
  */
 export function SfxControls() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const params = useStore(s => s.params)
   const setParam = useStore(s => s.setParam)
@@ -21,7 +32,7 @@ export function SfxControls() {
   const videoGuide = typeof params.video_guide === 'string' ? params.video_guide : ''
   const matchesGuide = (item: ApiOutput) => Boolean(videoGuide) && [item.asset_id, item.url, studioMediaPath(item)].includes(videoGuide)
   const selectedVideo = chosenVideo && matchesGuide(chosenVideo)
-    ? chosenVideo : videoItems.find(matchesGuide)
+    ? chosenVideo : videoItems.find(matchesGuide) ?? pickedGuides.get(videoGuide)
   const { t: common } = useUiTranslation('common')
 
   const sfxPrompt = ((params as unknown as Record<string, unknown>).MMAudio_prompt as string) || ''
@@ -32,6 +43,7 @@ export function SfxControls() {
     // Keep the selected source identity, including its original workspace.
     // The server inspects its duration when preparing the command.
     setParam('video_guide', item?.url)
+    if (item) pickedGuides.set(item.url, item)
     setChosenVideo(item)
   }
 
@@ -71,10 +83,10 @@ export function SfxControls() {
       {!videoGuide && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('sfx.duration')}</label>
+            <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('sfx.duration')}</label>
             <span className="text-xs text-text-secondary">{Math.min(durationSeconds, 20)}s</span>
           </div>
-          <input
+          <input aria-label={t('sfx.duration')} id={fieldIds('f0')}
             type="range"
             min={1}
             max={20}
@@ -87,10 +99,10 @@ export function SfxControls() {
 
       {/* SFX Prompt */}
       <div>
-        <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+        <label htmlFor={fieldIds('f1')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
           {t('sfx.description')}
         </label>
-        <textarea
+        <textarea aria-label={t('sfx.description')} id={fieldIds('f1')}
           value={sfxPrompt}
           onChange={e => setParam('MMAudio_prompt' as keyof typeof params, e.target.value)}
           placeholder={t('sfx.promptPlaceholder')}
@@ -102,10 +114,10 @@ export function SfxControls() {
 
       {/* Negative prompt */}
       <div>
-        <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+        <label htmlFor={fieldIds('f2')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
           {t('sfx.negative')}
         </label>
-        <input
+        <input aria-label={t('sfx.negative')} id={fieldIds('f2')}
           type="text"
           value={sfxNegPrompt}
           onChange={e => setParam('MMAudio_neg_prompt' as keyof typeof params, e.target.value)}
@@ -117,12 +129,12 @@ export function SfxControls() {
       {/* Text prompt weight */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <label className="text-[11px] text-text-muted uppercase tracking-wider">
+          <label htmlFor={fieldIds('f3')} className="text-[11px] text-text-muted uppercase tracking-wider">
             {t('sfx.strength')}
           </label>
           <span className="text-xs text-text-secondary">{textWeight.toFixed(1)}x</span>
         </div>
-        <input
+        <input aria-label={t('sfx.strength')} id={fieldIds('f3')}
           type="range"
           min={0}
           max={5}

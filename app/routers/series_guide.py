@@ -27,11 +27,12 @@ def create_series_guide_router(*, read_library: Callable[[str], dict], read_kits
     @router.get("/api/v1/series/{series_id}/guide")
     def series_guide(series_id: str, workspace: str):
         """The guide and this series' bible: characters with kits, poses and voices, locations, audio files, episodes."""
+        root = workspace_dir(workspace)
         try:
-            files = os.listdir(workspace_dir(workspace))
+            files = os.listdir(root)
         except OSError:
             files = []
-        return {"guide": guide_text(), "bible": build_bible(series(workspace, series_id), read_kits(workspace), files)}
+        return {"guide": guide_text(), "bible": build_bible(series(workspace, series_id), read_kits(workspace), files, root)}
 
     @router.get("/api/v1/series/{series_id}/episodes/{episode_id}/compact")
     def compact(series_id: str, episode_id: str, workspace: str):

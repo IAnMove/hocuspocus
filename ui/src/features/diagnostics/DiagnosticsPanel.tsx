@@ -7,13 +7,17 @@ import type { AvailabilityItem, ReportCorrelation, ReportPack } from './types.ts
 
 type LoadState = 'loading' | 'ready' | 'error'
 
-function FactList({ item }: { item: AvailabilityItem }) {
+function fillDiagnostics(template: string, values: Record<string, string | number>) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => String(values[key] ?? ''))
+}
+
+function FactList({ item, copy }: { item: AvailabilityItem; copy: DiagnosticsCopy }) {
   return (
     <li className="rounded-md border border-border bg-bg-tertiary/40 px-3 py-2 text-[11px] leading-snug text-text-secondary">
       <p className="font-medium text-text-primary">
         {item.id}
         {' · '}
-        {item.available ? 'available' : 'unavailable'}
+        {item.available ? copy.stateAvailable : copy.stateUnavailable}
       </p>
       <pre className="mt-1 whitespace-pre-wrap font-sans text-[11px] text-text-muted">{explainAvailability(item)}</pre>
     </li>
@@ -35,7 +39,7 @@ export function DiagnosticsView({
     return <p className="text-xs text-text-muted">{status === 'loading' ? copy.loading : copy.failed}</p>
   }
   const errorLabel = pack.error
-    ? `${pack.error.operation || 'task'} ${pack.error.task_id || ''} ${pack.error.code || pack.error.status || ''}`.trim()
+    ? `${pack.error.operation || copy.task} ${pack.error.task_id || ''} ${pack.error.code || pack.error.status || ''}`.trim()
     : copy.noError
   return (
     <section className="space-y-4 text-sm">
@@ -50,20 +54,23 @@ export function DiagnosticsView({
         </button>
       </div>
       <p className="text-[11px] text-text-muted">
-        {copy.build}: {pack.build.app_version || 'n/a'} / {pack.build.git_revision || 'n/a'}
+        {copy.build}: {pack.build.app_version || copy.na} / {pack.build.git_revision || copy.na}
         {' · '}
         {copy.platform}: {pack.platform.os} {pack.platform.architecture} / {pack.platform.backend}
         {' · '}
-        RAM {pack.observed.ram_gb ?? 'n/a'} GB / VRAM {pack.observed.vram_gb ?? 'n/a'} GB
+        {fillDiagnostics(copy.memory, {
+          ram: pack.observed.ram_gb ?? copy.na,
+          vram: pack.observed.vram_gb ?? copy.na,
+        })}
       </p>
       <p className="text-[11px] text-text-secondary">{copy.error}: {errorLabel}</p>
       <div>
         <h4 className="mb-1 text-xs uppercase tracking-wide text-text-muted">{copy.operations}</h4>
-        <ul className="space-y-2">{operationsOf(pack.availability).map(item => <FactList key={item.id} item={item} />)}</ul>
+        <ul className="space-y-2">{operationsOf(pack.availability).map(item => <FactList key={item.id} item={item} copy={copy} />)}</ul>
       </div>
       <div>
         <h4 className="mb-1 text-xs uppercase tracking-wide text-text-muted">{copy.models}</h4>
-        <ul className="space-y-2">{modelsOf(pack.availability).map(item => <FactList key={item.id} item={item} />)}</ul>
+        <ul className="space-y-2">{modelsOf(pack.availability).map(item => <FactList key={item.id} item={item} copy={copy} />)}</ul>
       </div>
     </section>
   )

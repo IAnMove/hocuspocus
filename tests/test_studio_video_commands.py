@@ -9,7 +9,7 @@ from PIL import Image
 import pytest
 
 from routers.image_generation_commands import create_image_generation_commands_router, image_command_handlers
-from routers.studio_video_commands import video_command_catalog
+from services.studio_video_commands import video_command_catalog
 from services.image_generation_runtime import create_image_generation_commands
 from services.native_generation_operation import NativeGenerationOperation
 from services.studio_video_resources import StudioVideoResources
@@ -40,7 +40,6 @@ def test_runtime_factory_publishes_generation_video(tmp_path):
         "_durable_generation_queue": SimpleNamespace(upsert=lambda _job: None),
         "_run_generation_with_preparation": lambda _job_id: None,
         "_jobs": {},
-        "register_generation_job": lambda *_args: None,
         "_gen_lock": object(),
         "_cancel_h3_idle_release": lambda: None,
         "_active_gen_states": {},

@@ -57,7 +57,7 @@ export function StoryMusicProductionLaunch(props: StoryProductionsTabProps) {
         </div>
       </div>
       <label className="flex items-start gap-2 rounded-md border border-border bg-bg-tertiary/40 p-2.5 cursor-pointer">
-        <input type="checkbox" checked={project.allowClipText} onChange={event => patch({ allowClipText: event.target.checked })} className="mt-0.5 accent-pink-400" />
+        <input aria-label={t('productions.allowClipText')} type="checkbox" checked={project.allowClipText} onChange={event => patch({ allowClipText: event.target.checked })} className="mt-0.5 accent-pink-400" />
         <span>
           <span className="block text-[10px] font-medium text-text-secondary">{t('productions.allowClipText')}</span>
           <span className="block text-[9px] leading-relaxed text-text-muted">{t('productions.allowClipTextHint')}</span>

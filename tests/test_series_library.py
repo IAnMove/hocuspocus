@@ -13,6 +13,8 @@ from services.series_library import (
     commit_canon_delta,
     create_series_episode,
     create_series_project,
+    normalize_series_project,
+    series_put_payload,
     duplicate_series_project,
     import_story_project,
     normalize_series_library,
@@ -40,6 +42,8 @@ def test_constructors_produce_ids_defaults_and_frozen_snapshot():
     assert series["provider"]["videoModel"] == "minimax_h3_legacy"
     assert series["provider"]["useGlobalProfile"] is True
     assert series["provider"]["videoSettings"]["orientation"] == "landscape"
+    # No invented look: a new series has no tone and no style until its author writes one.
+    assert (series["tone"], series["visualStyle"], series["characterVisualStyle"], series["cameraLanguage"]) == ("", "", "", "")
     assert re.fullmatch(r"episode_[0-9a-f]{32}", episode["id"])
     assert episode["canonSnapshot"]["revision"] == series["canon"]["revision"]
     series["canon"]["worldSummary"] = "Changed later"
@@ -407,3 +411,169 @@ def test_bulk_attempt_approval_is_atomic_and_rejects_duplicate_shots():
             {"shotId": "shot-a", "attemptId": "attempt-a"},
             {"shotId": "shot-a", "attemptId": "attempt-a"},
         ])
+
+
+def test_an_episode_number_is_optional_and_unique_in_its_season():
+    from fastapi import HTTPException
+    from services.series_episode import apply_series_episode_update, create_checked_episode
+    from services.series_library import EpisodeNumberTaken
+
+    series = create_series_project("default")
+    first = create_series_episode(series)
+    assert first["number"] == 1
+    series["episodesById"][first["id"]] = first
+    series["revision"] = 1
+    with pytest.raises(EpisodeNumberTaken) as taken:
+        create_series_episode(series, number=1)
+    assert taken.value.code == "episode_number_taken" and taken.value.holder_id == first["id"]
+    for bad in (0, -1, True, 1.5, "2"):
+        with pytest.raises(ValueError):
+            create_series_episode(series, number=bad)
+    second = create_series_episode(series, number=3)
+    assert second["number"] == 3
+    series["episodesById"][second["id"]] = second
+    kept = update_series_episode(series, second["id"], {"number": 3}, base_series_revision=1)
+    assert kept["episodesById"][second["id"]]["number"] == 3
+    with pytest.raises(EpisodeNumberTaken) as again:
+        update_series_episode(kept, second["id"], {"number": 1}, base_series_revision=kept["revision"])
+    assert again.value.holder_id == first["id"]
+
+    with pytest.raises(HTTPException) as http_taken:
+        create_checked_episode(series, {"episode": {"number": 1}})
+    assert http_taken.value.status_code == 409
+    assert http_taken.value.detail["code"] == "episode_number_taken" and http_taken.value.detail["episodeId"] == first["id"]
+    with pytest.raises(HTTPException) as http_bad:
+        create_checked_episode(series, {"episode": {"number": True}})
+    assert http_bad.value.status_code == 400
+    with pytest.raises(HTTPException) as http_move:
+        apply_series_episode_update("show", second["id"], {"episode": {"number": 1}, "baseSeriesRevision": 1}, series, updated_at="t")
+    assert http_move.value.status_code == 409 and http_move.value.detail["episodeId"] == first["id"]
+    renamed = apply_series_episode_update("show", second["id"], {"episode": {"number": 4}, "baseSeriesRevision": 1}, series, updated_at="t")
+    assert renamed["episodesById"][second["id"]]["number"] == 4
+
+
+def test_a_series_put_keeps_omitted_fields_and_replaces_a_nested_object_whole():
+    """series.update keeps top-level keys that were not sent and replaces a nested object in one piece."""
+    current = create_series_project("default", title="Harbour Lights")
+    current["characters"] = [
+        {"id": "mara", "name": "Mara", "personality": "steady"},
+        {"id": "leo", "name": "Leo", "personality": "loud"},
+    ]
+    current["locations"] = [{"id": "harbour", "name": "Harbour"}]
+    current["assets"] = {
+        "plate": {
+            "id": "plate", "kind": "image", "uri": "assets/series/harbour.png",
+            "ownerType": "series", "ownerId": current["id"],
+        },
+    }
+    current["soundDesign"] = {
+        "stinger": {"file": "sting.wav", "volume": 0.7},
+        "ambienceByLocation": {"harbour": {"file": "gulls.wav", "volume": 0.2}},
+        "ambienceMode": "episode",
+        "ambienceDuckDb": 6,
+        "roomByLocation": {"harbour": "outdoor"},
+    }
+    current["canon"]["worldSummary"] = "A harbour."
+    current["canon"]["immutableRules"] = [{"id": "rule_tide", "description": "The lantern stays lit."}]
+    episode = create_series_episode(current)
+    episode["review"] = {"mode": "plan", "shots": {}}
+    current["episodesById"] = {episode["id"]: episode}
+    current["seasons"][0]["episodeOrder"] = [episode["id"]]
+
+    def saved(sent):
+        return normalize_series_project(series_put_payload(current, sent), current["id"], "default")
+
+    omitted = saved({"allowedProductionMethods": ["animation_2d"]})
+    assert omitted["title"] == "Harbour Lights"
+    assert [item["id"] for item in omitted["characters"]] == ["mara", "leo"]
+    assert omitted["characters"][0]["personality"] == "steady"
+    assert omitted["soundDesign"]["stinger"]["file"] == "sting.wav"
+    assert omitted["soundDesign"]["roomByLocation"] == {"harbour": "outdoor"}
+    assert omitted["soundDesign"]["ambienceMode"] == "episode"
+    assert omitted["canon"]["immutableRules"][0]["id"] == "rule_tide"
+    assert omitted["episodesById"][episode["id"]]["review"]["mode"] == "plan"
+    assert omitted["assets"]["plate"]["uri"] == "assets/series/harbour.png"
+
+    partial = saved({"soundDesign": {"ambienceByLocation": {"harbour": {"file": "rain.wav", "volume": 0.3}}}})
+    assert partial["soundDesign"] == {"ambienceByLocation": {"harbour": {"file": "rain.wav", "volume": 0.3}}}
+    assert [item["id"] for item in partial["characters"]] == ["mara", "leo"]
+
+    one_character = saved({"characters": [{"id": "mara", "name": "Mara"}]})
+    assert [item["id"] for item in one_character["characters"]] == ["mara"]
+    assert one_character["characters"][0]["personality"] == ""
+
+    cleared = saved({"locations": []})
+    assert cleared["locations"] == []
+    assert [item["id"] for item in cleared["characters"]] == ["mara", "leo"]
+
+    canon_only = saved({"canon": {"worldSummary": "A darker harbour."}})
+    assert canon_only["canon"]["worldSummary"] == "A darker harbour."
+    assert canon_only["canon"]["immutableRules"] == []
+
+    sent_episodes = copy.deepcopy(current["episodesById"])
+    sent_episodes[episode["id"]]["review"] = {"mode": "direct", "shots": {}}
+    kept = saved({"episodesById": sent_episodes})
+    assert kept["episodesById"][episode["id"]]["review"]["mode"] == "plan"
+
+
+def test_an_episode_number_is_unique_per_season_and_checked_only_when_it_changes():
+    """Season 2 has its own episode 1, and the editor re-sending a number an episode already has is no change."""
+    from services.series_episode import apply_series_episode_update
+    from services.series_library import EpisodeNumberTaken
+
+    series = create_series_project("default")
+    first_season = series["seasons"][0]["id"]
+    series["seasons"].append({**series["seasons"][0], "id": "season_2", "number": 2, "title": "Season 2", "episodeOrder": []})
+    one = create_series_episode(series)
+    series["episodesById"][one["id"]] = one
+    other_one = create_series_episode(series, "season_2", number=1)
+    assert other_one["seasonId"] == "season_2" and other_one["number"] == 1
+    series["episodesById"][other_one["id"]] = other_one
+    old_twin = {**create_series_episode(series), "number": 1}
+    series["episodesById"][old_twin["id"]] = old_twin
+    series["revision"] = 1
+
+    for episode in (one, other_one, old_twin):
+        sent = copy.deepcopy(series["episodesById"][episode["id"]])
+        sent["title"] = "Renamed"
+        saved = apply_series_episode_update("show", episode["id"], {"episode": sent, "baseSeriesRevision": 1}, series, updated_at="t")
+        assert saved["episodesById"][episode["id"]]["title"] == "Renamed"
+    moved = update_series_episode(series, old_twin["id"], {"number": 2}, base_series_revision=1)
+    assert moved["episodesById"][old_twin["id"]]["number"] == 2
+    with pytest.raises(EpisodeNumberTaken) as taken:
+        update_series_episode(moved, one["id"], {"number": 2}, base_series_revision=2)
+    assert taken.value.holder_id == old_twin["id"]
+    second = update_series_episode(moved, other_one["id"], {"number": 2}, base_series_revision=2)
+    assert second["episodesById"][other_one["id"]]["number"] == 2, "season 1's episode 2 does not block season 2"
+    with pytest.raises(EpisodeNumberTaken):
+        update_series_episode(moved, other_one["id"], {"number": 1, "seasonId": first_season}, base_series_revision=2)
+
+
+def _library_with_loudness(tmp_path, before):
+    """A library whose series asset carries a silent assembly's loudness record, as routers/series_assembly stores it."""
+    series = create_series_project("default")
+    series["assets"] = {"asset_silent": {
+        "id": "asset_silent", "workspaceId": "default", "kind": "video", "uri": "outputs/silent.mp4",
+        "ownerType": "series", "ownerId": series["id"], "isDerivedThumbnail": False,
+        "metadata": {"loudness": {"applied": False, "reason": "The episode audio is silent", "before": before}}}}
+    return {"seriesById": {series["id"]: series}, "seriesOrder": [series["id"]]}
+
+
+def test_a_non_finite_number_is_never_saved_and_never_breaks_a_read(tmp_path):
+    """Starlette's JSONResponse refuses -Infinity: once one was saved, every Series read of the workspace answered 500."""
+    from starlette.responses import JSONResponse
+    from services.series_library import series_library_path
+
+    silent = {"lufs": float("-inf"), "truePeakDb": float("-inf"), "rangeLu": 0.0}
+    write_series_library(str(tmp_path), _library_with_loudness(tmp_path, silent), "default")
+    raw = Path(series_library_path(str(tmp_path))).read_text(encoding="utf-8")
+    assert "Infinity" not in raw and "NaN" not in raw, "a non-finite number is repaired when it is written"
+    JSONResponse(read_series_library(str(tmp_path), "default"))
+    # A file an older version already wrote: the number is read as null.
+    Path(series_library_path(str(tmp_path))).write_text(raw.replace('"lufs":null', '"lufs":-Infinity'), encoding="utf-8")
+    assert "-Infinity" in Path(series_library_path(str(tmp_path))).read_text(encoding="utf-8")
+    stored = read_series_library(str(tmp_path), "default")
+    before = next(iter(next(iter(stored["seriesById"].values()))["assets"].values()))["metadata"]["loudness"]["before"]
+    assert before["lufs"] is None and before["rangeLu"] == 0.0
+    JSONResponse(stored)
+    write_series_library(str(tmp_path), stored, "default")

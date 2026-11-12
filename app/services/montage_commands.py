@@ -65,6 +65,21 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
                              ["workspace", "file", "clip_id", "take_id", "expected_revision"], True,
                              "Use a finished take for a clip. The previous media stays as a take. A take shorter than "
                              "the clip's slot is slowed to cover it unless retime is false. Export again afterwards."),
+    "montages.comic.panels": ({"workspace": WORKSPACE, "file": FILE,
+                               "clip_ids": {"type": "array", "maxItems": 24, "items": CLIP_ID},
+                               "frames": {"type": "object", "maxProperties": 24,
+                                          "description": "clip id to seconds inside the trimmed clip"},
+                               "clips": {"type": "array", "minItems": 1, "maxItems": 24,
+                                         "description": "unsaved clips {id, source, trimStart, trimEnd, comic}; "
+                                                        "replaces clip_ids",
+                                         "items": {"type": "object"}}},
+                              ["workspace", "file"], False,
+                              "Comic view of a montage: one raw frame and one printed frame per clip, cached in the "
+                              "workspace. clip_ids selects at most 24 clips; omit it for the first 24. frames overrides "
+                              "the instant inside the trimmed clip. clips draws unsaved editor clips instead. A clip "
+                              "whose media cannot be read comes back with error. This does not create a comic "
+                              "document. Edits of the "
+                              "montage, including comic.frame and comic.text, are montages.save. Export ignores comic."),
     "montages.export.status": ({"job_id": {"type": "string", "minLength": 1, "maxLength": 80}, "workspace": WORKSPACE},
                                ["job_id"], False,
                                "Read a montage export job: status, progress, filename and url when completed. "
@@ -95,6 +110,13 @@ def _payload(arguments: Any, name: str) -> dict[str, Any]:
     if unknown or missing:
         raise MontageError(f"Invalid input fields; required: {', '.join(required)}", code="invalid_command")
     return payload
+
+
+def _linked_export(saved: dict[str, Any], workspace: str) -> dict[str, Any]:
+    """The export request of a saved montage, naming that montage for the video's sidecar ("Edit montage")."""
+    body = export_body(saved["montage"], workspace)
+    body["montage"] = {"file": saved["file"], "revision": saved["montage"].get("revision")}
+    return body
 
 
 class MontageCommands:
@@ -137,11 +159,15 @@ class MontageCommands:
         elif name == "montages.shot.select":
             result = self._board().select(payload["workspace"], payload["file"], payload["clip_id"], payload["take_id"],
                                           expected_revision=payload["expected_revision"], retime=payload.get("retime", True))
+        elif name == "montages.comic.panels":
+            from services.montage_comic import comic_panels
+            result = comic_panels(self.store, payload["workspace"], payload["file"], clip_ids=payload.get("clip_ids"),
+                                  frames=payload.get("frames"), clips=payload.get("clips"))
         elif name == "montages.shot.regenerate":
             raise MontageError("montages.shot.regenerate is asynchronous; use execute_async", code="invalid_command")
         elif name == "montages.export":
             saved = self.store.get(payload["workspace"], payload["file"])
-            result = {"file": saved["file"], "job": self.start_export(export_body(saved["montage"], payload["workspace"]))}
+            result = {"file": saved["file"], "job": self.start_export(_linked_export(saved, payload["workspace"]))}
         elif name == "montages.derive":
             from services.montage_derive import derive_saved
             result = derive_saved(self.store, payload)

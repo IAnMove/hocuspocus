@@ -1,0 +1,12 @@
+{
+  "outline": "Esquema",
+  "inspector": "Inspector",
+  "viewport": "Visor",
+  "transport": "Transporte",
+  "collapseOutline": "Ocultar esquema",
+  "expandOutline": "Mostrar esquema",
+  "collapseInspector": "Ocultar inspector",
+  "expandInspector": "Mostrar inspector",
+  "openInspector": "Abrir inspector",
+  "closeInspector": "Cerrar inspector"
+}

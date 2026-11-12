@@ -22,7 +22,7 @@ export function LinkProject({
     <span>{t('link.action')}</span>
     <label>
       {t('link.kind')}
-      <select className="ml-1 rounded border border-border bg-bg-primary" value={kind} onChange={event => setKind(event.target.value === 'episode' ? 'episode' : 'story')}>
+      <select aria-label={t('link.kind')} className="ml-1 rounded border border-border bg-bg-primary" value={kind} onChange={event => setKind(event.target.value === 'episode' ? 'episode' : 'story')}>
         <option value="story">{t('link.story')}</option>
         <option value="episode">{t('link.episode')}</option>
       </select>

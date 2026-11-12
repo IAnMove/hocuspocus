@@ -22,15 +22,15 @@ export function Scene3DScreenControls({ slot, meshes, nodes = meshes, items, dis
     <input type="number" aria-label={t(`screens.${key}`)} min={min} max={max} step="0.01" disabled={disabled} value={screen?.[key] ?? defaultMediaScreen()[key]}
       onChange={event => { const value = Number(event.target.value); if (event.target.value && Number.isFinite(value)) patch({ [key]: Math.max(min, Math.min(max, value)) }) }} className="min-h-9 w-20 rounded border border-border bg-bg-primary p-1" /></label>
   return <section className="mt-3 space-y-3 rounded-lg border border-border p-3" data-testid="scene3d-screen-controls">
-    {slot.media === 'image' && <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" disabled={disabled} checked={Boolean(screen)} onChange={event => onChange(event.target.checked ? { ...defaultMediaScreen(), media: 'video', fit: 'cover' } : undefined)} />{t('screens.animateImage')}</label>}
-    {slot.media === 'model3d' ? <label className="flex min-h-9 items-center gap-2"><input type="checkbox" disabled={disabled || !nodes.length} checked={Boolean(screen)} onChange={event => onChange(event.target.checked ? defaultModelScreen(nodes, meshes) : undefined)} />{t('screens.attach')}</label> : slot.media === 'screen' ? <strong>{t('screens.title')}</strong> : null}
+    {slot.media === 'image' && <label className="flex min-h-10 items-center gap-2 text-sm"><input aria-label={t('screens.animateImage')} type="checkbox" disabled={disabled} checked={Boolean(screen)} onChange={event => onChange(event.target.checked ? { ...defaultMediaScreen(), media: 'video', fit: 'cover' } : undefined)} />{t('screens.animateImage')}</label>}
+    {slot.media === 'model3d' ? <label className="flex min-h-9 items-center gap-2"><input aria-label={t('screens.attach')} type="checkbox" disabled={disabled || !nodes.length} checked={Boolean(screen)} onChange={event => onChange(event.target.checked ? defaultModelScreen(nodes, meshes) : undefined)} />{t('screens.attach')}</label> : slot.media === 'screen' ? <strong>{t('screens.title')}</strong> : null}
     {screen && <>
       {slot.media === 'model3d' && <ModelScreenPlacement screen={screen} nodes={nodes} meshes={meshes} disabled={disabled} patch={patch} />}
       {!screen.poseSequence && <ScreenSourceControls screen={screen} items={items} disabled={disabled} onChoose={onChoose} patch={patch} />}
       {slot.media === 'image' && <Scene3DPoseSequenceControls key={`${slot.id}:${slot.sourceUrl}`} screen={screen} baseUrl={slot.sourceUrl} items={items} disabled={disabled} workspace={workspace} onChange={onChange} />}
       {slot.media === 'screen' && <ScreenStyleControls screen={screen} disabled={disabled} patch={patch} onApplyToAll={onApplyToAll} />}
       {slot.media !== 'image' && <div className="grid grid-cols-2 gap-3">{field('width', .02, 80)}{field('height', .02, 80)}</div>}
-      <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={screen.flipY} disabled={disabled} onChange={event => patch({ flipY: event.target.checked })} />{t('screens.flipY')}</label>
+      <label className="flex min-h-9 items-center gap-2"><input aria-label={t('screens.flipY')} type="checkbox" checked={screen.flipY} disabled={disabled} onChange={event => patch({ flipY: event.target.checked })} />{t('screens.flipY')}</label>
       <ScreenPlaybackControls screen={screen} disabled={disabled} patch={patch} field={field} />
       <Scene3DLoopControls screen={screen} disabled={disabled} patch={patch} />
     </>}
@@ -47,7 +47,7 @@ function ScreenSourceControls({ screen, items, disabled, onChoose, patch }: {
     <AssetInput label={t('screens.content')} placeholder={t('screens.chooseContent')} items={items}
       value={pickerOutputFromSlot(screen.sourceUrl, screen.media, screen.sourceRef)} accept="image/*,video/*" optional disabled={disabled}
       constraints={{ kinds: ['image', 'video'], maxCount: 1, optional: true }} onChoose={onChoose} />
-    <label className="flex min-h-9 items-center gap-2"><input type="checkbox" disabled={disabled} checked={Boolean(screen.transparent)} onChange={event => patch({ transparent: event.target.checked })} />{t('screens.transparent')}</label>
+    <label className="flex min-h-9 items-center gap-2"><input aria-label={t('screens.transparent')} type="checkbox" disabled={disabled} checked={Boolean(screen.transparent)} onChange={event => patch({ transparent: event.target.checked })} />{t('screens.transparent')}</label>
     {screen.transparent && <p className="text-xs text-text-muted">{t('screens.transparentHelp')}</p>}
     <label className="flex items-center justify-between gap-2">{t('screens.fit')}<select aria-label={t('screens.fit')} value={screen.fit} disabled={disabled} onChange={event => patch({ fit: event.target.value as MediaScreen['fit'] })} className="min-h-9 rounded border border-border bg-bg-primary px-2">
       <option value="contain">{t('screens.contain')}</option><option value="cover">{t('screens.cover')}</option></select></label>
@@ -61,7 +61,7 @@ function ScreenPlaybackControls({ screen, disabled, patch, field }: {
   const { t } = useUiTranslation('scene3dEditor')
   if (screen.media !== 'video' && !screen.poseSequence) return null
   return <><div className="grid grid-cols-2 gap-3">{field('start', 0, 86400)}{field('speed', .05, 8)}</div>
-    <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={screen.loop} disabled={disabled} onChange={event => patch({ loop: event.target.checked })} />{t('screens.loop')}</label>{screen.media === 'video' && <p className="text-xs text-text-muted">{t('screens.clockHelp')}</p>}</>
+    <label className="flex min-h-9 items-center gap-2"><input aria-label={t('screens.loop')} type="checkbox" checked={screen.loop} disabled={disabled} onChange={event => patch({ loop: event.target.checked })} />{t('screens.loop')}</label>{screen.media === 'video' && <p className="text-xs text-text-muted">{t('screens.clockHelp')}</p>}</>
 }
 
 function supportsScreenControls(slot: Scene3DSlot) {

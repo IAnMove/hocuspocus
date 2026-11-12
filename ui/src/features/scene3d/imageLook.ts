@@ -1,8 +1,19 @@
 import { NearestFilter, Vector2, type MeshBasicMaterial, type MeshStandardMaterial, type Texture } from 'three'
 import { parseImageWindows, type ImageWindow } from './imageWindows'
 import { parseImageColorKey, type ImageColorKey } from './imageColorKey'
+import { parseSettleLook, type SettleLook } from './imageSettle'
+import { parseImageFade, type ImageFade } from './imageFade'
 
-export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; roll?: number; windows?: ImageWindow[]; colorKey?: ImageColorKey }
+export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; roll?: number; windows?: ImageWindow[]; colorKey?: ImageColorKey;
+  /** Sample the picture with linear filtering and no mipmaps, so a 1:1 fill keeps the source texels. */
+  sharp?: boolean
+  /** Mirrored copies of the picture side by side (1–9): a set layer wide enough for a camera that turns. */
+  tiles?: number
+  /** Bring the floor up to every painted piece that stands just above the floor line (a share of the picture's height
+   * from its bottom), in the floor's colour and grain, so the pieces stand on the ground (imageSettle.ts). */
+  settle?: SettleLook
+  /** Opacity over the shot (imageFade.ts). */
+  fade?: ImageFade }
 
 function isPositiveFinite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -19,9 +30,15 @@ export function parseImageLook(raw: unknown): ImageLook | undefined {
   if (windows) look.windows = windows
   if (typeof value.tint === 'string' && /^#[\da-f]{6}$/i.test(value.tint)) look.tint = value.tint
   if (value.unlit === true) look.unlit = true
+  if (value.sharp === true) look.sharp = true
   if (value.grounded === true) look.grounded = true
   if (isPositiveFinite(value.shadow)) look.shadow = Math.min(1, value.shadow)
   if (isPositiveFinite(value.psx)) look.psx = Math.max(.5, Math.min(2, value.psx))
+  if (isPositiveFinite(value.tiles) && value.tiles >= 2) look.tiles = Math.min(9, Math.round(value.tiles))
+  const settle = parseSettleLook(value.settle)
+  if (settle) look.settle = settle
+  const fade = parseImageFade(value.fade)
+  if (fade) look.fade = fade
   return Object.keys(look).length ? look : undefined
 }
 

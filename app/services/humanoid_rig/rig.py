@@ -7,11 +7,14 @@ import numpy as np
 from services.humanoid_rig.errors import NotHumanoid
 from services.humanoid_rig.names import BONE_NAMES
 
-RIG_VERSION = 2
+RIG_VERSION = 5
 
 
-def rig_humanoid(source: bytes, clip_ids: list[str] | None = None, bpm: float = 120.0) -> tuple[bytes, dict]:
-    """Return ``(glb, sidecar)``. Raises ``NotHumanoid`` when the mesh is not a person."""
+def rig_humanoid(source: bytes, clip_ids: list[str] | None = None, bpm: float = 120.0, hints: dict | None = None) -> tuple[bytes, dict]:
+    """Return ``(glb, sidecar)``. Raises ``NotHumanoid`` when the mesh is not a person.
+
+    ``hints`` is a mould's own leg layout (``layout_hints``): it places legs a skirt hides from the silhouette."""
+    from services.humanoid_rig.layout_hints import apply_leg_hints
     from services.humanoid_rig.clips import clip_library, rig_for_skeleton
     from services.humanoid_rig.comfort import comfort_limits
     from services.humanoid_rig.gltf_export import read_primitives, write_rigged_glb
@@ -21,9 +24,10 @@ def rig_humanoid(source: bytes, clip_ids: list[str] | None = None, bpm: float = 
 
     primitives = read_primitives(bytes(source))
     positions, indices, counts = _combined(primitives)
-    found = detect_landmarks(positions, indices)
-    skeleton = build_skeleton(found["points"], found["height"], found["y_min"], found["facing"], found["head_region"], found["base"])
-    joints, weights = compute_weights(positions, indices, skeleton)
+    found = apply_leg_hints(detect_landmarks(positions, indices), hints)
+    skeleton = build_skeleton(found["points"], found["height"], found["y_min"], found["facing"], found["head_region"], found["base"],
+                              found["robe"])
+    joints, weights = compute_weights(positions, indices, skeleton, found["cloth"])
     limits = comfort_limits(positions, indices, joints, weights, skeleton)
     clips = clip_library(bpm, list(clip_ids or ["idle"]), rig_for_skeleton(skeleton, limits))
     marker = rig_marker(skeleton, limits)
@@ -85,5 +89,5 @@ def _sidecar(found: dict, skeleton: dict, limits: dict, clips: list[dict]) -> di
         "limits": limits,
         "bones": list(BONE_NAMES),
         "clips": [{"index": index, "id": clip["id"], "name": clip["name"], "duration": clip["duration"],
-                   "contacts": clip.get("contacts", [])} for index, clip in enumerate(clips)],
+                   "loop": clip.get("loop", True), "contacts": clip.get("contacts", [])} for index, clip in enumerate(clips)],
     }

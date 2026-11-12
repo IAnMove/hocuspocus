@@ -49,10 +49,19 @@ const SERIES_NEEDS_EPISODE = new Set([
   'generate_series_plan',
   'apply_series_plan',
   'render_series_shots',
+  'edit_series_shot',
+  'rerender_series_shot',
+  'regenerate_series_line_voice',
+  'apply_series_shot_card',
   'review_series_attempts',
   'assemble_series_episode',
   'commit_series_canon',
   'stage_series_comic',
+])
+
+const SERIES_NEEDS_SERIES = new Set([
+  'set_series_location_stage',
+  'check_series_location_stage',
 ])
 
 function uniqueNames(names: string[]): string[] {
@@ -76,6 +85,7 @@ function missingDataReason(name: string, context: WizardAvailabilityContext): st
       ? 'No hay un episodio abierto; nombra el episodio exacto o créalo con create_series_episode.'
       : 'No hay una serie abierta. create_series_episode con create_if_missing=true puede crearla.'
   }
+  if (SERIES_NEEDS_SERIES.has(name) && !series.series_id) return 'No hay una serie abierta en Series Lab; ábrela o nómbrala antes de esta acción.'
   return ''
 }
 

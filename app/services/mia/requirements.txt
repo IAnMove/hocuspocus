@@ -1,0 +1,21 @@
+# Make-It-Animatable runtime (Linux, Python 3.11).
+# Torch 2.1.2+cu121, torchvision 0.16.2+cu121 and numpy are pinned by the profile.
+# bpy is listed here so the lock installs it; the profile constraint keeps 4.3.0.
+# pytorch3d and torch-cluster are CUDA wheels the lock resolver cannot see;
+# mia_install.js installs them after this set.
+# Upstream imports gradio and the Hugging Face ``spaces`` package from app.py.
+einops
+timm
+PyMCubes
+potpourri3d
+shapely
+trimesh
+matplotlib
+plyfile
+tqdm
+bpy==4.3.0
+gradio>=5.25.0,<6
+spaces
+huggingface_hub
+pygltflib==1.16.3
+scipy

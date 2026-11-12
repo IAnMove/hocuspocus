@@ -2,6 +2,7 @@ import { Color, FogExp2, HemisphereLight, type Scene } from 'three'
 import type { Scene3DDressing } from '../types.ts'
 import { atmosSet, isAtmosDressing, resolveAtmos } from './registry.ts'
 import type { AtmosSettings } from './params.ts'
+import { NIGHT, isNight } from './night.ts'
 
 export { atmosEye } from './eye.ts'
 export { atmosFallbackLook, hasWebGL2 } from './degrade.ts'
@@ -31,12 +32,13 @@ export function applyAtmosAtmosphere(scene: Scene, kind: Scene3DDressing | undef
     }
     return
   }
-  if (light) {
-    light.intensity = 0.34
-    light.color.set(0xe7f0dc)
-    light.groundColor.set(0x6d7a52)
-  }
   const fog = resolveAtmos(settings, 'low', kind)
+  if (light) {
+    const night = isNight(fog.timeOfDay)
+    light.intensity = night ? NIGHT.hemiIntensity : 0.34
+    light.color.set(night ? NIGHT.hemiSky : 0xe7f0dc)
+    light.groundColor.set(night ? NIGHT.hemiGround : 0x6d7a52)
+  }
   scene.background = new Color(fog.fogColor)
   scene.fog = new FogExp2(fog.fogColor, 0.014 + fog.fogDensity * 0.034)
 }

@@ -6,10 +6,15 @@ import pytest
 from routers.quick_video_batches import (
     _EXECUTION_LOCK,
     QuickVideoBatchActionRequest,
+    QuickVideoBatchSettings,
     QuickVideoBatchStartRequest,
     create_quick_video_batch_router,
 )
 from services.task_manager import get_task_registry
+
+
+def test_batch_settings_default_spoken_language_is_english():
+    assert QuickVideoBatchSettings(videoModel="minimax_h3_legacy").spokenLanguage == "English"
 
 
 def _payload(ideas, *, continue_on_error=True):

@@ -4,10 +4,12 @@ import type { TFunction } from 'i18next'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import { h3CatalogEntry } from '../../lib/h3Catalog'
-import { catalogVramGb, resolveModelCatalog } from '../../lib/modelCatalog'
+import { catalogVramGb, isRemoteModel, resolveModelCatalog } from '../../lib/modelCatalog'
 import type { ModelDef } from '../../types'
 import { InfoTooltip } from './InfoTooltip'
 import { H3ModelName } from './H3ModelInfo'
+import { LicenceNotice } from '../common/LicenceNotice'
+import { licenceForModel } from '../../lib/licenceNotice'
 
 function displayName(model: ModelDef | undefined, savedName: string | undefined, modelType: string, fallback: string) {
   return model?.name ?? savedName ?? (modelType || fallback)
@@ -74,6 +76,7 @@ export function ModelSelector() {
   if (effectiveSubMode === 'recast' && currentModelType === 'viggle_animate') {
     return <div data-wizard-anchor="model" className="rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs">
       {currentModel?.name || 'Viggle-Animate'}
+      <LicenceNotice licence={licenceForModel(currentModel, families)} />
     </div>
   }
 
@@ -90,6 +93,11 @@ export function ModelSelector() {
         </span>
         <ChevronDown size={14} className={`shrink-0 text-text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
+      {licenceForModel(currentModel, families) && (
+        <div className="px-0.5 pt-1">
+          <LicenceNotice licence={licenceForModel(currentModel, families)} />
+        </div>
+      )}
 
       {/* Dropdown (opens upward) */}
       {open && (
@@ -113,14 +121,27 @@ export function ModelSelector() {
                 <div className="px-3 pt-2 pb-1 text-[10px] text-text-muted uppercase tracking-wider font-medium">
                   {family.label}
                 </div>
+                {family.licence && (
+                  <div className="px-3 pb-1">
+                    <LicenceNotice licence={family.licence} />
+                  </div>
+                )}
                 {/* Models in family */}
-                {famModels.map(model => {
+                {famModels.map((model, index) => {
                   const isSelected = model.model_type === currentModelType
+                  const modelLicence = family.licence ? null : licenceForModel(model, [family])
+                  const previousLicence = index > 0 ? licenceForModel(famModels[index - 1], [family]) : null
+                  const showModelLicence = Boolean(modelLicence && modelLicence.id !== previousLicence?.id)
                   const help = selectorModelHelp(model, t)
                   const vramGb = catalogVramGb(model)
                   return (
+                    <div key={model.model_type}>
+                    {showModelLicence && (
+                      <div className="px-3 pb-1">
+                        <LicenceNotice licence={modelLicence} />
+                      </div>
+                    )}
                     <div
-                      key={model.model_type}
                       className={`group w-full flex items-center transition-colors ${
                         isSelected
                           ? 'bg-accent-blue/10 text-text-primary'
@@ -152,6 +173,7 @@ export function ModelSelector() {
                         </span>
                       )}
                     </div>
+                    </div>
                   )
                 })}
               </div>
@@ -168,6 +190,7 @@ function selectorModelHelp(model: ModelDef, t: TFunction<'studio'>): string {
   if (h3) {
     return [t(`h3Catalog.${h3.variant}Hint`), t('h3Catalog.memory')].join('\n\n')
   }
+  if (isRemoteModel(model)) return t('modelCatalog.remoteHint')
   const catalog = resolveModelCatalog(model)
   return [
     t(`modelCatalog.${catalog.variant}Hint`),
@@ -191,7 +214,7 @@ function ModelBadges({ model }: {
     supports_audio_input?: boolean
     generates_audio?: boolean
     supports_ref_images?: boolean
-    resource_requirements?: { vram_gb?: number }
+    resource_requirements?: { vram_gb?: number; tier?: string }
   }
 }) {
   const { t } = useUiTranslation('studio')
@@ -210,6 +233,9 @@ function ModelBadges({ model }: {
   }
   if (model.supports_ref_images) {
     badges.push({ label: t('model.refs'), title: t('model.refsHint') })
+  }
+  if (isRemoteModel(model)) {
+    badges.push({ label: t('model.remote'), title: t('model.remoteHint') })
   }
   if (badges.length === 0) return null
   return (

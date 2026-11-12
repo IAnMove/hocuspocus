@@ -128,6 +128,7 @@ function vendorSteps(id) {
         `python "{{path.resolve(cwd, 'app/services/hunyuan3d/patch_windows_sources.py')}}" --restore`,
       ] : []),
       `git fetch --depth 1 origin ${vendor.revision}`, `git checkout --detach ${vendor.revision}`,
+      ...(vendor.recursive ? ['git submodule update --init --recursive'] : []),
       `python "{{path.resolve(cwd, 'scripts/runtime_vendor.py')}}" ${id}`,
     ]}},
   ]
@@ -145,10 +146,19 @@ function engineSteps(engine, platform) {
       message: `uv venv --python ${spec.python} --seed ${spec.env}`,
     }})
   }
-  const torch = ['torch', 'torchvision', 'torchaudio'].filter(k => spec[k])
-    .map(k => `${k}==${spec[k]}+cu${spec.cuda.replace('.', '')}`).join(' ')
+  const torchNames = ['torch', 'torchvision', 'torchaudio'].filter(k => spec[k])
+  // CPU wheels: Linux and Windows publish 2.7.0+cpu; macOS publishes 2.7.0 with no local tag.
+  // CUDA engines keep the +cu suffix exactly as before.
+  const torch = spec.torchIndex === 'cpu'
+    ? torchNames.map(k => `${k}==${spec[k]}${platform === 'darwin' ? '' : '+cpu'}`).join(' ') +
+      ' --index https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match'
+    : torchNames.map(k => `${k}==${spec[k]}+cu${spec.cuda.replace('.', '')}`).join(' ')
   const removals = engine === 'wangp' && platform === 'win32'
     ? [pip(engine, platform, 'uninstall torchcodec')] : []
+  if (engine === 'trellis2') run.push({method: 'shell.run', params: {
+    ...shell(engine, platform),
+    message: 'conda install -y -c nvidia/label/cuda-12.4.1 -c conda-forge cuda-toolkit=12.4 gcc_linux-64=12 gxx_linux-64=12 make',
+  }})
   const packages = [
     ...removals,
     ...(torch ? [pip(engine, platform, `install ${torch}`)] : []),
@@ -164,6 +174,11 @@ function engineSteps(engine, platform) {
     message: guarded('conda install -y -c conda-forge ffmpeg'),
   }})
   if (engine === 'wangp') run.push(...call('torch.js', {managed: true}))
+  if (engine === 'trellis2') run.push({method: 'shell.run', params: {
+    ...shell(engine, platform),
+    env: {...shell(engine, platform).env, MAX_JOBS: '2'},
+    message: 'python app/services/trellis2/install_native.py',
+  }})
   if (engine === 'hunyuan3d') {
     // Windows builds load the CUDA-compatible MSVC toolset chosen by the probe
     // (runtime_profiles.find_msvc); DISTUTILS_USE_SDK makes setuptools use it
@@ -194,13 +209,52 @@ function engineSteps(engine, platform) {
   }
   if (engine === 'sam') run.push({method: 'shell.run', params: {...shell(engine, platform),
     message: pip(engine, platform, `install ${vendors.sam3.path}`)}})
+  if (engine === 'anime_face') run.push({method: 'shell.run', params: {
+    ...shell(engine, platform),
+    env: {...shell(engine, platform).env, CUDA_VISIBLE_DEVICES: '',
+      HF_HOME: 'app/services/anime_face/cache',
+      HUGGINGFACE_HUB_CACHE: 'app/services/anime_face/cache/hub'},
+    message: 'python -c "from anime_face_detector import create_detector; create_detector(\'yolov3\', device=\'cpu\')"',
+  }})
   if (engine === 'rigging') run.push({method: 'shell.run', params: {
     ...shell(engine, platform, '.', {CUDA_HOME: "{{path.resolve(path.dirname(which('nvcc')), '..')}}"}),
     message: [pip(engine, platform, 'install flash-attn==2.7.4.post1 --no-build-isolation'),
       pip(engine, platform, 'install spconv-cu126==2.3.8'),
       pip(engine, platform, 'install torch_scatter==2.1.2 torch_cluster==1.6.3 -f https://data.pyg.org/whl/torch-2.7.0%2Bcu128.html')],
   }})
+  if (engine === 'see_through') {
+    // Pinned here, not in vendors.json: that file is hashed into every engine's fingerprint.
+    const src = spec.source
+    const dest = 'app/services/see_through/vendor/see-through'
+    const base = shell(engine, platform)
+    run.push({when: `{{!exists('${dest}/.git')}}`, method: 'shell.run', params: {
+      message: `git clone --depth 1 --no-checkout ${src.url} ${dest}`,
+    }})
+    run.push({method: 'shell.run', params: {
+      path: dest,
+      message: `git fetch --depth 1 origin ${src.revision} && git checkout --detach ${src.revision}`,
+    }})
+    run.push({method: 'shell.run', params: {...base, message: pip(engine, platform, `install -e ${dest}/common`)}})
+    run.push({method: 'shell.run', params: {...base, env: {...base.env,
+      HF_HOME: "{{path.resolve('app/services/see_through/hf')}}", HF_HUB_DISABLE_TELEMETRY: '1'},
+      message: [
+        'python -c "from huggingface_hub import snapshot_download; snapshot_download(\'24yearsold/seethroughv0.0.2_layerdiff3d_nf4\')"',
+        'python -c "from huggingface_hub import snapshot_download; snapshot_download(\'24yearsold/seethroughv0.0.1_marigold_nf4\')"',
+      ]}})
+  }
+
+  if (engine === 'mia') run.push({method: 'shell.run', params: {
+    ...shell(engine, platform),
+    message: [
+      pip(engine, platform, 'install pytorch3d==0.7.7+pt2.1.2cu121 --extra-index-url https://miropsota.github.io/torch_packages_builder'),
+      pip(engine, platform, 'install torch-cluster -f https://data.pyg.org/whl/torch-2.1.2+cu121.html'),
+      'app/services/mia/env/bin/python app/services/mia/fetch_weights.py',
+    ],
+  }})
+  // Corrects the few upstream wheel tags uv's check rejects (decord on Linux). It is a no-op
+  // elsewhere and is not hashed: existing installs never needed it, so they stay current.
   run.push({method: 'shell.run', params: {...shell(engine, platform), message: [
+    'python scripts/runtime_wheel_tags.py',
     pip(engine, platform, 'check'),
     `python scripts/runtime_verify.py --engine ${engine}`,
   ]}})
@@ -209,8 +263,11 @@ function engineSteps(engine, platform) {
     const v = vendors[id]
     run.push({method: 'fs.write', params: {path: v.marker, text: `repository=${v.url}\nrevision=${v.revision}\n`}})
   }
-  const markers = {hunyuan3d: '.maestro_hunyuan3d_v1.installed', minimax_h3: '.maestro_minimax_h3_v2.installed', rigging: '.maestro_rigging_v1.installed'}
+  const markers = {hunyuan3d: '.maestro_hunyuan3d_v1.installed', minimax_h3: '.maestro_minimax_h3_v2.installed', rigging: '.maestro_rigging_v1.installed', mia: '.maestro_mia_v1.installed'}
   if (markers[engine]) run.push({method: 'fs.write', params: {path: `${spec.env}/${markers[engine]}`, text: catalog.revision}})
+  if (engine === 'see_through') run.push({method: 'fs.write', params: {
+    path: `${spec.env}/.maestro_see_through_v1.installed`, text: spec.source.revision,
+  }})
   return run.map(step => step.method === 'shell.run' ? {
     ...step, params: {...step.params, message: guarded(step.params.message)},
   } : step)

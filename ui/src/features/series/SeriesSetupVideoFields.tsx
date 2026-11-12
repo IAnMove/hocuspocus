@@ -9,6 +9,26 @@ import {
 import { SeriesField } from './components'
 import { inputClass, selectClass } from './styles'
 import type { SeriesProject } from './types'
+import {
+  DEFAULT_SERIES_VIDEO_RESOLUTION, SERIES_VIDEO_RESOLUTION_LABELS, SERIES_VIDEO_RESOLUTIONS, seriesVideoResolution,
+} from './videoResolution'
+
+/** The H3 size of the script's video shots: the series' own choice, outside the provider settings, so a series that
+ * follows the global profile still makes it. A shot's own size overrides it. */
+export function SeriesVideoShotResolutionField({ series, t, patch }: {
+  series: SeriesProject
+  t: TFunction<'seriesLab'>
+  patch: (value: Partial<SeriesProject>) => void
+}) {
+  return (
+    <SeriesField label={t('providers.videoShotResolution')} hint={t('providers.videoShotResolutionHint')}>
+      <select aria-label={t('providers.videoShotResolution')} className={selectClass} value={series.videoShotResolution || DEFAULT_SERIES_VIDEO_RESOLUTION}
+        onChange={event => patch({ videoShotResolution: seriesVideoResolution(event.target.value) })}>
+        {SERIES_VIDEO_RESOLUTIONS.map(value => <option key={value} value={value}>{t(SERIES_VIDEO_RESOLUTION_LABELS[value])}</option>)}
+      </select>
+    </SeriesField>
+  )
+}
 
 export function SeriesSetupVideoFields({
   series, t, patchProvider, patchVideo,
@@ -27,7 +47,7 @@ export function SeriesSetupVideoFields({
   return (
     <>
       <SeriesField label={t('providers.videoModel')} hint={t('providers.videoModelHint')}>
-        <select
+        <select aria-label={t('providers.videoModel')}
           className={selectClass}
           value={selected}
           onChange={event => {
@@ -51,22 +71,19 @@ export function SeriesSetupVideoFields({
         </select>
         {unknownVideo && <p className="mt-1 text-[10px] text-amber-300">{t('providers.unknownModel')}</p>}
       </SeriesField>
-      <SeriesField label={t('providers.resolution')}>
-        <select className={selectClass} value={String(series.provider.videoSettings.resolution || '480p')} onChange={event => patchVideo({ resolution: event.target.value })}>
-          <option value="480p">{t('providers.res480')}</option>
-          <option value="540p">{t('providers.res540')}</option>
-          <option value="720p">{t('providers.res720')}</option>
-          <option value="768p">{t('providers.res768')}</option>
+      <SeriesField label={t('providers.resolution')} hint={t('providers.resolutionHint')}>
+        <select aria-label={t('providers.resolution')} className={selectClass} value={String(series.provider.videoSettings.resolution || DEFAULT_SERIES_VIDEO_RESOLUTION)} onChange={event => patchVideo({ resolution: event.target.value })}>
+          {SERIES_VIDEO_RESOLUTIONS.map(value => <option key={value} value={value}>{t(SERIES_VIDEO_RESOLUTION_LABELS[value])}</option>)}
         </select>
       </SeriesField>
       <SeriesField label={t('providers.orientation')}>
-        <select className={selectClass} value={String(series.provider.videoSettings.orientation || 'landscape')} onChange={event => patchVideo({ orientation: event.target.value as 'landscape' | 'portrait' })}>
+        <select aria-label={t('providers.orientation')} className={selectClass} value={String(series.provider.videoSettings.orientation || 'landscape')} onChange={event => patchVideo({ orientation: event.target.value as 'landscape' | 'portrait' })}>
           <option value="landscape">{t('providers.landscape')}</option>
           <option value="portrait">{t('providers.portrait')}</option>
         </select>
       </SeriesField>
       <SeriesField label={t('providers.steps')} hint={fusedSteps ? t('providers.fusedStepsHint') : undefined}>
-        <input
+        <input aria-label={t('providers.steps')}
           className={inputClass}
           type="number"
           min={fusedSteps?.min || 1}

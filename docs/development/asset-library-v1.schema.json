@@ -40,12 +40,14 @@
     },
     "collection": {
       "type": "object",
-      "required": ["files", "size", "archive"],
+      "required": ["files", "size"],
+      "description": "A zip collection has archive. A per-file collection has digest and a url on each file, and no archive.",
       "properties": {
         "title": { "type": "string" },
         "files": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true },
         "dependencies": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
         "size": { "type": "integer", "minimum": 1, "description": "Sum of the file sizes." },
+        "digest": { "$ref": "#/$defs/sha256", "description": "sha256 of sorted name:sha256 lines. Required when archive is absent." },
         "archive": {
           "type": "object",
           "required": ["url", "size", "sha256"],

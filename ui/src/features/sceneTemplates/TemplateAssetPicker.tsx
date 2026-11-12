@@ -5,7 +5,7 @@ import { catalogItemToOutput } from '../asset-picker/adapters.ts'
 import { useUiTranslation } from '../../i18n'
 import { acceptForSlotKinds, commitTemplateSlotChoice } from './templateSlotPick.ts'
 
-type PickerKind = 'image' | 'model3d'
+type PickerKind = 'image' | 'model3d' | 'video'
 
 export interface TemplateAssetPickerProps {
   workspace: string

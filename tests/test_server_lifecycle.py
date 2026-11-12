@@ -55,7 +55,12 @@ SERVER = textwrap.dedent(
 
     atexit.register(hook)
     threading.Thread(target=lambda: time.sleep(10**6), daemon=False).start()
-    from services.server_lifecycle import run_until_stopped
+    from services.server_lifecycle import bind_listener, run_until_stopped
+    if os.environ.get("PREBIND"):
+        # As launch.py does: own the port before announcing it, then hand the socket to Uvicorn.
+        listener, port = bind_listener("127.0.0.1", int(os.environ["PORT"]))
+        print(f"serving on {port}", flush=True)
+        run_until_stopped(app, host="127.0.0.1", port=port, sockets=[listener])
     run_until_stopped(app, host="127.0.0.1", port=int(os.environ["PORT"]))
     """
 )
@@ -196,3 +201,159 @@ def test_killing_the_launching_shell_stops_the_server(tmp_path):
         connection.close()
         for pid in _server_pids(shell.pid):
             os.kill(pid, signal.SIGKILL)
+
+
+def test_bind_listener_owns_the_preferred_port_or_falls_forward_to_the_next_free_one():
+    from services.server_lifecycle import bind_listener
+    blocker = socket.socket()
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    busy = blocker.getsockname()[1]
+    try:
+        listener, port = bind_listener("127.0.0.1", busy, span=3)
+        try:
+            assert port != busy and busy < port <= busy + 3
+            assert listener.getsockname()[1] == port, "the socket is already bound and listening"
+            with socket.create_connection(("127.0.0.1", port), 1):
+                pass
+        finally:
+            listener.close()
+        with pytest.raises(OSError):
+            bind_listener("127.0.0.1", busy, span=0)
+    finally:
+        blocker.close()
+
+
+def test_the_server_serves_on_a_socket_bound_before_the_announcement(tmp_path):
+    process, connection, port = _start(tmp_path, PREBIND="1")
+    try:
+        probe = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        probe.request("GET", "/stream")
+        assert probe.getresponse().read1(16).startswith(b"data:")
+        probe.close()
+    finally:
+        connection.close()
+        process.send_signal(signal.SIGTERM)
+        assert _wait_gone(process.pid, 10)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="TIME_WAIT reuse is the POSIX behaviour")
+def test_a_port_left_in_time_wait_by_the_previous_server_is_bound_again():
+    """A restart used to land on the next port (42004): the old server's closed connections held 42003 in TIME_WAIT."""
+    from services.server_lifecycle import bind_listener
+    # The previous server bound its port the same way (the kernel reuses TIME_WAIT only when both sides allow it,
+    # which Uvicorn's own bind did before the socket was pre-bound here).
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    free = probe.getsockname()[1]
+    probe.close()
+    old, port = bind_listener("127.0.0.1", free, span=0)
+    client = socket.create_connection(("127.0.0.1", port), 1)
+    served, _ = old.accept()
+    served.close()  # the server closes first: its end of the connection waits in TIME_WAIT on this port
+    old.close()
+    client.close()
+    listener, bound = bind_listener("127.0.0.1", port, span=3)
+    try:
+        assert bound == port, "the same port again, not the next one"
+    finally:
+        listener.close()
+
+
+STALLING_SERVER = textwrap.dedent(
+    """
+    import ctypes, os, sys, threading, time
+    sys.path.insert(0, os.environ["APP_DIR"])
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    native = ctypes.PyDLL(None)  # PyDLL keeps the GIL for the whole call, like a long native model call
+
+    @app.get("/status")
+    def status():
+        return {"ok": True}
+
+    @app.post("/stall")
+    async def stall():
+        threading.Thread(target=lambda: (time.sleep(0.5), native.sleep(int(os.environ["STALL_SECONDS"]))), daemon=True).start()
+        return {"started": True}
+
+    from services.server_lifecycle import run_until_stopped
+    run_until_stopped(app, host="127.0.0.1", port=int(os.environ["PORT"]))
+    """
+)
+
+
+def test_the_server_keeps_idle_connections_longer_than_a_native_stall(tmp_path):
+    """gen-03: a polling client lost requests during model loads (ConnectionResetError, a lost Cancel).
+
+    Another thread held the GIL in one long native call, so the whole interpreter stood still for longer than
+    Uvicorn's default 5 s keep-alive. When it woke, the expired keep-alive timer closed the socket with the
+    client's unread request in it. The server runs in its own process here (a GIL hog in the test's own process
+    would freeze the poller too); the stall outlasts the old 5 s timeout. Cause of the stall: unknown, it needs a
+    GPU run; this is the mitigation.
+    """
+    script = tmp_path / "stalling_server.py"
+    script.write_text(STALLING_SERVER, encoding="utf-8")
+    port = _free_port()
+    process = subprocess.Popen(
+        [sys.executable, str(script)],
+        env={**os.environ, "APP_DIR": str(APP_DIR), "PORT": str(port), "STALL_SECONDS": "7",
+             "HOCUSPOCUS_GRACEFUL_SECONDS": "1"},
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            try:
+                socket.create_connection(("127.0.0.1", port), 0.2).close()
+                break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            pytest.fail("server did not start")
+        poller = http.client.HTTPConnection("127.0.0.1", port, timeout=40)
+        poller.request("GET", "/status")
+        assert poller.getresponse().read() == b'{"ok":true}'  # the connection is now idle and kept alive
+        starter = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        starter.request("POST", "/stall")
+        assert starter.getresponse().status == 200
+        starter.close()
+        time.sleep(1.5)  # the interpreter is frozen from here on; the next request waits in the socket
+        poller.request("GET", "/status")
+        answer = poller.getresponse()
+        assert answer.status == 200 and answer.read() == b'{"ok":true}'
+        poller.close()
+    finally:
+        process.send_signal(signal.SIGTERM)
+        assert _wait_gone(process.pid, 15)
+
+
+def test_the_server_is_configured_to_keep_idle_connections_for_75_seconds(monkeypatch):
+    """The quick form of the test above: the Config the server is built with."""
+    import uvicorn
+    from fastapi import FastAPI
+
+    from services import server_lifecycle
+
+    class Stop(Exception):
+        pass
+
+    built = {}
+
+    class RecordingConfig(uvicorn.Config):
+        def __init__(self, *args, **kwargs):
+            built.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    def stop(_code):
+        raise Stop
+
+    monkeypatch.setattr(uvicorn, "Config", RecordingConfig)
+    monkeypatch.setattr(uvicorn.Server, "run", lambda self, sockets=None: None)
+    monkeypatch.setattr(server_lifecycle.signal, "signal", lambda *_args: None)
+    monkeypatch.setattr(server_lifecycle, "stop_with_parent", lambda: None)
+    monkeypatch.setattr(server_lifecycle, "finish_process", stop)
+    with pytest.raises(Stop):
+        server_lifecycle.run_until_stopped(FastAPI(), host="127.0.0.1", port=0)
+    assert built["timeout_keep_alive"] == 75

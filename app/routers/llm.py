@@ -17,6 +17,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from services.lyrics_language import detect_language
+
 
 # The song-writer system prompts live in editable guide files (loaded via
 # services.guide_loader.load_guide at request time, cached after first read):
@@ -90,10 +92,19 @@ def _optional_lyria_warning(lyria_prompt: str, requested: bool) -> str:
     return ""
 
 
+def _requested_language(body: dict, description: str) -> str:
+    """The lyrics language the caller asked for, else the one its description is written in, else English. The
+    Director song writer and Music Simple send none: a Spanish description used to get English lyrics."""
+    given = str(body.get("language") or "").strip()[:80]
+    if given:
+        return given
+    return {"es": "Spanish", "en": "English"}.get(detect_language(description), "English")
+
+
 def _minimax_song_request_prompt(body: dict, description: str, instrumental: bool) -> str:
     """Build a labelled brief so references never leak into the final provider prompt."""
     model = str(body.get("model") or "music-3.0").strip()
-    language = str(body.get("language") or "English").strip()[:80]
+    language = _requested_language(body, description)
     try:
         duration = max(20, min(360, int(body.get("duration_seconds") or 90)))
     except (TypeError, ValueError):
@@ -298,8 +309,14 @@ def create_llm_router(
     ensure_llm_loaded: Callable[[], None],
     comic_writing_llm: Callable[[dict], dict | None],
     resolve_visual_media: Callable[[str, str | None], str] | None = None,
+    require_local_llm: Callable[[], None] | None = None,
 ) -> APIRouter:
-    """Build the contiguous LLM control/generate/song-writer router."""
+    """Build the contiguous LLM control/generate/song-writer router.
+
+    ``require_local_llm`` runs when a load asks for the ``local`` provider, and
+    raises the HTTP error that refuses it. A server without a local engine
+    passes it; the full server passes nothing.
+    """
 
     router = APIRouter()
 
@@ -313,6 +330,7 @@ def create_llm_router(
     async def llm_load(request: Request):
         """Load the LLM model."""
         from services import llm_service
+        from services.provider_profile import client_remote_url
         body = {}
         if request.headers.get("content-type", "").startswith("application/json"):
             body = await request.json()
@@ -322,7 +340,9 @@ def create_llm_router(
         model_id = body.get("model_id", profile_model or default_llm_repo)
         device = body.get("device", services.get("llm_device", llm_default_device()))
         provider = body.get("provider", profile_provider)
-        remote_url = body.get("remote_url", profile_remote_url)
+        if provider == "local" and require_local_llm is not None:
+            require_local_llm()
+        remote_url = client_remote_url(provider, str(body.get("remote_url") or ""), profile_remote_url)
         api_key, remote_url = llm_provider_credentials(provider, services, remote_url)
 
         try:
@@ -343,10 +363,11 @@ def create_llm_router(
     def list_llm_models(provider: str = "", url: str = ""):
         """Return available LLM model options. Pass provider and optional url to query that server (Ollama / OpenAI-compatible) without waiting for a saved profile."""
         from services import llm_service
+        from services.provider_profile import client_remote_url
         services = get_services_config()
         profile_provider, _profile_model, profile_remote_url = effective_llm_routing(services)
         p = provider or profile_provider
-        api_key, remote_url = llm_provider_credentials(p, services, url.strip() or profile_remote_url)
+        api_key, remote_url = llm_provider_credentials(p, services, client_remote_url(p, url, profile_remote_url))
         return {"models": llm_service.get_available_models(provider=p, remote_url=remote_url, api_key=api_key)}
 
     @router.get("/api/v1/llm/stream-status")
@@ -401,6 +422,10 @@ def create_llm_router(
                                            lambda value: resolve_visual_media(value, body.get("workspace")))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        except llm_service.LLMProviderError as e:
+            # The provider failed (a rejected key is its 401/403), not this server. Raised, not
+            # returned: the MCP `analyze` tool calls this function directly and needs the exception.
+            raise HTTPException(status_code=502, detail=str(e), headers={"X-Hocus-Error-Code": e.code}) from e
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -447,7 +472,7 @@ def create_llm_router(
         instrumental = bool(body.get("instrumental"))
         target = str(body.get("target") or "ace-step").strip().lower()
         model = str(body.get("model") or "music-3.0").strip()
-        language = str(body.get("language") or "English").strip()[:80]
+        language = _requested_language(body, description)
         image_paths = _song_writer_image_paths(body)
         system_prompt, user_prompt, include_lyria = _song_writer_prompts(
             body, description, instrumental, target, language,
@@ -699,8 +724,14 @@ def create_llm_prompt_router(
     get_cached_hardware: Callable[[], dict],
     get_enhancer_enabled: Callable[[], int],
     enhance_with_wangp: Callable[..., Any],
+    plan_h3_gate: Callable[[], None] | None = None,
 ) -> APIRouter:
-    """Build the LLM prompt tools that sit after Director generate-music."""
+    """Build the LLM prompt tools that sit after Director generate-music.
+
+    ``plan_h3_gate`` runs first in the H3 window planner, before the body is
+    read, and raises the HTTP error that refuses it. A server without a local
+    video engine passes it; the full server passes nothing.
+    """
 
     router = APIRouter()
 
@@ -708,6 +739,8 @@ def create_llm_prompt_router(
     async def llm_plan_h3_windows(request: Request):
         """Expand one H3 First/Last concept into exact per-window prompts."""
 
+        if plan_h3_gate is not None:
+            plan_h3_gate()
         body = await request.json()
         prompt = str(body.get("prompt") or "").strip()
         model_type = str(body.get("model_type") or "")

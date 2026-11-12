@@ -18,7 +18,7 @@ export function registerLipsCreatorCapabilities(register: typeof defineCapabilit
       input: { type: 'object', additionalProperties: false, properties: { name: { type: 'string' }, description: { type: 'string' }, style: { enum: ['cutout', 'children-illustration', 'anime-2d'] },
         pack_id: id, character_id: id, pose_id: id, base_revision: { type: 'integer', minimum: 0 }, changes: { type: 'object' }, reference: { type: 'object' }, asset: { type: 'object' },
         state: { enum: CHARACTER_MOUTH_STATES }, states: stateList } } }, required: ['type', 'operation', 'input'] },
-    risk: 'edit', confirmation: 'none', progress: 'Actualizando Lips Creator…',
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.updatingLipsCreator',
     resolve(raw) {
       return typeof raw.operation === 'string' && operations.has(raw.operation) && raw.input && typeof raw.input === 'object' && !Array.isArray(raw.input)
         ? { type: 'lips_creator', operation: raw.operation as AgentLipsCreatorAction['operation'], input: raw.input as Record<string, unknown> } : null
@@ -33,7 +33,7 @@ export function registerLipsCreatorCapabilities(register: typeof defineCapabilit
     name: 'generate_lips', title: 'Generate Lips Creator mouths', description: 'Generate missing mouths sequentially, saving every output as a candidate before the next job. Pass states to regenerate only those mouths. Keeps approved drawings intact. Stops on uncertain job or save errors.',
     useWhen: 'The user explicitly asks to generate or regenerate mouths in a saved collection.', parameters: ['pack_id', 'states', 'model', 'confirm'],
     inputSchema: { type: 'object', additionalProperties: false, properties: { type: { const: 'generate_lips' }, pack_id: id, states: stateList, model: { type: 'string' }, confirm: { const: true } }, required: ['type', 'pack_id', 'confirm'] },
-    risk: 'compute', confirmation: 'required', progress: 'Generando bocas de Lips Creator…',
+    risk: 'compute', confirmation: 'required', progress: 'wizard:progress.generatingLipsMouths',
     resolve(raw) {
       if (raw.confirm !== true || typeof raw.pack_id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(raw.pack_id)) return null
       if (raw.states !== undefined && (!Array.isArray(raw.states) || !raw.states.length || raw.states.length > 9 || new Set(raw.states).size !== raw.states.length || raw.states.some(state => !CHARACTER_MOUTH_STATES.includes(state as CharacterMouthState)))) return null

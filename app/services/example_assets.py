@@ -66,7 +66,9 @@ class ExampleAssets:
         pack = self.collections[collection]
         receipt = self.cache / (collection + ".installed.json")
         try:
-            if json.loads(receipt.read_text())["sha256"] != pack["archive"]["sha256"]:
+            archive = pack.get("archive")
+            expected = archive["sha256"] if isinstance(archive, dict) else pack["digest"]
+            if json.loads(receipt.read_text())["sha256"] != expected:
                 return False
             return all(self.cached(name) is not None for name in pack["files"])
         except (OSError, ValueError, KeyError):

@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import ast
-import copy
-import json
 import os
 import sys
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 
@@ -16,28 +12,9 @@ _APP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app"))
 if _APP_DIR not in sys.path:
     sys.path.insert(0, _APP_DIR)
 
-
-def _load_functions(*names: str):
-    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    selected = [
-        copy.deepcopy(node)
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name in names
-    ]
-    namespace = {"json": json}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
-    return tuple(namespace[name] for name in names)
-
-
-(
-    _repair_comic_text_encoding,
-    _parse_comic_director_json,
+from services.comic_director_json import (  # noqa: E402
     _generate_comic_director_json,
-) = _load_functions(
-    "_repair_comic_text_encoding",
-    "_parse_comic_director_json",
-    "_generate_comic_director_json",
+    _parse_comic_director_json,
 )
 
 

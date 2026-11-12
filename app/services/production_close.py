@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-_STAGES = ("song", "analyze", "cast", "frames", "clips", "scenes", "montage")
+_STAGES = ("song", "analyze", "cast", "models", "frames", "clips", "scenes", "montage")
 
 
 def note_resume(production: Any) -> None:

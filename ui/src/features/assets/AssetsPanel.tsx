@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ParseKeys } from 'i18next'
+import type { ParseKeys, TFunction } from 'i18next'
 import { Box, FileText, Film, Image as ImageIcon, Info, Loader2, Music2, RefreshCw, Search } from 'lucide-react'
 import { fetchAsset, fetchAssets, type AssetCatalogItem, type AssetKind } from '../../api/client'
 import { useStore } from '../../stores/useStore'
@@ -15,6 +15,14 @@ const KIND_FILTERS: Array<{ value: AssetKind | ''; labelKey: ParseKeys<'navigati
   { value: 'scene', labelKey: 'tabs.scenes' },
   { value: 'document', labelKey: 'tabs.documents' },
 ]
+
+function metadataStatusLabel(t: TFunction<'activity'>, status: AssetCatalogItem['metadata_status']) {
+  if (status === 'canonical') return t('catalog.status.canonical')
+  if (status === 'missing') return t('catalog.status.missing')
+  if (status === 'legacy') return t('catalog.status.legacy')
+  if (status === 'unreadable') return t('catalog.status.unreadable')
+  return t('catalog.status.invalid')
+}
 
 function icon(kind: AssetKind) {
   if (kind === 'image') return <ImageIcon size={16} />
@@ -181,7 +189,7 @@ export function AssetsPanel() {
                       <div className="mt-0.5 text-[10px] text-text-muted">{formatBytes(asset.size_bytes)} · {asset.origin.tool}</div>
                     </div>
                     <span className={`rounded px-1.5 py-0.5 text-[9px] ${asset.metadata_status === 'canonical' ? 'bg-green-500/15 text-green-300' : 'bg-amber-500/15 text-amber-300'}`}>
-                      {asset.metadata_status}
+                      {metadataStatusLabel(tActivity, asset.metadata_status)}
                     </span>
                   </div>
                   {asset.prompt_preview && <p className="line-clamp-3 text-[10px] leading-relaxed text-text-secondary" title={asset.prompt_preview}>{asset.prompt_preview}</p>}

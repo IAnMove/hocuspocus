@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import ast
 import os
-from pathlib import Path
 import sys
 import tempfile
 import threading
@@ -334,17 +332,10 @@ class TestLlmRequestCancellation(unittest.TestCase):
             self.assertNotIn(key, task_manager._cancellation_tokens)
 
     def test_public_cancel_message_distinguishes_abort_from_safe_boundary(self):
-        source = Path(_APP_DIR, "_launch_runtime.py").read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        function = next(
-            node for node in tree.body
-            if isinstance(node, ast.FunctionDef) and node.name == "_planning_cancel_message"
-        )
-        namespace = {}
-        exec(compile(ast.Module(body=[function], type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
+        from services.series_plan_jobs import _planning_cancel_message
 
-        aborted = namespace["_planning_cancel_message"]("Story generation", True)
-        unsupported = namespace["_planning_cancel_message"]("Story generation", False)
+        aborted = _planning_cancel_message("Story generation", True)
+        unsupported = _planning_cancel_message("Story generation", False)
         self.assertIn("closed immediately", aborted)
         self.assertIn("could not abort", unsupported)
         self.assertIn("safe boundary", unsupported)

@@ -46,6 +46,8 @@ def test_discover_create_plan_capture_review_map_and_link_over_mcp_and_wizard(tm
     plan = call(client, 'lips.generation.plan', {"pack_id": "ruby"}, mcp=True)['result']
     assert len(plan['requests']) == 9
     assert all(item['reference'] is None and 'Burgundy cartoon lips' in item['prompt'] and 'entirely from the description' in item['prompt'] for item in plan['requests'])
+    # The default image model is Qwen Image 2.1 Turbo, which refuses a negative prompt: the plan names it and sends none.
+    assert all(item['model_hint'] == 'qwen_image_21_turbo' and 'negative_prompt' not in item for item in plan['requests'])
     assert read_character_kit_library(root('a'))['kits'] == {}
     assert call(client, 'lips.list', {"workspace": "b"}, mcp=True)['result']['library']['kits'] == {}
     # Capture one mouth, then map every sound to it: this is valid even with fewer drawings.

@@ -78,7 +78,7 @@ export function registerProductionWorkCapabilities(register: typeof defineCapabi
       },
       required: ['type', 'operation', 'input'],
     },
-    risk: 'edit', confirmation: 'none', progress: 'Buscando la obra…',
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.searchingWork',
     resolve(raw) {
       if (typeof raw.operation !== 'string' || !operations.has(raw.operation) || !raw.input || typeof raw.input !== 'object' || Array.isArray(raw.input)) return null
       return { type: 'production_works', operation: raw.operation as ProductionWorkOperation, input: raw.input as Record<string, unknown> }

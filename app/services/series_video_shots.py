@@ -1,0 +1,974 @@
+"""Generate a Series shot's video take from its script (``kind: "video"`` plus ``video``).
+
+The clip used to be made outside and imported with ``series.asset.import``. A shot that
+names ``video`` is generated here, before the native render, and attached the way that
+import attaches a take: through ``attach_series_import``, not through the MCP tool.
+Sound stays with ``series_take_sound`` at the cut. ``keepAudio`` false drops the model's
+own track (``layout2d.clipAudio: "drop"``).
+
+``plan`` and ``preview`` reviews do not spend a generation until that shot's plan is
+approved. ``episode.videoBudget.maxShots`` is a warning on ``from_script`` and a cap
+here. After each take its middle and last frames are compared with the start frame
+(color histogram, edge density, dHash); the first frame is the start frame itself.
+Crossing ``STYLE_DRIFT_THRESHOLD`` records ``style_drift`` and does not fail the shot.
+
+Every take's ``intent_id`` carries a digest of what it asks for (prompt, length, model,
+size, start and end frames) and its take number. A resumed run replays a take that is
+still running instead of paying for it twice. A take that failed or was cancelled is
+remembered in the step (``failedTakes``) and never asked for again under that intent:
+the next attempt takes the next number, up to ``maxTakes`` per run.
+
+The clip is an H3 preset in the series frame (``480x864`` for a portrait 480p series):
+the shot's own ``resolution``, else the series' ``videoShotResolution``, else 480p.
+Both take 480p, 540p, 720p or 768p. Only a size other than 480p enters the request
+digest a take keeps (``videoRequest``), so the takes made while every clip was 480p
+still match their shot and are not made again.
+
+``videoRequest`` is not the whole request. What else chooses the picture (a portrait series
+frame, the cast and location plate a ``plan`` start is composed from, the pixels of a named
+start or end) is kept in a second digest, ``videoInputs`` (``series_video_inputs``). A take made
+before it existed has none and matches on ``videoRequest`` alone, so an upgrade makes no
+clip again. When the approved take is not the one the shot asks for now, produce points the
+approval at the matching take unless a person chose the approved one.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import time
+import uuid
+from typing import Any, Callable
+from urllib.parse import quote, urlencode
+
+from PIL import Image
+
+from services.pose_facing import pose_asset, workspace_path
+from services.series_render import (
+    DEFAULT_SERIES_RESOLUTION, H3_RESOLUTIONS, series_resolution_preset, shot_resolution,
+)
+from services.series_review import episode_mode, shot_entry
+from services.series_script_warnings import listed_shots
+from services.series_shot_plan import frame_size
+from services.series_video_inputs import (INPUTS_KEY, REQUEST_KEY, inputs_digest, matching_attempts, repair_approval,
+                                          with_end)
+
+# H3 publishes 24 fps and lengths 124, then +17, through 345 (minimax_h3_handler).
+FRAME_RATE = 24
+FRAMES_MIN = 124
+FRAMES_STEP = 17
+FRAMES_MAX = 345
+DEFAULT_FRAMES = FRAMES_MIN
+DEFAULT_MODEL = "minimax_h3"
+# An unchanged plate scores 0. A flat plate recolored to the opposite hue scores about 0.67.
+STYLE_DRIFT_THRESHOLD = 0.45
+_TERMINAL = frozenset({"completed", "failed", "cancelled", "discarded", "error"})
+_PROMPT_LIMIT = 8000
+
+
+class VideoShotError(RuntimeError):
+    """One scripted video shot could not be prepared or generated."""
+
+
+def parse_budget(value: Any) -> dict[str, int] | None:
+    """``{"maxShots": n}`` or None when the script names no budget."""
+    if value is None:
+        return None
+    count = value.get("maxShots") if isinstance(value, dict) else None
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        raise ValueError("videoBudget.maxShots must be a whole number")
+    return {"maxShots": count}
+
+
+def _video_indexes(script: dict[str, Any]) -> list[int]:
+    shots = script.get("shots") if isinstance(script.get("shots"), list) else []
+    return [index for index, shot in enumerate(shots)
+            if isinstance(shot, dict) and shot.get("kind") == "video" and isinstance(shot.get("video"), dict)]
+
+
+def video_shot_count(script: dict[str, Any]) -> int:
+    return len(_video_indexes(script))
+
+
+def budget_warning(script: dict[str, Any], budget: dict[str, int] | None, shot_id: Callable[[int], str]) -> dict[str, Any] | None:
+    """The script asks for more video shots than its budget. It does not block. ``shots`` are the ones past it."""
+    if not budget:
+        return None
+    over = [shot_id(index) for index in _video_indexes(script)][budget["maxShots"]:]
+    return budget_group(budget["maxShots"], over) if over else None
+
+
+def methods_to_allow(series: dict[str, Any], script: dict[str, Any]) -> list[str] | None:
+    """The series' ``allowedProductionMethods`` plus ``imported_video``, when the script has H3 video shots and the
+    series does not allow that method yet. None when nothing is to be added.
+
+    A scripted clip is attached as an ``imported_video`` take (``series_production.attach_series_import``), which the
+    series default (``generated_video`` only) refuses after the clip was made."""
+    if not _video_indexes(script):
+        return None
+    from services.series_production import normalize_production_methods
+    try:
+        allowed = normalize_production_methods(series.get("allowedProductionMethods"))
+    except ValueError:
+        return None
+    return None if "imported_video" in allowed else [*allowed, "imported_video"]
+
+
+def method_warning(series: dict[str, Any], script: dict[str, Any], shot_id: Callable[[int], str]) -> dict[str, Any] | None:
+    """``imported_video_not_allowed`` in the grouped warning shape: the video shots a write of the script enables."""
+    if methods_to_allow(series, script) is None:
+        return None
+    shots = [shot_id(index) for index in _video_indexes(script)]
+    return {"code": "imported_video_not_allowed", "subject": "allowedProductionMethods", "shots": shots,
+            "message": f"allowedProductionMethods: imported_video is not allowed for this series; "
+                       f"writing the script enables it {listed_shots(shots)}"}
+
+
+def budget_group(limit: Any, over: list[str]) -> dict[str, Any]:
+    """``video_budget`` in the grouped warning shape of a script (``series_script_warnings``): the shots the cap skips."""
+    count = "1 video shot is" if len(over) == 1 else f"{len(over)} video shots are"
+    return {"code": "video_budget", "subject": "videoBudget", "shots": over, "maxShots": limit,
+            "message": f"videoBudget: {count} over maxShots {limit} and not generated {listed_shots(over)}"}
+
+
+def normalize_video(raw: Any) -> dict[str, Any]:
+    """The stored ``video`` object. Raises ``ValueError`` on a bad shape."""
+    if not isinstance(raw, dict):
+        raise ValueError("video must be an object")
+    prompt = raw.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("video.prompt is required")
+    start = raw.get("start", "plan")
+    if not _start_shape(start):
+        raise ValueError("video.start must be plan, an asset, or pose:<character>/<pose>")
+    end = raw.get("end", None)
+    if end is not None and end != "same" and not _source_shape(end):
+        raise ValueError("video.end must be same, an asset, or null")
+    frames = _frames(raw.get("frames", DEFAULT_FRAMES))
+    model = raw.get("model", DEFAULT_MODEL)
+    if model != DEFAULT_MODEL:
+        raise ValueError("video.model must be minimax_h3")
+    takes = raw.get("maxTakes", 2)
+    if takes not in (1, 2, 3):
+        raise ValueError("video.maxTakes must be 1, 2 or 3")
+    keep = raw.get("keepAudio", False)
+    if not isinstance(keep, bool):
+        raise ValueError("video.keepAudio must be true or false")
+    return {"prompt": prompt.strip()[:_PROMPT_LIMIT], "start": start, "end": end, "frames": frames,
+            "model": model, "maxTakes": takes, "keepAudio": keep}
+
+
+def store_video(shot: dict[str, Any]) -> None:
+    """Normalize a stored shot's ``video`` in place. The script and the episode editor both store it here.
+
+    Only an ``imported_video`` shot keeps one. ``keepAudio`` false drops the model's own track
+    (``layout2d.clipAudio: "drop"``) unless the shot already says what to do with it.
+    Raises ``ValueError`` on a bad shape.
+    """
+    if shot.get("video") is None or shot.get("productionMethod") != "imported_video":
+        shot.pop("video", None)
+        return
+    request = normalize_video(shot["video"])
+    shot["video"] = request
+    if not request["keepAudio"]:
+        layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+        layout.setdefault("clipAudio", "drop")
+        shot["layout2d"] = layout
+
+
+def video_preset(series: dict[str, Any], shot: dict[str, Any] | None = None) -> str:
+    """The clip's H3 tier: the shot's ``resolution``, else the series' ``videoShotResolution``, else 480p.
+
+    The series' Lab render setting (``provider.videoSettings.resolution``) is not read: it belongs to the
+    provider model and the global profile, and most series saved it as 540p before 480p was the default."""
+    return (shot_resolution(shot) or series_resolution_preset(series.get("videoShotResolution"))
+            or DEFAULT_SERIES_RESOLUTION)
+
+
+def video_resolution(series: dict[str, Any], shot: dict[str, Any] | None = None) -> str:
+    """The clip's H3 preset in the series frame: ``480x864`` for a portrait 480p series."""
+    width, height = frame_size(series)
+    return H3_RESOLUTIONS[("portrait" if height > width else "landscape", video_preset(series, shot))]
+
+
+def digest_request(request: dict[str, Any], preset: str) -> dict[str, Any]:
+    """The request a take's ``videoRequest`` digests: the size only when it is not 480p, so a 480p take keeps the
+    digest it had before sizes could be chosen."""
+    return request if preset == DEFAULT_SERIES_RESOLUTION else {**request, "resolution": preset}
+
+
+def cancel_generation(deps: Any, job_id: str) -> None:
+    """Stop a submitted clip so it does not keep the GPU. A finished job answers 409 and is left as it is."""
+    try:
+        deps.call("jobs.cancel", {"version": 1, "input": {"job_id": job_id}})
+    except Exception:  # best effort: the production stops either way
+        return
+
+
+def reference_problems(shot: dict[str, Any], checker: Any, where: str) -> None:
+    """The start and end frames name a pose, a workspace file or an image asset of the series."""
+    if shot.get("kind") != "video" or not isinstance(shot.get("video"), dict):
+        return
+    try:
+        request = normalize_video(shot["video"])
+    except ValueError as error:
+        checker.problems.append(f"{where}: {error}")
+        return
+    _known_frame(request["start"], checker, where, "start")
+    if request["end"] not in (None, "same"):
+        _known_frame(request["end"], checker, where, "end")
+    if _duration_too_long(shot, request["frames"]):
+        checker.problems.append(f"{where}: video.frames is shorter than duration")
+
+
+def needs_video_step(episode: dict[str, Any]) -> bool:
+    return any(isinstance(shot, dict) and isinstance(shot.get("video"), dict) for shot in episode.get("shots") or [])
+
+
+def style_distance(left: Image.Image, right: Image.Image) -> float:
+    """How far two frames have drifted: the larger of the color-histogram gap and the mean of that gap, the edge-density gap and dHash."""
+    histogram = _histogram_distance(left, right)
+    edges = abs(_edge_density(left) - _edge_density(right))
+    hashed = _dhash_distance(left, right)
+    return round(max(histogram, (histogram + edges + hashed) / 3), 4)
+
+
+def produce_videos(job: dict[str, Any], step: dict[str, Any], deps: Any, *, cancelled: Callable[[], bool],
+                   save: Callable[[], None] | None = None) -> bool:
+    """Generate the episode's scripted video shots. True when the job is now waiting on a plan.
+
+    ``save`` stores the job; it runs when a take is submitted, so a cancel can stop that take."""
+    series, episode = _episode_of(deps, job)
+    allowed, overflow = _cap(episode, _scripted(episode))
+    warnings = [_overflow_warning(episode, overflow)] if overflow else []
+    waiting: list[dict[str, str]] = []
+    done = set(step.get("doneShots") or [])
+    run = _Run(job, step, deps, cancelled, save or (lambda: None))
+    for shot in allowed:
+        if _already_made(run, series, episode, shot, done):
+            done.add(shot.get("id"))
+            continue
+        if _plan_blocks(episode, shot):
+            waiting.append({"shotId": shot.get("id"), "reason": "plan"})
+            continue
+        _spend_one(run, series, episode, shot, done, warnings)
+    step["warnings"] = warnings
+    step["doneShots"] = sorted(item for item in done if item)
+    if waiting:
+        return _hold_for_plan(job, step, waiting)
+    return False
+
+
+def _episode_of(deps: Any, job: dict[str, Any]) -> tuple[dict, dict]:
+    library = deps.read_library(job["workspace"])
+    series = (library.get("seriesById") or {}).get(job["seriesId"]) or {}
+    episode = (series.get("episodesById") or {}).get(job["episodeId"]) or {}
+    return series, episode
+
+
+def _scripted(episode: dict[str, Any]) -> list[dict[str, Any]]:
+    return [shot for shot in episode.get("shots") or [] if isinstance(shot, dict) and isinstance(shot.get("video"), dict)]
+
+
+def _already_made(run: "_Run", series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any], done: set) -> bool:
+    """True when this request already has a completed take. The take the shot asks for is then also the approved
+    one, unless a person chose another: changing the size away and back must not skip the generation and cut the
+    clip of the other size, or fail the cut for want of an approval."""
+    if shot.get("id") in done:
+        return True
+    asked = _asked(series, shot, run.space)
+    if asked is None or not matching_attempts(series, shot, *asked):
+        return False
+    if not _plan_blocks(episode, shot):
+        _reapprove(run, series, episode, shot, *asked)
+    return True
+
+
+class _Space:
+    """The workspace root and its kits, as the digests of one produce run read them. The kits load on first use."""
+
+    def __init__(self, root: str = "", read_kits: Callable[[], dict[str, Any]] | None = None) -> None:
+        self.root, self._read_kits, self._kits = root, read_kits, None
+
+    @property
+    def kits(self) -> dict[str, Any]:
+        if self._kits is None:
+            self._kits = (self._read_kits() if self._read_kits else None) or {}
+        return self._kits
+
+
+class _Run:
+    """One produce run of the video step: the job, its step, the tools and the cancel and save hooks."""
+
+    def __init__(self, job: dict, step: dict, deps: Any, cancelled: Callable[[], bool], save: Callable[[], None]) -> None:
+        self.job, self.step, self.deps, self.cancelled, self.save = job, step, deps, cancelled, save
+        workspace = job["workspace"]
+        self.space = _Space(deps.workspace_dir(workspace), lambda: _kits(deps, workspace))
+
+
+def _require_method(series: dict[str, Any], shot: dict[str, Any]) -> None:
+    """A scripted clip is attached as an ``imported_video`` take, which the series must allow. The attach refuses it
+    the same way (``series_production._verified_take_media``), but only after the GPU time was spent."""
+    from services.series_production import series_shot_method
+    try:
+        method = series_shot_method(series, shot)
+    except ValueError as error:
+        raise VideoShotError(str(error)) from error
+    if method == "generated_video":
+        raise VideoShotError(f"{shot.get('id')}: choose an animation or imported-video method before attaching a completed take")
+
+
+def _spend_one(run: _Run, series: dict, episode: dict, shot: dict, done: set, warnings: list) -> None:
+    if run.cancelled():
+        raise VideoShotError("cancelled")
+    _require_method(series, shot)
+    made = _generate(run, shot, series)
+    _remember(run.deps, run.job, shot, made, episode_mode(episode) != "preview")
+    _note_drift(warnings, shot, made)
+    done.add(shot.get("id"))
+    run.step["doneShots"] = sorted(done)
+
+
+def _note_drift(warnings: list, shot: dict[str, Any], made: dict[str, Any]) -> None:
+    distance = made.get("distance")
+    if distance is None or distance <= STYLE_DRIFT_THRESHOLD:
+        return
+    warnings.append({"code": "style_drift", "shotId": shot.get("id"), "distance": distance, "take": made["number"]})
+
+
+def _hold_for_plan(job: dict[str, Any], step: dict[str, Any], waiting: list[dict[str, str]]) -> bool:
+    step["status"] = "queued"
+    job.update(status="waiting", waiting=waiting, finishedAt=time.time(),
+               message=f"Waiting for the review: {len(waiting)} plans to approve before spending video")
+    return True
+
+
+def import_generated_take(series: dict[str, Any], workspace: str, root: str, shot_id: str, source_path: str,
+                          metadata: dict[str, Any], *, approve: bool) -> str:
+    """Copy ``source_path`` into the series assets and attach it as the shot's take. No MCP call."""
+    from services.series_library import approve_shot_render_attempt
+    from services.series_production import attach_series_import
+
+    asset_id = f"asset_{uuid.uuid4().hex[:12]}"
+    extension = os.path.splitext(source_path)[1].lower()[:12] or ".mp4"
+    relative = f"assets/{series['id']}/{asset_id}{extension}"
+    destination = os.path.join(root, *relative.split("/"))
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    shutil.copy2(source_path, destination)
+    asset = {"id": asset_id, "workspaceId": workspace, "kind": "video", "uri": relative, "ownerType": "shot",
+             "ownerId": shot_id, "isDerivedThumbnail": False,
+             "metadata": {"name": os.path.basename(source_path)[:300], "referenceRole": "reference", **metadata}}
+    attach_series_import(series, asset, as_take=True, source_path=destination)
+    attempt_id = str(asset["ownerId"])
+    if approve:
+        found = _shot_index(series, shot_id)
+        if found is not None:
+            episode, index, shot = found
+            episode["shots"][index] = approve_shot_render_attempt(shot, attempt_id, "server")
+    return attempt_id
+
+
+# Shape ---------------------------------------------------------------------------------------------
+
+def _frames(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("video.frames must be an H3 length (124, then +17 up to 345)")
+    if value < FRAMES_MIN or value > FRAMES_MAX or (value - FRAMES_MIN) % FRAMES_STEP:
+        raise ValueError("video.frames must be an H3 length (124, then +17 up to 345)")
+    return value
+
+
+def _start_shape(value: Any) -> bool:
+    if value == "plan":
+        return True
+    if isinstance(value, str) and value.startswith("pose:") and "/" in value[5:]:
+        return True
+    return _source_shape(value)
+
+
+def _source_shape(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= 400 and "\n" not in value and ".." not in value
+
+
+def _duration_too_long(shot: dict[str, Any], frames: int) -> bool:
+    if shot.get("lines"):
+        return False
+    duration = shot.get("duration")
+    if isinstance(duration, bool) or not isinstance(duration, (int, float)):
+        return False
+    return float(duration) > frames / FRAME_RATE + 0.05
+
+
+def _known_frame(value: str, checker: Any, where: str, label: str) -> None:
+    if value == "plan":
+        return
+    if value.startswith("pose:"):
+        character, _, pose = value[5:].partition("/")
+        checker.character(character, pose or "base", where)
+        return
+    if value in checker.files:
+        return
+    asset = (checker.series.get("assets") or {}).get(value)
+    if isinstance(asset, dict) and asset.get("kind") in ("image", "video"):
+        return
+    checker.problems.append(f"{where}: video.{label} {value} is not a workspace file or an image asset")
+
+
+def _plan_blocks(episode: dict[str, Any], shot: dict[str, Any]) -> bool:
+    if episode_mode(episode) == "direct":
+        return False
+    return shot_entry(episode, str(shot.get("id")))["plan"] != "approved"
+
+
+def _cap(episode: dict[str, Any], shots: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    budget = episode.get("videoBudget") if isinstance(episode.get("videoBudget"), dict) else {}
+    limit = budget.get("maxShots")
+    if isinstance(limit, bool) or not isinstance(limit, int):
+        return shots, []
+    return shots[:limit], shots[limit:]
+
+
+def _overflow_warning(episode: dict[str, Any], overflow: list[dict[str, Any]]) -> dict[str, Any]:
+    limit = (episode.get("videoBudget") or {}).get("maxShots")
+    return budget_group(limit, [str(shot.get("id")) for shot in overflow])
+
+
+def _request_digest(request: dict[str, Any]) -> str:
+    return hashlib.sha1(json.dumps(request, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def _stored_request(shot: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return normalize_video(shot.get("video"))
+    except ValueError as error:
+        raise VideoShotError(f"{shot.get('id')}: {error}") from error
+
+
+def _intent(job: dict[str, Any], shot: dict[str, Any], *parts: Any) -> str:
+    """``series-<episode>-<shot>-...``. The ids are cut first, so the digest and the take number always fit."""
+    tail = "-".join(str(part) for part in parts)
+    return f"series-{job['episodeId']}-{shot['id']}"[:150 - len(tail)] + f"-{tail}"
+
+
+def _file_digest(path: str) -> str:
+    digest = hashlib.sha1()
+    try:
+        with open(path, "rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
+    except OSError:
+        return ""
+    return digest.hexdigest()
+
+
+def _take_digest(params: dict[str, Any], start_path: str) -> str:
+    """What one take asks for: its parameters and the start frame's pixels (a file can be replaced in place)."""
+    body = {"params": params, "start": _file_digest(start_path)}
+    return hashlib.sha1(json.dumps(body, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def _failed_takes(step: dict[str, Any], shot_id: str, digest: str) -> list[int]:
+    """Take numbers of this request that failed or were cancelled. The list is the step's, so it is saved with it."""
+    failed = step.setdefault("failedTakes", {})
+    record = failed.get(shot_id)
+    if not isinstance(record, dict) or record.get("digest") != digest or not isinstance(record.get("takes"), list):
+        record = failed[shot_id] = {"digest": digest, "takes": []}
+    return record["takes"]
+
+
+def _next_take(number: int, failed: list[int]) -> int:
+    number += 1
+    while number in failed:
+        number += 1
+    return number
+
+
+def _asked(series: dict[str, Any], shot: dict[str, Any], space: _Space) -> tuple[str, str | None] | None:
+    """``(videoRequest, videoInputs)`` of what the shot asks for now. None when its video object is not valid."""
+    try:
+        request = normalize_video(shot.get("video"))
+    except ValueError:
+        return None
+    return _request_digest(digest_request(request, video_preset(series, shot))), _video_inputs(series, shot, request, space)
+
+
+def _take_matches(series: dict[str, Any], shot: dict[str, Any], *, root: str | None = None,
+                  kits: dict[str, Any] | None = None) -> bool:
+    """Does a completed take already ask for this? ``root`` and ``kits`` locate a named start frame's file."""
+    asked = _asked(series, shot, _Space(root or "", lambda: kits or {}))
+    return asked is not None and bool(matching_attempts(series, shot, *asked))
+
+
+def _video_inputs(series: dict[str, Any], shot: dict[str, Any], request: dict[str, Any], space: _Space) -> str | None:
+    """The ``videoInputs`` digest (see ``series_video_inputs``). None when a named start or end resolves to no file."""
+    parts: dict[str, Any] = {}
+    width, height = frame_size(series)
+    if height > width:
+        parts["orientation"] = "portrait"
+    if request["start"] == "plan":
+        parts["plan"] = _plan_part(series, shot, space)
+    else:
+        pixels = _start_pixels(series, request["start"], space)
+        if pixels is None:
+            return None
+        parts["start"] = pixels
+    digest = inputs_digest(parts)
+    end = request.get("end")
+    if end in (None, "same"):
+        return digest
+    end_pixels = _start_pixels(series, end, space)
+    return None if end_pixels is None else with_end(digest, end_pixels)
+
+
+def _plan_part(series: dict[str, Any], shot: dict[str, Any], space: _Space) -> dict[str, Any]:
+    """What a ``plan`` start frame is composed from: the pose image each cast member's kit gives and where it stands
+    (``_plan_layers``), and the location plate.
+
+    The plate itself is a media intent keyed by these files and positions, so only a change here composes a new one:
+    a character given another kit, or a pose image that appears after a clip made on the flat plate, is a new clip;
+    a cast member with no image is not drawn and changes nothing."""
+    layers = _plan_layers(shot, series, space.kits, space.root)
+    return {"cast": [[layer["file"], layer["x"]] for layer in layers], "base": _location_file(series, shot)}
+
+
+def _start_pixels(series: dict[str, Any], name: str, space: _Space) -> str | None:
+    """The digest of a named start or end frame's file, or None when the name resolves to no readable file."""
+    relative = named_frame_file(series, space.kits if name.startswith("pose:") else {}, space.root, name)
+    return (_file_digest(os.path.join(space.root, relative)) or None) if relative else None
+
+
+def _reapprove(run: "_Run", series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any], request: str,
+               inputs: str | None) -> None:
+    """Approve the take the shot asks for when it is approved on none or on a take of another request, and store it.
+
+    ``series_video_inputs.repair_approval`` decides; this runs it on the series the produce reads and on the stored
+    library, which may have moved on since (it decides again there)."""
+    preview = episode_mode(episode) == "preview"
+
+    def repair(target: dict[str, Any]) -> dict[str, Any] | None:
+        """The shot after the repair in ``target`` (this job's episode), or None when it was left alone."""
+        stored = (target.get("episodesById") or {}).get(run.job["episodeId"]) or {}
+        index = next((at for at, item in enumerate(stored.get("shots") or [])
+                      if isinstance(item, dict) and item.get("id") == shot.get("id")), None)
+        if index is None or repair_approval(target, stored, index, request, inputs, preview=preview) is None:
+            return None
+        return stored["shots"][index]
+
+    repaired = repair(series)
+    if repaired is None:
+        return
+    if repaired is not shot:
+        shot.clear()
+        shot.update(repaired)
+
+    def mutate(library: dict) -> None:
+        live = (library.get("seriesById") or {}).get(run.job["seriesId"])
+        if isinstance(live, dict):
+            repair(live)
+
+    workspace = run.job["workspace"]
+    if _locked_write(workspace, mutate):
+        return
+    write = getattr(run.deps, "write_library", None)
+    if write:
+        library = json.loads(json.dumps(run.deps.read_library(workspace)))
+        mutate(library)
+        write(workspace, library)
+
+
+# One shot ------------------------------------------------------------------------------------------
+
+def _generate(run: _Run, shot: dict[str, Any], series: dict[str, Any]) -> dict[str, Any]:
+    job, deps = run.job, run.deps
+    request = _stored_request(shot)
+    resolution = video_resolution(series, shot)
+    inputs = _video_inputs(series, shot, request, run.space)
+    start_path, start_ref = _start_frame(job, shot, series, deps, resolution)
+    end_ref = start_ref if request.get("end") == "same" else _end_reference(job, request.get("end"), series, deps)
+    params = {"prompt": request["prompt"], "model_type": request["model"], "resolution": resolution,
+              "video_length": request["frames"], "image_start": start_ref}
+    if end_ref:
+        params["image_end"] = end_ref
+    digest = _take_digest(params, start_path)
+    failed = _failed_takes(run.step, shot["id"], digest)
+    best: dict[str, Any] | None = None
+    number, problem = 0, None
+    for _ in range(int(request["maxTakes"])):
+        number = _next_take(number, failed)
+        intent = _intent(job, shot, "video", digest, number)
+        try:
+            take_path = _take(run, params, intent)
+        except VideoShotError as error:
+            failed.append(number)
+            if run.cancelled():
+                raise
+            problem = error
+            continue
+        distance = _drift(start_path, take_path, request["frames"])
+        if best is None or _closer(distance, best.get("distance")):
+            best = {"distance": distance, "file": take_path, "intent": intent, "number": number,
+                    "request": digest_request(request, video_preset(series, shot)), "inputs": inputs}
+        if distance is not None and distance <= STYLE_DRIFT_THRESHOLD:
+            break
+    if best is None:
+        raise VideoShotError(f"{shot.get('id')}: no take ({problem})")
+    return best
+
+
+def _take(run: _Run, params: dict[str, Any], intent: str) -> str:
+    """Submit one take (or replay it under its intent) and wait for its file. The step names the running job."""
+    workspace = run.job["workspace"]
+    submitted = _call(run.deps, "generation.video", 3, {"workspace": workspace, "params": params}, intent=intent)
+    job_id = _job_id(submitted)
+    run.step["jobId"] = job_id
+    run.save()
+    try:
+        finished = _wait(run.deps, job_id, run.cancelled)
+    finally:
+        run.step.pop("jobId", None)
+    path = _output_file(finished, run.deps, workspace)
+    if not os.path.isfile(path):
+        # A replayed take whose file was cleaned up: the next take asks again.
+        raise VideoShotError(f"{job_id}: {os.path.basename(path)} is missing")
+    return path
+
+
+def _closer(distance: float | None, best: float | None) -> bool:
+    if distance is None:
+        return False
+    return best is None or distance < best
+
+
+def _remember(deps: Any, job: dict[str, Any], shot: dict[str, Any], made: dict[str, Any], approve: bool) -> None:
+    metadata = {"productionMethod": "imported_video", "automaticDraft": True, REQUEST_KEY: _request_digest(made["request"]),
+                "intentId": made["intent"], **({} if made.get("distance") is None else {"styleDistance": made["distance"]}),
+                **({} if made.get("inputs") is None else {INPUTS_KEY: made["inputs"]})}
+    if not approve:
+        metadata["reviewStage"] = "preview"
+    if getattr(deps, "import_take", None):
+        deps.import_take({"workspace": job["workspace"], "seriesId": job["seriesId"], "episodeId": job["episodeId"],
+                          "shotId": shot["id"], "file": made["file"], "metadata": metadata, "approve": approve})
+        return
+    _persist(deps, job, shot["id"], made["file"], metadata, approve)
+
+
+def _persist(deps: Any, job: dict[str, Any], shot_id: str, source: str, metadata: dict[str, Any], approve: bool) -> None:
+    workspace = job["workspace"]
+    if _locked_write(workspace, lambda library: _mutate(library, job, workspace, shot_id, source, metadata, approve, deps)):
+        return
+    library = json.loads(json.dumps(deps.read_library(workspace)))
+    _mutate(library, job, workspace, shot_id, source, metadata, approve, deps)
+    _save(deps, workspace, library)
+
+
+def _mutate(library: dict, job: dict, workspace: str, shot_id: str, source: str, metadata: dict, approve: bool, deps: Any) -> None:
+    series = (library.get("seriesById") or {}).get(job["seriesId"])
+    if not isinstance(series, dict):
+        raise VideoShotError("Series episode not found")
+    import_generated_take(series, workspace, deps.workspace_dir(workspace), shot_id, source, metadata, approve=approve)
+
+
+def _locked_write(workspace: str, mutate: Callable[[dict], None]) -> bool:
+    from routers import series_library as routes
+    lock, read, write, resolve = (getattr(routes, "_library_lock", None), getattr(routes, "_read_library", None),
+                                  getattr(routes, "_write_library", None), getattr(routes, "_resolve_workspace", None))
+    if lock is None or read is None or write is None or resolve is None:
+        return False
+    with lock:
+        resolved = resolve(workspace)
+        library = read(resolved)
+        mutate(library)
+        write(resolved, library)
+    return True
+
+
+def _save(deps: Any, workspace: str, library: dict) -> None:
+    if getattr(deps, "write_library", None):
+        deps.write_library(workspace, library)
+        return
+    from services.series_library import write_series_library
+    write_series_library(deps.workspace_dir(workspace), library, workspace)
+
+
+def _shot_index(series: dict[str, Any], shot_id: str) -> tuple[dict, int, dict] | None:
+    for episode in (series.get("episodesById") or {}).values():
+        if not isinstance(episode, dict):
+            continue
+        for index, shot in enumerate(episode.get("shots") or []):
+            if isinstance(shot, dict) and shot.get("id") == shot_id:
+                return episode, index, shot
+    return None
+
+
+# Tools ---------------------------------------------------------------------------------------------
+
+def _call(deps: Any, tool: str, version: int, data: dict[str, Any], *, intent: str | None = None) -> dict[str, Any]:
+    """The tool reply. ``generation.video`` matches ``game_tools``: the handler adds ``operation``."""
+    envelope: dict[str, Any] = {"version": version, "input": data}
+    if intent:
+        envelope["intent_id"] = intent
+    reply = deps.call(tool, envelope)
+    if not isinstance(reply, dict) or reply.get("_is_error"):
+        error = (reply or {}).get("error") if isinstance(reply, dict) else None
+        message = error.get("message") if isinstance(error, dict) else reply
+        raise VideoShotError(f"{tool}: {message}"[:500])
+    result = reply.get("result")
+    return result if isinstance(result, dict) else reply
+
+
+def admitted_job_id(reply: Any) -> str | None:
+    """The backend job id a tool's admission reply names, or None.
+
+    ``generation.video`` is an operation tool: its handler answers the admission result unchanged,
+    ``{"receipt": {..., "result": {"job_id": ...}}, "replayed": bool}`` (``task_command_admission._receipt``), with no
+    top-level ``result``. A reply already unwrapped to ``job_id``, or a ``job`` / ``task`` object, is read too."""
+    if not isinstance(reply, dict):
+        return None
+    receipt = reply.get("receipt") if isinstance(reply.get("receipt"), dict) else {}
+    for holder in (receipt.get("result"), reply, reply.get("job"), reply.get("task")):
+        for key in ("job_id", "jobId"):
+            if isinstance(holder, dict) and holder.get(key):
+                return str(holder[key])
+    return None
+
+
+def _job_id(payload: dict[str, Any]) -> str:
+    found = admitted_job_id(payload)
+    if found is None:
+        raise VideoShotError("generation.video returned no job")
+    return found
+
+
+def _wait(deps: Any, job_id: str, cancelled: Callable[[], bool]) -> dict[str, Any]:
+    while True:
+        if cancelled():
+            cancel_generation(deps, job_id)
+            raise VideoShotError("cancelled")
+        payload = _call(deps, "jobs.wait", 1, {"job_id": job_id, "timeout_s": 30})
+        status = str(payload.get("status") or "")
+        if status in _TERMINAL:
+            if status != "completed":
+                raise VideoShotError(payload.get("error") or payload.get("message") or status)
+            return payload
+        if not payload.get("timed_out"):
+            deps.sleep(deps.poll_seconds)
+
+
+def _output_file(payload: dict[str, Any], deps: Any, workspace: str) -> str:
+    files = [str(item) for item in (payload.get("output_files") or []) if item]
+    name = files[0] if files else payload.get("file") or payload.get("filename")
+    if not name:
+        raise VideoShotError("generation.video returned no file")
+    return _locate(deps, workspace, str(name))
+
+
+def _locate(deps: Any, workspace: str, name: str) -> str:
+    if os.path.isabs(name):
+        return name
+    return os.path.join(deps.workspace_dir(workspace), name.lstrip("/"))
+
+
+# Start frame ---------------------------------------------------------------------------------------
+
+def _start_frame(job: dict[str, Any], shot: dict[str, Any], series: dict[str, Any], deps: Any,
+                 resolution: str) -> tuple[str, str]:
+    start = _stored_request(shot)["start"]
+    if start == "plan":
+        return _compose_plan(job, shot, series, deps, resolution)
+    return _named_frame(job, start, series, deps)
+
+
+def _end_reference(job: dict[str, Any], end: str | None, series: dict[str, Any], deps: Any) -> str | None:
+    if not end:
+        return None
+    _path, reference = _named_frame(job, end, series, deps)
+    return reference
+
+
+def _named_frame(job: dict[str, Any], name: str, series: dict[str, Any], deps: Any) -> tuple[str, str]:
+    root = deps.workspace_dir(job["workspace"])
+    relative = named_frame_file(series, _kits(deps, job["workspace"]) if name.startswith("pose:") else {}, root, name)
+    if not relative:
+        raise VideoShotError(f"pose {name} has no image")
+    asset = (series.get("assets") or {}).get(name)
+    by_id = not name.startswith("pose:") and isinstance(asset, dict) and asset.get("uri") and _asset_id(name)
+    return os.path.join(root, relative), name if by_id else _file_reference(job["workspace"], relative)
+
+
+def named_frame_file(series: dict[str, Any], kits: dict[str, Any], root: str, name: str) -> str | None:
+    """The workspace file a named frame points at: ``pose:<character>/<pose>``, an asset id or a workspace file.
+    None when a pose has no image."""
+    if name.startswith("pose:"):
+        character, _, pose = name[5:].partition("/")
+        return _pose_file(series, kits, root, character, pose)
+    asset = (series.get("assets") or {}).get(name)
+    return str(asset["uri"]) if isinstance(asset, dict) and asset.get("uri") else name
+
+
+def _compose_plan(job: dict[str, Any], shot: dict[str, Any], series: dict[str, Any], deps: Any,
+                  resolution: str) -> tuple[str, str]:
+    root = deps.workspace_dir(job["workspace"])
+    size = [int(part) for part in resolution.split("x")]
+    layers = _plan_layers(shot, series, _kits(deps, job["workspace"]), root)
+    if not layers:
+        layers = [{"file": _flat_plate(root, f"{shot['id']}-plate.png", size), "x": 50, "y": 50}]
+    plate = {"workspace": job["workspace"], "size": size, "background": "#c4b49a", "layers": layers,
+             "output_name": f"{shot['id']}-video-start"}
+    base = _location_file(series, shot)
+    if base:
+        plate["base"] = base
+    # The same plate replays the composed file; a changed plate is a new intent, not a 409.
+    intent = _intent(job, shot, "start", hashlib.sha1(json.dumps(plate, sort_keys=True).encode()).hexdigest()[:12])
+    composed = _call(deps, "media.compose", 1, plate, intent=intent)
+    name = str(composed.get("file") or "")
+    if not name:
+        raise VideoShotError("media.compose returned no file")
+    path = _locate(deps, job["workspace"], name)
+    relative = name if not os.path.isabs(name) else os.path.relpath(name, root)
+    return path, _file_reference(job["workspace"], relative)
+
+
+def _plan_layers(shot: dict[str, Any], series: dict[str, Any], kits: dict[str, Any], root: str) -> list[dict[str, Any]]:
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    layers = []
+    for entry in layout.get("cast") or []:
+        if not isinstance(entry, dict):
+            continue
+        relative = _pose_file(series, kits, root, str(entry.get("characterId") or ""), str(entry.get("poseId") or "base"))
+        if relative:
+            layers.append({"file": relative, "x": entry.get("x", 50), "y": 72, "scale": 0.62, "anchor": "bottom"})
+    return layers[:16]
+
+
+def _pose_file(series: dict[str, Any], kits: dict[str, Any], root: str, character_id: str, pose_id: str) -> str | None:
+    character = next((item for item in series.get("characters") or [] if item.get("id") == character_id), None)
+    kit_id = (((character or {}).get("voiceProfile") or {}).get("characterKitRef") or {}).get("id")
+    asset = pose_asset((kits or {}).get(kit_id), pose_id)
+    if not isinstance(asset, dict):
+        return None
+    path = workspace_path(asset.get("source"), root)
+    if path:
+        return os.path.relpath(path, os.path.realpath(root))
+    for key in ("file", "source"):
+        name = asset.get(key)
+        if isinstance(name, str) and name and not name.startswith("/"):
+            return name
+    return None
+
+
+def _location_file(series: dict[str, Any], shot: dict[str, Any]) -> str | None:
+    location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None)
+    plate = ((location or {}).get("layout2d") or {}).get("plateAssetId") if isinstance((location or {}).get("layout2d"), dict) else None
+    asset = (series.get("assets") or {}).get(plate) if isinstance(plate, str) else None
+    uri = (asset or {}).get("uri") if isinstance(asset, dict) else None
+    return str(uri) if isinstance(uri, str) and uri else None
+
+
+def _flat_plate(root: str, name: str, size: list[int]) -> str:
+    folder = os.path.join(root, "series-video")
+    os.makedirs(folder, exist_ok=True)
+    relative = f"series-video/{name}"
+    Image.new("RGB", (size[0], size[1]), (196, 180, 154)).save(os.path.join(root, "series-video", name))
+    return relative
+
+
+def _kits(deps: Any, workspace: str) -> dict[str, Any]:
+    if getattr(deps, "read_kits", None):
+        return deps.read_kits(workspace) or {}
+    from services.character_kit_library import read_character_kit_library
+    return read_character_kit_library(deps.workspace_dir(workspace)).get("kits") or {}
+
+
+def _file_reference(workspace: str, relative: str) -> str:
+    rel = str(relative).replace("\\", "/").lstrip("/")
+    return f"/api/v1/file/{quote(rel)}?{urlencode({'workspace': workspace})}"
+
+
+def _asset_id(value: str) -> bool:
+    return value.startswith("asset_") and " " not in value
+
+
+def _drift(start_path: str, take_path: str, frames: int) -> float | None:
+    """The larger distance of the take's middle and last frames from the start frame.
+
+    The first frame of the take is the start frame by construction, so it is not compared."""
+    try:
+        plate = _open_frame(start_path)
+        later = [_open_frame(take_path, at) for at in (frames / FRAME_RATE / 2, None)]
+    except OSError:
+        return None
+    distances = [style_distance(plate, frame) for frame in later if frame is not None] if plate is not None else []
+    return max(distances) if distances else None
+
+
+def _open_frame(path: str, at: float | None = 0.0) -> Image.Image | None:
+    """A still, or the frame of a video at ``at`` seconds (``None``: the last frame)."""
+    if not path or not os.path.isfile(path):
+        return None
+    if path.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+        with Image.open(path) as image:
+            return image.convert("RGB")
+    return _video_frame(path, at)
+
+
+def _video_frame(path: str, at: float | None) -> Image.Image | None:
+    import subprocess
+    import tempfile
+    folder = tempfile.mkdtemp(prefix="video-shot-")
+    target = os.path.join(folder, "frame.png")
+    seek = ["-sseof", "-0.25"] if at is None else ["-ss", f"{max(0.0, at):.3f}"]
+    try:
+        subprocess.run(["ffmpeg", "-y", *seek, "-i", path, "-frames:v", "1", target], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        if not os.path.isfile(target):
+            return None
+        with Image.open(target) as image:
+            return image.convert("RGB")
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+# Picture distance ----------------------------------------------------------------------------------
+
+def _histogram_distance(left: Image.Image, right: Image.Image) -> float:
+    first, second = _histogram(left), _histogram(right)
+    total = sum(first) or 1
+    return sum(abs(a - b) for a, b in zip(first, second)) / (2 * total)
+
+
+def _histogram(image: Image.Image) -> list[int]:
+    small = image.convert("RGB").resize((64, 64))
+    bins = [0] * 24
+    for red, green, blue in small.getdata():
+        bins[red // 32] += 1
+        bins[8 + green // 32] += 1
+        bins[16 + blue // 32] += 1
+    return bins
+
+
+def _edge_density(image: Image.Image) -> float:
+    gray = image.convert("L").resize((64, 64))
+    pixels = gray.load()
+    total = 0
+    count = 0
+    for y in range(63):
+        for x in range(63):
+            here = pixels[x, y]
+            total += abs(here - pixels[x + 1, y]) + abs(here - pixels[x, y + 1])
+            count += 2
+    return (total / count) / 255 if count else 0.0
+
+
+def _dhash_distance(left: Image.Image, right: Image.Image) -> float:
+    return (_dhash(left) ^ _dhash(right)).bit_count() / 64
+
+
+def _dhash(image: Image.Image) -> int:
+    gray = list(image.convert("L").resize((9, 8)).getdata())
+    bits = 0
+    for y in range(8):
+        row = gray[y * 9:(y + 1) * 9]
+        for x in range(8):
+            bits = (bits << 1) | (1 if row[x] > row[x + 1] else 0)
+    return bits

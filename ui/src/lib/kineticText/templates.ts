@@ -1,5 +1,5 @@
 import textCatalog from '../../../../app/shared/text_templates.json' with { type: 'json' }
-import type { KineticText, TextFont } from './types'
+import type { KineticText, TextExit, TextFont } from './types'
 
 export type TextTemplateField = { key: string; labelKey: string; default: string }
 export type TextTemplate = {
@@ -17,6 +17,13 @@ const cue = (id: string, text: string, frame: { start: number; duration: number 
 type RawField = { key: string; default: string; labelKey: string }
 type RawText = { id: string; labelKey: string; fields: RawField[] }
 type TextFrame = { start: number; duration: number; width: number; height: number }
+
+/** Every template leaves before its end: the exit plays in the last part of the cue. */
+const leave = (preset: TextExit, duration: number) => ({ exit: { preset, duration } })
+/** A second line (the chapter title, the call to action) follows the first by up to half a second. */
+const after = (frame: TextFrame) => frame.start + Math.min(0.5, frame.duration * 0.2)
+/** Each slam word but the last stays under the next one this long, so the plate never shows the picture between words. */
+const SLAM_OVERLAP = 0.06
 
 const RANSOM_FONTS: readonly TextFont[] = ['display', 'marker', 'serif', 'condensed']
 const RANSOM_PAPER = ['#f4e7cf', '#f6f1e4', '#f3d2b5', '#e7eef8']
@@ -40,7 +47,7 @@ function ransomCue(word: string, index: number, count: number, frame: TextFrame,
     x, y, size: tall ? 7 : 8, font: RANSOM_FONTS[index % RANSOM_FONTS.length], weight: 700,
     align: 'center', uppercase: true, rotation: RANSOM_TILT[index % RANSOM_TILT.length], color: '#1c140f',
     start: frame.start + Math.min(index * 0.12, frame.duration * 0.5), end: frame.start + frame.duration,
-    enter: { preset: 'impact', duration: 0.2 },
+    enter: { preset: 'impact', duration: 0.2 }, ...leave('fade', 0.25),
     box: { kind: 'paper', color: RANSOM_PAPER[index % RANSOM_PAPER.length], opacity: 1, padding: 0.28 },
     stroke: { ...INK }, shadow: { ...NO_SHADOW },
   })
@@ -66,7 +73,7 @@ function dymoLook(text: string, dark: boolean, tall: boolean): Partial<KineticTe
   return {
     x: 50, y: tall ? 72 : 78, size: tall ? 4.5 : 5, font: 'mono', weight: 700, align: 'center',
     uppercase: true, letterSpacing: 0.06, maxWidth: tall ? 84 : 78, rotation: dymoTilt(text),
-    color: dark ? '#141210' : '#f4efe6', enter: { preset: 'words', duration: 0.8 },
+    color: dark ? '#141210' : '#f4efe6', enter: { preset: 'words', duration: 0.8 }, ...leave('wipe', 0.3),
     box: { kind: 'tape', color: dark ? '#f2b705' : '#141210', opacity: 1, padding: 0.55, radius: 0.18 },
     stroke: { color: '#141210', width: 0 }, shadow: { color: '#141210', blur: 0, x: 0, y: 0 },
   }
@@ -82,7 +89,7 @@ function buildCard(values: Record<string, string>, frame: TextFrame) {
   const tall = vertical(frame.height, frame.width)
   return [cue('card', values.title || 'Musktopia', frame, {
     x: 50, y: tall ? 44 : 46, size: tall ? 10 : 12, font: 'display', weight: 400, align: 'center',
-    rotation: -1, color: '#1a140f', enter: { preset: 'rise', duration: 0.45 },
+    rotation: -1, color: '#1a140f', enter: { preset: 'rise', duration: 0.45 }, ...leave('fall', 0.3),
     box: { kind: 'card', color: '#f7f1e4', opacity: 1, padding: 0.62, radius: 0.08 },
     stroke: { ...INK }, shadow: { ...NO_SHADOW },
   })]
@@ -92,29 +99,41 @@ function buildDesktop(values: Record<string, string>, frame: TextFrame) {
   const params: Record<string, number | string> = {}
   for (const key of ['theme', 'layout', 'apps', 'switch']) params[key] = values[key]
   for (const key of ['focus', 'workspace']) params[key] = Math.trunc(Number(values[key]))
-  return [cue('desktop', '', frame, { x: 50, y: 50, size: 10, graphic: { id: 'tiling', params } })]
+  return [cue('desktop', '', frame, { x: 50, y: 50, size: 10, graphic: { id: 'tiling', params }, ...leave('fade', 0.3) })]
 }
 
 const BUILDS: Record<string, TextTemplate['build']> = {
   'lower-third-date': (values, frame) => {
     const y = vertical(frame.height, frame.width) ? 72 : 78
     return [
-      cue('date', values.date || '1991', frame, { y: y - 8, size: 14, font: 'display', weight: 400, align: 'left', x: 12, enter: { preset: 'slide-right', duration: 0.45 }, box: { kind: 'bar', color: '#e85d4c', opacity: 1, padding: 0.2 } }),
-      cue('caption', values.caption || '', frame, { y, size: 5, font: 'condensed', x: 12, align: 'left', enter: { preset: 'fade', duration: 0.4 } }),
+      cue('date', values.date || '1991', frame, { y: y - 8, size: 14, font: 'display', weight: 400, align: 'left', x: 12, enter: { preset: 'slide-right', duration: 0.45 }, ...leave('slide-left', 0.35), box: { kind: 'bar', color: '#e85d4c', opacity: 1, padding: 0.2 } }),
+      cue('caption', values.caption || '', frame, { y, size: 5, font: 'condensed', x: 12, align: 'left', enter: { preset: 'fade', duration: 0.4 }, ...leave('fade', 0.3) }),
     ]
   },
-  'chorus-banner': (values, frame) => [cue('chorus', values.line || '', frame, { font: 'marker', y: vertical(frame.height, frame.width) ? 62 : 48, enter: { preset: 'words', duration: 1.1 }, loop: 'pulse', box: { kind: 'paper', color: '#f4e7cf', opacity: 0.94, padding: 0.4 }, color: '#2a2118' })],
-  'title-card': (values, frame) => [cue('title', values.title || '', frame, { font: 'display', weight: 400, size: 16, y: 46, enter: { preset: 'blur', duration: 0.7 }, box: { kind: 'plate', color: '#07080d', opacity: 1, padding: 0 } }), ...(values.subtitle ? [cue('sub', values.subtitle, frame, { y: 62, size: 5, font: 'serif', enter: { preset: 'fade', duration: 0.5 } })] : [])],
-  'end-card': (values, frame) => [cue('end', values.title || '', frame, { font: 'display', weight: 400, size: 12, y: 44 }), cue('cta', values.cta || '', frame, { y: 60, size: 5, font: 'sans' })],
-  'year-counter': (values, frame) => [cue('count', '{value}', frame, { font: 'display', weight: 400, size: 18, y: 42, counter: { from: Number(values.from) || 0, to: Number(values.to) || 0, decimals: 0, ease: 'ease' } }), ...(values.label ? [cue('label', values.label, frame, { y: 62, size: 5, font: 'condensed' })] : [])],
-  quote: (values, frame) => [cue('quote', `“${values.quote || ''}”`, frame, { font: 'serif', italic: true, size: 7, y: 46, maxWidth: vertical(frame.height, frame.width) ? 78 : 60, enter: { preset: 'typewriter', duration: 1.4 } }), ...(values.author ? [cue('author', values.author, frame, { y: 64, size: 4, font: 'sans' })] : [])],
+  'chorus-banner': (values, frame) => [cue('chorus', values.line || '', frame, { font: 'marker', y: vertical(frame.height, frame.width) ? 62 : 48, enter: { preset: 'words', duration: 1.1 }, ...leave('fade', 0.3), loop: 'pulse', box: { kind: 'paper', color: '#f4e7cf', opacity: 0.94, padding: 0.4 }, color: '#2a2118' })],
+  'title-card': (values, frame) => [cue('title', values.title || '', frame, { font: 'display', weight: 400, size: 16, y: 46, enter: { preset: 'blur', duration: 0.7 }, ...leave('fade', 0.4), box: { kind: 'plate', color: '#07080d', opacity: 1, padding: 0 } }), ...(values.subtitle ? [cue('sub', values.subtitle, frame, { y: 62, size: 5, font: 'serif', enter: { preset: 'fade', duration: 0.5 }, ...leave('fade', 0.3) })] : [])],
+  'end-card': (values, frame) => [
+    cue('end', values.title || '', frame, { font: 'display', weight: 400, size: 12, y: 44, enter: { preset: 'rise', duration: 0.5 }, ...leave('fade', 0.4) }),
+    cue('cta', values.cta || '', frame, { y: 60, size: 5, font: 'sans', start: after(frame), enter: { preset: 'scale', duration: 0.3 }, loop: 'pulse', ...leave('fade', 0.3) }),
+  ],
+  'year-counter': (values, frame) => [cue('count', '{value}', frame, { font: 'display', weight: 400, size: 18, y: 42, counter: { from: Number(values.from) || 0, to: Number(values.to) || 0, decimals: 0, ease: 'ease' }, ...leave('fade', 0.3) }), ...(values.label ? [cue('label', values.label, frame, { y: 62, size: 5, font: 'condensed', ...leave('fade', 0.3) })] : [])],
+  quote: (values, frame) => [cue('quote', `“${values.quote || ''}”`, frame, { font: 'serif', italic: true, size: 7, y: 46, maxWidth: vertical(frame.height, frame.width) ? 78 : 60, enter: { preset: 'typewriter', duration: 1.4 }, ...leave('fade', 0.4) }), ...(values.author ? [cue('author', values.author, frame, { y: 64, size: 4, font: 'sans', ...leave('fade', 0.3) })] : [])],
   'trailer-slam': (values, frame) => {
     const lines = (values.lines || '').split('|').map(line => line.trim()).filter(Boolean).slice(0, 8)
     const each = frame.duration / Math.max(1, lines.length)
-    return lines.map((line, index) => cue(`slam-${index + 1}`, line, { start: frame.start + each * index, duration: each }, { font: 'display', weight: 400, size: 14, y: 50, enter: { preset: 'impact', duration: 0.18 }, box: { kind: 'plate', color: '#000000', opacity: 1, padding: 0 } }))
+    return lines.map((line, index) => {
+      const last = index === lines.length - 1
+      return cue(`slam-${index + 1}`, line, { start: frame.start + each * index, duration: each + (last ? 0 : SLAM_OVERLAP) }, {
+        font: 'display', weight: 400, size: 14, y: 50, enter: { preset: 'impact', duration: 0.18 },
+        ...(last ? leave('fade', 0.3) : leave('none', 0.05)), box: { kind: 'plate', color: '#000000', opacity: 1, padding: 0 },
+      })
+    })
   },
-  chapter: (values, frame) => [cue('kicker', (values.kicker || '').toUpperCase(), frame, { y: 40, size: 3, font: 'condensed', uppercase: true, letterSpacing: 0.2 }), cue('chapter', values.title || '', frame, { y: 50, size: 12, font: 'display', weight: 400 })],
-  'social-caption': (values, frame) => [cue('social', values.caption || '', frame, { y: vertical(frame.height, frame.width) ? 72 : 84, size: 4.5, maxWidth: vertical(frame.height, frame.width) ? 76 : 70, font: 'sans', box: { kind: 'pill', color: '#11131a', opacity: 0.82, padding: 0.45, radius: 0.8 } })],
+  chapter: (values, frame) => [
+    cue('kicker', (values.kicker || '').toUpperCase(), frame, { y: 40, size: 3, font: 'condensed', uppercase: true, letterSpacing: 0.2, enter: { preset: 'typewriter', duration: 0.6 }, ...leave('fade', 0.3) }),
+    cue('chapter', values.title || '', frame, { y: 50, size: 12, font: 'display', weight: 400, start: after(frame), enter: { preset: 'wipe', duration: 0.6 }, ...leave('fade', 0.4) }),
+  ],
+  'social-caption': (values, frame) => [cue('social', values.caption || '', frame, { y: vertical(frame.height, frame.width) ? 72 : 84, size: 4.5, maxWidth: vertical(frame.height, frame.width) ? 76 : 70, font: 'sans', enter: { preset: 'rise', duration: 0.35 }, ...leave('fade', 0.25), box: { kind: 'pill', color: '#11131a', opacity: 0.82, padding: 0.45, radius: 0.8 } })],
   ransom: buildRansom,
   dymo: buildDymo,
   card: buildCard,

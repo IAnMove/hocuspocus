@@ -142,13 +142,65 @@ def test_the_bible_lists_what_an_agent_may_use():
     assert audio_files(["mus-a.wav", "x.mp3"])["other"] == ["x.mp3"]
 
 
+def test_the_bible_shows_the_series_episode_format_and_finish_and_the_guide_their_defaults():
+    plain = build_bible(series(), {}, [])["series"]
+    assert plain["episodeFormat"] is None and plain["finish"] == "paper", "a series that chose nothing gets the defaults"
+    own = build_bible({**series(), "episodeFormat": "Two acts, 2 minutes, 14 shots.", "look": {"finish": "film"}}, {}, [])["series"]
+    assert own["episodeFormat"] == "Two acts, 2 minutes, 14 shots." and own["finish"] == "film"
+    guide = guide_text()
+    for phrase in ("`pan-left`", "`drift`", "are `static` (push-in words `push`)", "`look.finish`", "`none`",
+                   "Follow the series' `episodeFormat`, else this sitcom format", "45–55 shots", "else push on punchlines"):
+        assert phrase in guide, phrase
+    assert "`static` or `push`" not in guide, "the camera is not only static or push any more"
+
+
 def test_a_compact_episode_keeps_layout_lines_and_takes():
     ep = episode()
+    ep["shots"][0]["transitionIn"] = {"kind": "fade_black", "seconds": 0.8}
     compact = compact_episode(series(ep), ep)
     shot = compact["shots"][0]
     assert shot["layout2d"]["framing"] == "close" and shot["dialogueBeats"][0]["text"].startswith("¡¿CIEN")
+    assert shot["transitionIn"] == {"kind": "fade_black", "seconds": 0.8}
     assert shot["takes"][0] == {"id": "a1", "status": "completed", "language": "spanish", "seconds": 1.71, "sceneFilename": "e2s06.scene.json"}
     assert "attempts" not in shot and compact["languageVersions"]["english"]["dialogue"]
+    assert "transitionIn" in guide_text() and "fade_black" in guide_text() and "dip_white" in guide_text()
+
+
+def test_the_guide_names_the_production_lessons():
+    """Lessons that cost hours, and the real series.update merge. Growth stays within 40% of 40364 bytes
+    (35% until the open Video 3D rollup joined the template plan, seated rest and the realistic job in one guide: 56100 bytes;
+    32% until the template-fit gate and the template plan added 0.8 KB between them: 54026 bytes; 30% until the round-headed body added one paragraph; 25% until the box room and the voice band each added a line: 50622 bytes together; 15% until the owner PRs #1003, #1004, #1006, #1007 and #1015 each added a few lines to the guide: 47626 bytes together;
+    20% until the kit animations of a Series cast entry added 1.5 KB: 49374 bytes)."""
+    guide = guide_text()
+    assert len(guide.encode()) <= int(40364 * 1.40)
+    assert "model3d.blob.make" in guide
+    for phrase in (
+        "keeps every top-level field you omit",
+        "ambienceByLocation",
+        "base_revision",
+        "JSON copy",
+        "boats, waves, crowds, rain",
+        "image_start",
+        "image_end",
+        "10–13 key shots",
+        "shot_ids",
+        "One kit per character",
+        "voice-over",
+        "12 frames",
+        "85–155 Hz",
+        "165–255 Hz",
+        "pitch_range",
+        "magenta",
+        "output_name",
+        "output_name_taken",
+        "pitch_out_of_range",
+        "assets included",
+    ):
+        assert phrase in guide, phrase
+    # An existing name is kept (the new file is name(2)); agents with only MCP tools have no shell; no tool blends
+    # frames; the render checks the pitch range (#916).
+    for wrong in ("Reusing a name replaces", "nvidia-smi", "last 14 frames", "does not apply that range"):
+        assert wrong not in guide, wrong
 
 
 def test_the_guide_routes(tmp_path):
@@ -167,9 +219,13 @@ def test_the_guide_routes(tmp_path):
 def test_the_series_profile_names_real_series_tools():
     from services.mcp_profiles import PROFILES
     from services.series_commands import command_catalog
-    names = {item["name"] for item in command_catalog()}
+    from services.series_sets import command_catalog as room_catalog
+    operations = [*command_catalog(), *room_catalog()]
+    names = {item["name"] for item in operations}
     series_tools = {name for name in PROFILES["series"]["tools"] if name.startswith(("series.", "characters."))}
     assert series_tools <= names, series_tools - names
     assert {"series.guide", "series.episode.get"} <= names
-    readonly = {item["name"]: item["mutation"] for item in command_catalog()}
+    readonly = {item["name"]: item["mutation"] for item in operations}
     assert readonly["series.guide"] is False and readonly["series.episode.get"] is False
+    assert readonly["series.location.set3d"] is True
+    assert readonly["series.location.set3d.status"] is False

@@ -118,7 +118,7 @@ function SelectedSource({
           : <Film size={12} className="text-accent-blue shrink-0" />}
         <span className="flex-1 min-w-0 truncate text-[11px] text-text-primary">{sourceName}</span>
         {sourceAssetId && <span className="text-[9px] text-text-muted shrink-0">{sourceWorkspace || 'workspace'}</span>}
-        <button type="button" onClick={() => setSource(null)} className="p-0.5 text-text-muted hover:text-red-400 transition-colors" title={t('chrome.clear')}>
+        <button type="button" onClick={() => setSource(null)} className="p-0.5 text-text-muted hover:text-red-400 transition-colors" title={t('chrome.clear')} aria-label={t('chrome.clear')}>
           <X size={12} />
         </button>
       </div>

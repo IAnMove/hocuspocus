@@ -2,11 +2,15 @@
 import ast
 import asyncio
 import json
+import os
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+
+from services.kernel.config import ConfigStore
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def load_functions(path, names, namespace):
     tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
     functions = []
-    for node in tree.body:
+    for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names:
             node.decorator_list = []
             functions.append(node)
@@ -36,8 +40,12 @@ def settings_runtime(tmp_path):
         offloadobj=resident_offload, attention_mode="auto", args=SimpleNamespace(),
     )
     load_functions("app/wgp.py", ["_normalize_output_type", "get_default_profile", "compute_profile"], wgp.__dict__)
-    namespace = {"wgp": wgp, "Request": object, "HTTPException": HTTPException, "json": json}
-    load_functions("app/_launch_runtime.py", ["_validated_memory_profile_updates", "update_system_config"], namespace)
+    namespace = {
+        "wgp": wgp, "Request": object, "HTTPException": HTTPException, "json": json, "os": os, "uuid": uuid,
+        "_save_server_config": ConfigStore(lambda: wgp).save,
+    }
+    load_functions("app/services/settings_store.py", ["_validated_memory_profile_updates"], namespace)
+    load_functions("app/routers/settings.py", ["update_system_config"], namespace)
 
     def update(body):
         async def read_body():

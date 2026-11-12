@@ -2,11 +2,11 @@ from pathlib import Path
 
 from services.media_refs import parse_media_ref
 
-RUNTIME = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
+EDITOR_ROUTER = Path(__file__).resolve().parents[1] / "app" / "routers" / "video_editor.py"
 
 
 def test_video_editor_resolver_uses_parse_media_ref():
-    source = RUNTIME.read_text(encoding="utf-8")
+    source = EDITOR_ROUTER.read_text(encoding="utf-8")
     assert "from services.media_refs import parse_media_ref" in source
     assert "path, workspace = parse_media_ref(source, workspace)" in source
 

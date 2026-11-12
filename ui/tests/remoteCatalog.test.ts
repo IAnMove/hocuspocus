@@ -49,12 +49,12 @@ test('catalog filter key ignores constraints object identity', () => {
   assert.equal(remoteCatalogFilterKey('', undefined), '')
 })
 
-test('remote pages are 24 wide and never collapse to zero', () => {
-  assert.equal(ASSET_PICKER_PAGE_SIZE, 24)
+test('remote pages are 60 wide and never collapse to zero', () => {
+  assert.equal(ASSET_PICKER_PAGE_SIZE, 60)
   assert.equal(remotePageCount(0), 1)
-  assert.equal(remotePageCount(24), 1)
-  assert.equal(remotePageCount(25), 2)
-  assert.equal(remotePageCount(120), 5)
+  assert.equal(remotePageCount(60), 1)
+  assert.equal(remotePageCount(61), 2)
+  assert.equal(remotePageCount(300), 5)
 })
 
 test('remote toolbar uses constraint kinds; local toolbar only kinds present', () => {
@@ -73,7 +73,7 @@ test('remote list model pages by catalog total, not the in-memory outputs', () =
   const model = explorerListModel({
     remote: true,
     remoteItems: remote,
-    remoteTotal: 120,
+    remoteTotal: 300,
     remoteStatus: 'ready',
     localItems: local,
     query: '',
@@ -84,7 +84,7 @@ test('remote list model pages by catalog total, not the in-memory outputs', () =
   })
   assert.equal(model.pages, 5)
   assert.equal(model.safePage, 4)
-  assert.equal(model.footerTotal, 120)
+  assert.equal(model.footerTotal, 300)
   assert.equal(model.visible.length, 24)
   assert.equal(model.pickerItems[0].ref.scheme === 'catalog' ? model.pickerItems[0].ref.id : '', 'hit-0')
 })

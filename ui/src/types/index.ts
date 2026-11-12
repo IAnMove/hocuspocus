@@ -1,7 +1,20 @@
+/** One licence record for a model family. Variants point at it; they do not copy it. */
+export interface ModelLicence {
+  id: string
+  url: string
+  territoryExcluded: string[]
+  commercial: boolean
+  note: string
+}
+
 export interface ModelFamily {
   id: string
   label: string
   order: number
+  /** Set when every model in this family shares one territory licence. */
+  licence?: ModelLicence | null
+  /** Records used by some models when the family mixes products. */
+  licenceRecords?: ModelLicence[] | null
 }
 
 export type DirectorPipelineType = 'music_video' | 'short_film_audio' | 'short_film_story' | 'comic_movie'
@@ -63,6 +76,9 @@ export interface ModelDef {
   supports_ref_images?: boolean
   director?: DirectorModelCompatibility
   is_downloaded?: boolean
+  official?: boolean
+  optional?: boolean
+  runtime?: { installed: boolean; compatible?: boolean; install_hint?: string | null }
   // True when this model is only available with Mature Mode enabled.
   // Backend always returns the entry; UI filters it out when
   // servicesConfig.nsfw_mode is false. When nsfw_mode flips on, the
@@ -75,6 +91,8 @@ export interface ModelDef {
   // Weight-managed tool models (e.g. UniRig): shown in the settings
   // catalog for download/delete, but never selectable for generation.
   tool_only?: boolean
+  /** Id of the family licence. The full record lives on ModelFamily.licence. */
+  licenceId?: string
 }
 
 export interface Resolution {
@@ -303,6 +321,8 @@ export interface GenerationDetails {
   model_type?: string
   model_name?: string
   generation_mode?: string
+  /** Edit-tab jobs: which edit (retake, inpaint, edit_anything, outpaint, recast, restyle). */
+  edit_sub_mode?: string
   resolution?: string
   seed?: number | string
   steps?: number
@@ -334,6 +354,31 @@ export interface GenerationDetails {
   video_model_name?: string
   video_resolution?: string
   video_steps?: number
+  /** Director: the shared reference every start image is drawn from. */
+  reference_anchor?: DirectorReferenceAnchor
+  /** Director: whether image prompts copy the reference's light. */
+  lighting_continuity?: DirectorLightingContinuity
+  /** Director: whether clothing words are removed so references keep their clothes. */
+  keep_reference_wardrobe?: boolean
+  /** Director music video: which recurring set each chorus gets. */
+  chorus_set?: MusicVideoChorusSet
+  /** Director music video: clip i gets line i % length (empty: no hint). */
+  coverage_cycle?: string[]
+}
+
+/** Settings › Services › Director shared reference (run option ``reference_anchor``). */
+export type DirectorReferenceAnchorMode = 'always' | 'no_cast_refs' | 'off'
+/** Settings › Services › Light from the reference (run option ``lighting_continuity``). */
+export type DirectorLightingContinuity = 'auto' | 'reference' | 'per_shot'
+export type MusicVideoChorusSet = 'first' | 'rotate' | 'free'
+
+/** The picture a Director run draws every start image from. */
+export interface DirectorReferenceAnchor {
+  mode: DirectorReferenceAnchorMode
+  /** ``user``: the user's reference image; ``generated``: drawn from shot 1. */
+  source: 'user' | 'generated' | 'none'
+  filename?: string
+  prompt?: string
 }
 
 export interface GenerationJob {
@@ -343,7 +388,9 @@ export interface GenerationJob {
   /** Canonical Activity identity; distinct from the backend polling job id. */
   taskId?: string
   rootTaskId?: string
-  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'
+  /** `leftover`/`interrupted`: saved by a previous server process and not
+   *  running; the tile offers resume or discard. */
+  status: 'queued' | 'waiting_resource' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'leftover' | 'interrupted'
   progress: number
   step: number
   totalSteps: number
@@ -374,6 +421,13 @@ export interface GenerationTaskTiming {
   phase_timings: Array<{ phase: string; seconds: number }>
 }
 
+/** The listing's `origin` of a file an agent made (`GET /api/v1/outputs`, services/output_origin.py). */
+export interface OutputOrigin {
+  actor: 'agent' | 'wizard'
+  /** The MCP tool or Wizard capability that made it. */
+  capability?: string
+}
+
 export interface OutputFile {
   name: string
   url: string
@@ -395,6 +449,8 @@ export interface OutputFile {
   thumbnail_url?: string | null
   /** Assembled production result, never a component clip. */
   result_kind?: VideoResultKind | null
+  /** Who asked for it, from its sidecar: an MCP agent or the Wizard (absent for a person's work). */
+  origin?: OutputOrigin | null
   /** Pixel size when the listing knows it. The gallery sizes rows from it. */
   width?: number
   height?: number
@@ -454,6 +510,9 @@ export interface SceneAnimationEvent {
   payload?: string
 }
 
+export type SceneVideoLoop = 'loop' | 'hold' | 'pingpong'
+export interface SceneVideoPlayback { start: number; loop: SceneVideoLoop; speed: number }
+
 export interface SceneLayer {
   characterKitRef?: import('../lib/characterVoice').CharacterKitRef
   id: string
@@ -475,6 +534,11 @@ export interface SceneLayer {
   /** Layer-frame point, 0–100, that stays on the anchor while scale changes.
    *  Absent or 50,50 keeps scaling around the center. Camera and effect layers ignore it. */
   focus?: { x: number; y: number }
+  /** Video layers only: the clip plays on its own clock, apart from the layer's motion timing. `start` is the clip
+   *  second shown at the scene's start, `speed` its rate, and `loop` what happens at the clip's end: play it again
+   *  (`loop`), keep its last frame (`hold`) or play it back and forth (`pingpong`). Absent, the clip follows the
+   *  layer's motion time, as older scenes do. */
+  playback?: SceneVideoPlayback
   /** Deterministic full-frame procedural particles, shared by preview,
    * scene JSON and browser capture. Only used by effect layers. */
   atmosphere?: {
@@ -488,8 +552,11 @@ export interface SceneLayer {
   }
   /** Camera-pan multiplier: 0 ignores camera pan, 1 follows it normally,
    *  and values above 1 create foreground parallax. Camera zoom/roll still
-   *  affect every visual layer. Ignored by camera layers. */
+   *  affect every visual layer unless `parallaxZoom` is set. Ignored by camera layers. */
   parallax?: number
+  /** A depth layer: the camera zoom also follows `parallax` (zoom 1 + (camera zoom - 1) * parallax),
+   *  so a push grows near layers more than far ones. Off, the layer takes the full camera zoom. */
+  parallaxZoom?: boolean
   beatPulse?: { amount: number; on: 'beats' | 'downbeats' }
   sequence?: import('../lib/scene2d/motion').FrameSequence
   /** Author-confirmed horizontal continuity. Enables safe loop/cylinder tools;
@@ -529,6 +596,9 @@ export interface SceneLayer {
     speed: number
     /** Initial offset along the selected axis, in scene percent. */
     phase?: number
+    /** Every other copy is drawn mirrored along the scroll axis, so a picture that is not seamless meets itself at
+     * each join. The copies must touch (spacing equal to the drawn size along that axis); an odd count gets one more. */
+    mirror?: boolean
     /** Foreground silhouette locked to each tile join so a looping plate never shows its seam. */
     seamOccluder?: {
       enabled: boolean
@@ -622,6 +692,10 @@ export interface Scene {
   height: number
   /** Preview, timeline and browser capture sampling rate. Defaults to 30 for legacy scenes. */
   fps?: SceneFrameRate
+  /** Stop-motion hold: the picture changes every 2, 3 or 4 frames. Absent, export time is unchanged. */
+  motionStep?: 2 | 3 | 4
+  /** Deterministic shake of one hold, in pixels, from 0 to 2. */
+  stopMotionJitter?: number
   duration: number
   layers: SceneLayer[]
   /** Real generated/imported audio assets mixed into the exported scene MP4. */
@@ -701,14 +775,14 @@ export interface SceneCatalogAssetReference {
 }
 
 export type VideoResultKind = 'music_video' | 'trailer' | 'series_episode' | 'chapter'
-export type MediaFilter = 'all' | 'assets' | 'projects' | 'runs' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'world3d' | 'animate3d' | 'character-replacement' | 'avatars' | 'multiclip' | 'favorites' | 'workspaces' | 'characters' | 'lips' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
+export type MediaFilter = 'all' | 'assets' | 'projects' | 'runs' | 'images' | 'videos' | 'audio' | 'model3d' | 'scenes' | 'stories' | 'series' | 'styles' | 'comics' | 'videoeditor' | 'scene3d' | 'world3d' | 'animate3d' | 'character-replacement' | 'avatars' | 'multiclip' | 'favorites' | 'agents' | 'gameAssets' | 'workspaces' | 'characters' | 'lips' | 'videoclips' | 'trailers' | 'series_episodes' | 'auditdev'
 export type AspectRatio = 'auto' | '21:9' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 export type ResolutionPreset = 'auto' | '480p' | '540p' | '720p' | '768p' | '1080p'
 export type ScailResolutionProfile = '480p' | '512p' | '704p'
 /** Backward-compatible name for saved Recast/API callers. */
 export type RecastResolutionProfile = ScailResolutionProfile
 export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'
-export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything' | 'recast'
+export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything' | 'recast' | 'replace_character'
 export type AudioSubMode = 'speech' | 'music' | 'sfx' | 'mixer'
 
 export interface RecastReferenceAsset {
@@ -811,6 +885,7 @@ export interface ModelOptions {
   minimax_h3_text_encoder_default?: string
   minimax_h3_semantic_bridge?: boolean
   minimax_h3_fused_turbo?: boolean
+  minimax_h3_fasth3?: boolean
   minimax_h3_turbo?: {
     preset_id?: string
     presets?: Array<{ id: string; label: string; filename: string; steps: number; weight: number; description: string; runtime: string; workflow: string }>
@@ -998,6 +1073,10 @@ export interface VideoClipInfo {
   prompt: string
   negative_prompt: string
   audio_prompt: string
+  /** Window number → the prompt a model handler rewrote before generating (what the model received). */
+  model_prompts?: Record<string, string>
+  /** Director: what the planner's cleanup removed from this shot's image prompt (empty: nothing). */
+  prompt_cleanup?: { garments?: number; motion_sentences?: number; fillers?: number }
   saved_metadata: Record<string, unknown>
 }
 
@@ -1026,7 +1105,7 @@ export interface MultiClip {
   keyframes: MultiClipKeyframe[]
 }
 
-export type SettingsTab = 'performance' | 'integrations'
+export type SettingsTab = 'performance' | 'integrations' | 'installation'
 
 export type TextProvider =
   | 'local'
@@ -1111,7 +1190,15 @@ export interface ServicesConfig {
   nsfw_mode: boolean
   nsfw_accepted_at: string | null
   director_prompt_polish: 'off' | 'full_guide' | 'light_guide' | 'third_pass'
+  /** The Director sends every prompt exactly as planned: no style prefix, locks or polish. */
+  raw_prompts?: boolean
+  director_reference_anchor?: DirectorReferenceAnchorMode
+  director_lighting_continuity?: DirectorLightingContinuity
+  director_keep_reference_wardrobe?: boolean
   workflow_parallelism_enabled: boolean
+  /** «Modo un solo disparo»: 'review' (default) = a person approves what an agent makes; 'one_shot' = the agent approves it too
+   *  (services/agent_autonomy.py). Every approval the agent gives is marked in the app so it can be audited and reverted. */
+  agent_autonomy?: 'review' | 'one_shot'
   debug_trace_enabled: boolean
   debug_trace_log_path: string
   civitai_api_key: string
@@ -1506,6 +1593,10 @@ export interface MusicVideoTreatment {
   chorus_signature: string
   surrealism: number
   forbidden_elements: string
+  /** Coverage cycle: clip i gets line i % length. Missing: the server's six; empty: no hint. */
+  coverage?: string[]
+  /** Which recurring set each chorus gets. Missing: ``first``. */
+  chorus_set?: MusicVideoChorusSet
 }
 
 /** Partial plan returned from single-phase LLM calls */
@@ -1969,6 +2060,11 @@ export interface SavedPipelineState {
   preview_clips?: Array<Record<string, unknown>>
   scene_description: string
   reference_image_path: string | null
+  /** The shared reference Director drew from shot 1 (a file of this run). */
+  generated_reference_image_filename?: string | null
+  /** ``deterministic_fallback``: the planner returned no shots and Director built a simple plan. */
+  planning_source?: string | null
+  generation_details?: GenerationDetails
   auto_mode: boolean
   seamless: boolean
   image_model: string

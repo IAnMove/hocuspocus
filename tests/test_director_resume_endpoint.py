@@ -2,31 +2,11 @@
 
 from __future__ import annotations
 
-import ast
-import copy
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from routers import director as director_routes
 from services import director_pipeline
-
-
-ROOT = Path(__file__).resolve().parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
-
-
-def _load_endpoint(namespace: dict):
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
-    node = next(
-        copy.deepcopy(candidate)
-        for candidate in tree.body
-        if isinstance(candidate, ast.FunctionDef)
-        and candidate.name == "director_pipeline_resume"
-    )
-    node.decorator_list = []
-    module = ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[]))
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
-    return namespace["director_pipeline_resume"]
 
 
 def test_resume_reopens_and_republishes_the_same_director_root():
@@ -47,22 +27,21 @@ def test_resume_reopens_and_republishes_the_same_director_root():
             "root_id": f"task-director-{pipeline_id}",
         }
 
-    endpoint = _load_endpoint({
-        "_init_pipeline": lambda: None,
-        "wgp": SimpleNamespace(server_config={"save_path": "outputs"}),
-        "_get_active_workspace": lambda: "default",
-        "_reset_canonical_task_for_resume": lambda workspace, task_id: resets.append(
-            (workspace, task_id)
-        ),
-        "_publish_director_task": publish,
-    })
-
-    with patch.object(
+    with patch.object(director_routes, "_init_pipeline", lambda: None), patch.object(
+        director_routes, "wgp", SimpleNamespace(server_config={"save_path": "outputs"}),
+    ), patch.object(
+        director_routes, "_get_active_workspace", lambda: "default",
+    ), patch.object(
+        director_routes, "_reset_canonical_task_for_resume",
+        lambda workspace, task_id: resets.append((workspace, task_id)),
+    ), patch.object(
+        director_routes, "_publish_director_task", publish,
+    ), patch.object(
         director_pipeline, "resume_pipeline", return_value=(True, "resumed"),
     ), patch.object(
         director_pipeline, "get_pipeline", return_value=pipeline,
     ):
-        result = endpoint(pipeline_id)
+        result = director_routes.director_pipeline_resume(pipeline_id)
 
     task_id = f"task-director-{pipeline_id}"
     assert resets == [("project-a", task_id)]

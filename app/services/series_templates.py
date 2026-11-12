@@ -45,7 +45,7 @@ def _pick(value: Any, language: str) -> Any:
 
 
 def _language(language: str | None) -> str:
-    return language if language in LANGUAGES else "es"
+    return language if language in LANGUAGES else "en"
 
 
 def list_templates(language: str | None = None) -> list[dict[str, Any]]:
@@ -68,10 +68,10 @@ def build_series(template_id: str, workspace: str, *, title: str = "", language:
         raise SeriesTemplateError(f"Unknown series template {template_id}", status=404)
     lang = _language(language)
     body = _pick(copy.deepcopy(template["series"]), lang)
-    series = create_series_project(workspace, title=title.strip() or _pick(template["title"], lang))
-    content, spoken = LANGUAGES[lang]
+    # ``language`` gives the labels and ``languageIntent`` together, as the POST /series route does.
+    series = create_series_project(workspace, title=title.strip() or _pick(template["title"], lang), language=lang)
     series.update({key: body[key] for key in _FIELDS if key in body})
-    series.update({"language": content, "spokenLanguage": spoken, "allowedProductionMethods": ["animation_2d", "generated_video"],
+    series.update({"allowedProductionMethods": ["animation_2d", "generated_video"],
                    "template": {"id": template_id, "language": lang}})
     series["canon"] = {**series["canon"], **(body.get("canon") or {})}
     series = normalize_series_project(series, series["id"], workspace)

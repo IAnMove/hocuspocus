@@ -11,7 +11,7 @@ for the missing pieces.
 |---|---|
 | Workflow `CI` | Runs on `push`/`pull_request` to `main`, `development`, `dev`. No `paths` / `paths-ignore` filters. |
 | Job `CI required` | Aggregator. `if: always()`. Fails unless the three deterministic jobs are `success`. Cancelled/skipped/missing ≠ success. |
-| Check names emitted | `Clean-repo guard + Python checks`, `UI tests + lint + type-check + build`, `UI E2E boot (Chromium + simulated API)`, `CI required` |
+| Check names emitted | `Clean-repo guard + Python checks`, `UI tests + lint + type-check + build`, `UI E2E boot (Chromium + simulated API) 1/3` … `3/3` (one check per Playwright shard), `CI required` |
 | Required on GitHub? | **No.** A job named `CI required` is not a branch rule. PRs can merge without it. |
 | Ruleset `Protect main` (id `22330118`) | Active on `~DEFAULT_BRANCH` (`main`). Rules: no deletion, no force-push, PR required, **0** approving reviews. **No required status checks.** `bypass_actors: []`, `current_user_can_bypass: never` for this token. |
 | `development` | `protected: false`. No ruleset. Direct push, force-push and deletion are possible with write access. |

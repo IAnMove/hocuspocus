@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { useState } from 'react'
 import { BookMarked, Loader2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -12,6 +13,8 @@ export function SaveRecipeDialog({ defaultNsfw, onSave, onCancel }: {
   onSave: (name: string, description: string, nsfw: boolean) => Promise<void>
   onCancel: () => void
 }) {
+  const fieldIds = useFieldIds()
+
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [nsfw, setNsfw] = useState(defaultNsfw)
@@ -43,8 +46,8 @@ export function SaveRecipeDialog({ defaultNsfw, onSave, onCancel }: {
           {t('recipes.saveBody')}
         </p>
 
-        <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{tCommon('fields.name')}</label>
-        <input
+        <label htmlFor={fieldIds('f0')} className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{tCommon('fields.name')}</label>
+        <input aria-label={tCommon('fields.name')} id={fieldIds('f0')}
           autoFocus
           value={name}
           onChange={e => setName(e.target.value)}
@@ -53,8 +56,8 @@ export function SaveRecipeDialog({ defaultNsfw, onSave, onCancel }: {
           className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue mb-3"
         />
 
-        <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{t('recipes.descriptionOptional')}</label>
-        <textarea
+        <label htmlFor={fieldIds('f1')} className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{t('recipes.descriptionOptional')}</label>
+        <textarea aria-label={t('recipes.descriptionOptional')} id={fieldIds('f1')}
           value={description}
           onChange={e => setDescription(e.target.value)}
           placeholder={t('recipes.descriptionPlaceholder')}
@@ -63,7 +66,7 @@ export function SaveRecipeDialog({ defaultNsfw, onSave, onCancel }: {
         />
 
         <label className="flex items-center gap-2 cursor-pointer mb-4">
-          <input type="checkbox" checked={nsfw} onChange={e => setNsfw(e.target.checked)} className="accent-accent-blue" />
+          <input aria-label={t('recipes.mature')} type="checkbox" checked={nsfw} onChange={e => setNsfw(e.target.checked)} className="accent-accent-blue" />
           <span className="text-[11px] text-text-secondary">{t('recipes.mature')}</span>
         </label>
 

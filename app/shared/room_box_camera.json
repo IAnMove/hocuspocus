@@ -1,0 +1,15 @@
+{
+  "eyeHeight": 1.6,
+  "wideBack": 0.85,
+  "mediumBack": 0.35,
+  "lookY": 1.15,
+  "lookZShare": 0.15,
+  "fovWide": 48,
+  "fovMedium": 38,
+  "adultHeight": 1.75,
+  "defaultHeight": 1.7,
+  "doorWidth": 0.9,
+  "doorHeight": 2.0,
+  "ceiling": 2.6,
+  "floorTile": 3.0
+}

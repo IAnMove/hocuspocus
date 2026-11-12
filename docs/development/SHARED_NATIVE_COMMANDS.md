@@ -31,10 +31,14 @@ repeat clicks in that interval share the pending UI action. Admission and its
 identity are reported by the command panel/Activity. Failed local placeholders
 do not increase the active-job count on the button.
 
-The shared native routes currently cover image, speech, local music, SFX and upscale. Other
-Studio modes continue through their existing paths until migrated. Speech
+The shared native routes used by Studio currently cover image, speech, local music, SFX and upscale. Other
+Studio modes, including Studio → Video, continue through their existing paths until migrated
+(`generation.video` is a native command for MCP and server-side callers, see
+[VIDEO_COMMANDS](VIDEO_COMMANDS.md)). Speech
 model duration controls have model-specific meanings: for example, a 20-second
 Kugel setting does not force a short sentence to occupy exactly 20 seconds.
+Studio speech defaults to VoxCPM2 (`voxcpm2_voicedesign`) once those weights
+are installed; otherwise KugelAudio. See [VOXCPM2](VOXCPM2.md).
 Music keeps the lyrics and Music Caption as distinct literal fields and does
 not inherit speech voices. Its native model controls determine the accepted
 duration; the Story song workflow retains its own contract.
@@ -70,12 +74,21 @@ Relevant tools include:
 | `models`, `processors` | Discover exact model IDs and processor availability |
 | `assets` | Find source IDs and workspace-qualified media URLs |
 | `generation.image` | Submit the shared image specification |
+| `generation.video` | Submit Wan 2.1 t2v (v2) or typed H3 / LTX-2.3 (v3); see [VIDEO_COMMANDS](VIDEO_COMMANDS.md) |
 | `generation.speech` | Submit the shared speech specification |
 | `generation.music` | Submit literal lyrics and a music caption to an installed local model |
 | `generation.sfx` | Generate MMAudio effects from text or replace a canonical video's audio |
 | `tools.upscale` | Submit a typed upscale request for an existing image/video |
+| `image.remove_background` | Still-image cutout (`auto` / `u2net` / `screen`). `auto` copies an already-transparent PNG and records `background_already_removed`; see [Tools HOWUSEIT](../tools/HOWUSEIT.md) |
+| `workspaces.list` / `workspaces.create` | Output **folders** (not `collections.*`). Same name rules as the UI; creating an existing name is a no-op. See [WORKSPACE_COMMANDS](WORKSPACE_COMMANDS.md) |
 | `generation.receipt` | Recover a shared admission and its canonical task |
 | `status` | Follow the returned native job ID |
+
+`generation.image` and `generation.speech` also admit the isolated FLUX 3 /
+Drama 3 model ids once that runtime is installed
+([FLUX3_DRAMA3](../generation/FLUX3_DRAMA3.md)). Cancel while the engine is
+still loading returns `cancelled` at once; cancel after sampling has started
+stays `cancelling` until the worker releases.
 
 The previous `generate`, `upscale` and other legacy tools remain available.
 Their schemas differ from the typed operations above; do not mix envelopes.
@@ -135,6 +148,7 @@ interrupted job.
 Validation errors do not establish admission. A storage/dispatch error can
 require recovery, so do not replace its intention automatically. Native task
 status remains the completion authority. Read [image](IMAGE_COMMANDS.md),
-[speech](SPEECH_COMMANDS.md), [music](MUSIC_COMMANDS.md), [SFX](SFX_COMMANDS.md) and [upscale](TOOLS_COMMANDS.md) contracts for
+[video](VIDEO_COMMANDS.md), [speech](SPEECH_COMMANDS.md),
+[music](MUSIC_COMMANDS.md), [SFX](SFX_COMMANDS.md) and [upscale](TOOLS_COMMANDS.md) contracts for
 supported inputs and current limits. Hashes record inspected sources; they do
 not make external source files immutable throughout queue lifetime.

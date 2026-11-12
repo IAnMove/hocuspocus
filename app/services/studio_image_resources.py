@@ -1,6 +1,7 @@
 """Resolve Studio command inputs using the existing media and LoRA locations.
 
-This is read-only preparation. It neither installs models nor publishes assets.
+This is preparation. It neither installs models nor publishes assets; the only file it can write is the flattened copy of a guide or
+mask picture with alpha (``studio_image_alpha``).
 Canonical URLs retain the source workspace even when output uses another one.
 """
 from __future__ import annotations
@@ -14,6 +15,7 @@ import shutil
 import uuid
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
+from services.studio_image_alpha import flattened
 from services.wangp_submission import resolve_wangp_media, wangp_media_url
 
 
@@ -240,7 +242,8 @@ class StudioImageResources:
                     picture.verify()
                 resources.append({"role": field, "index": index, "url": value,
                                   "workspace": workspace, **identity})
-                paths.append(path)
+                # The engine reads a guide and a mask with three channels: a picture with alpha goes in flattened.
+                paths.append(flattened(path, field, identity["sha256"], self.uploads_dir()))
             working[field] = paths if isinstance(raw, list) else paths[0]
         # Resolution has already happened against each explicit source root;
         # native fallback must not reinterpret those URLs in the output folder.

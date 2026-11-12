@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import threading
@@ -15,10 +16,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from routers.video_editor import (
+    _start_video_editor_export,
     create_video_editor_jobs_router,
     create_video_editor_router,
+    get_video_editor_export,
     reset_video_editor_jobs,
 )
+from services.agent_activity import caller_scope
 from services.media_refs import parse_media_ref
 
 
@@ -290,9 +294,33 @@ def test_thumbnail_and_screenshot_keep_response_shape(tmp_path):
     assert shot.status_code == 200
     body = shot.json()
     assert body["filename"].endswith("_hero_frame_frame.png")
-    assert body["url"] == f"/api/v1/file/{body['filename']}"
+    assert body["url"] == f"/api/v1/file/{body['filename']}?workspace=default"
+    assert body["workspace"] == "default"
     assert body["time"] == 0.2
     assert (roots["default"] / body["filename"]).is_file()
+
+
+def test_screenshot_is_saved_in_the_requested_workspace(tmp_path):
+    # The active workspace is "default"; the editor works on "film". The frame
+    # must land in "film" and its URL must say so, or thumbnails break as soon
+    # as the user switches workspace.
+    client, roots, _events = _harness(tmp_path)
+    (roots["film"] / "clip.mp4").write_bytes(b"fake-mp4")
+
+    def fake_extract(_source, output_path, _time):
+        Path(output_path).write_bytes(b"png")
+        return {"time": 0.5, "width": 1280, "height": 720}
+
+    with patch("routers.video_editor.extract_frame", side_effect=fake_extract):
+        shot = client.post("/api/v1/video-editor/screenshot", json={
+            "source": "clip.mp4", "time": 0.5, "name": "frame", "workspace": "film",
+        })
+    assert shot.status_code == 200
+    body = shot.json()
+    assert body["workspace"] == "film"
+    assert body["url"] == f"/api/v1/file/{body['filename']}?workspace=film"
+    assert (roots["film"] / body["filename"]).is_file()
+    assert not (roots["default"] / body["filename"]).exists()
 
 
 def test_export_validates_clips_and_missing_or_foreign_sources(tmp_path):
@@ -433,3 +461,41 @@ def test_running_cancel_waits_for_ffmpeg_boundary_and_removes_output(tmp_path):
     assert next_step == []
     assert list(roots["default"].glob("*_Edited.mp4")) == []
     assert list(roots["default"].glob("*_Edited.meta.json")) == []
+
+
+def test_export_sidecar_names_its_montage_and_only_a_real_agent_request(tmp_path):
+    """The saved montage and the MCP agent that asked reach the export sidecar (as the inline route did)."""
+    _client, roots, _events = _harness(tmp_path)
+    (roots["film"] / "clip.mp4").write_bytes(b"fake-mp4")
+
+    def fake_render(_clips, output_path, *, progress, **_settings):
+        Path(output_path).write_bytes(b"fake editor mp4")
+        return {"duration": 1.0}
+
+    # A body cannot claim an agent; only the MCP caller scope attributes the export.
+    body = _export_body(
+        workspace="film",
+        montage={"file": "Cierre.montage.json", "revision": 3},
+        requested_by={"tool": "external_agent", "capability": "forged"},
+    )
+
+    def export_sidecar() -> dict:
+        DeferredThread.instances[-1].run_now()
+        job = get_video_editor_export(DeferredThread.instances[-1].args[0])
+        assert job["status"] == "completed"
+        return json.loads((roots["film"] / job["filename"]).with_suffix(".meta.json").read_text(encoding="utf-8"))
+
+    with patch("routers.video_editor.threading.Thread", DeferredThread), patch(
+        "routers.video_editor.render_project", side_effect=fake_render,
+    ):
+        _start_video_editor_export(dict(body))
+        person = export_sidecar()
+        with caller_scope({"surface": "mcp", "profile": "studio"}):
+            _start_video_editor_export(dict(body))
+        agent = export_sidecar()
+
+    assert person["params"]["video_editor"]["montage"] == {"file": "Cierre.montage.json", "revision": 3}
+    assert "requested_by" not in person
+    assert agent["requested_by"] == {
+        "tool": "external_agent", "capability": "montages.export", "mcp_profile": "studio",
+    }

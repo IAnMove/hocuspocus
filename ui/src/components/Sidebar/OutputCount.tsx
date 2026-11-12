@@ -1,7 +1,10 @@
+import { useFieldIds } from '../common/fieldIds'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 
 export function OutputCount() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const count = useStore(s => s.outputCount)
   const setCount = useStore(s => s.setOutputCount)
@@ -9,10 +12,10 @@ export function OutputCount() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('outputCount.label')}</label>
+        <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('outputCount.label')}</label>
         <span className="text-xs text-text-secondary">{count}</span>
       </div>
-      <input
+      <input aria-label={t('outputCount.label')} id={fieldIds('f0')}
         type="range"
         min={1}
         max={6}

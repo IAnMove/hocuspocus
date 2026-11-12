@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Search, Loader2, BookOpen, HardDrive, Tag, Link2, ArrowUpCircle, RefreshCw, KeyRound, ExternalLink, Boxes, Trash2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -363,7 +364,7 @@ export function LoraBrowser() {
         {showUrlImport && (
           <div className="w-full bg-bg-tertiary border border-border rounded-lg p-3 space-y-2">
             <div className="flex items-center gap-2">
-              <input
+              <input aria-label={t('loraBrowser.urlPlaceholder')}
                 type="text"
                 value={importUrl}
                 onChange={e => setImportUrl(e.target.value)}
@@ -400,7 +401,7 @@ export function LoraBrowser() {
           <div className="flex-1 flex items-center gap-2 max-w-2xl">
             <div className="flex-1 relative">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-              <input
+              <input aria-label={t('loraBrowser.searchPlaceholder')}
                 type="text"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
@@ -416,7 +417,7 @@ export function LoraBrowser() {
           <button
             onClick={() => setOpen(false)}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-          >
+           title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}>
             <X size={18} />
           </button>
         </div>
@@ -472,6 +473,7 @@ export function LoraBrowser() {
       {!selectedModel && (
         <div className="px-4 py-2 border-b border-border flex items-center gap-2 overflow-x-auto shrink-0">
           <select
+            aria-label={t('loraBrowser.sortResults')}
             value={sort}
             onChange={e => setSort(e.target.value)}
             className="bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
@@ -487,6 +489,7 @@ export function LoraBrowser() {
           </select>
 
           <select
+            aria-label={t('loraBrowser.period')}
             value={period}
             onChange={e => setPeriod(e.target.value)}
             className="bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
@@ -503,6 +506,7 @@ export function LoraBrowser() {
           </select>
 
           <select
+            aria-label={t('loraBrowser.modelFilter')}
             value={selectedFilter}
             onChange={e => {
               setSelectedFilter(e.target.value)
@@ -521,7 +525,7 @@ export function LoraBrowser() {
               CivitAI search and the installed-LoRA view. */}
           {nsfwEnabled && (
           <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer shrink-0">
-            <input
+            <input aria-label={t('loraBrowser.nsfw')}
               type="checkbox"
               checked={nsfw}
               onChange={e => setNsfwSticky(e.target.checked)}
@@ -542,11 +546,12 @@ export function LoraBrowser() {
                 ? t('loraBrowser.updatesFilterTitle', { count: updatableCount })
                 : t('loraBrowser.updatesNoneTitle')}
             >
-              <input
+              <input aria-label={t('loraBrowser.updates')}
                 type="checkbox"
                 checked={updatableOnly}
                 onChange={e => setUpdatableOnly(e.target.checked)}
                 disabled={updatableCount === 0}
+                title={updatableCount === 0 ? t('loraBrowser.updatesNoneTitle') : undefined}
                 className="w-3.5 h-3.5 rounded accent-amber-500 disabled:opacity-40"
               />
               <span className={`flex items-center gap-0.5 ${
@@ -563,6 +568,7 @@ export function LoraBrowser() {
               a creator's renamed variants is current and what's stale. */}
           {browseKind === 'lora' && showInstalled && (
             <select
+              aria-label={t('loraBrowser.sortTitle')}
               value={installedSort}
               onChange={e => setInstalledSort(e.target.value as typeof installedSort)}
               className="px-2 py-1 text-xs rounded-lg border border-border bg-bg-tertiary text-text-secondary focus:outline-none focus:border-accent-blue shrink-0"
@@ -833,6 +839,8 @@ export function LoraBrowser() {
                               : 'bg-black/60 text-white/70 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400'
                         }`}
                         title={confirmDeleteKey === cardKey
+                          ? t('loraBrowser.confirmDelete')
+                          : t('loraBrowser.deleteLora')} aria-label={confirmDeleteKey === cardKey
                           ? t('loraBrowser.confirmDelete')
                           : t('loraBrowser.deleteLora')}
                       >

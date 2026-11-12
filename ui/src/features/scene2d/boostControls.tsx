@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import type { ParseKeys } from 'i18next'
 import { useUiTranslation } from '../../i18n'
 import { createSceneEvaluator } from '../../lib/scene2d/evaluate'
 import { FINISH_PRESETS, type SceneFinish } from '../../lib/scene2d/finish'
@@ -10,13 +11,9 @@ import type { AudioAnalysisResult, Scene, SceneLayer } from '../../types'
 
 const button = 'rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-secondary disabled:opacity-40'
 
-const PRESETS = [
-  ['warmCinema', 'finishWarm'],
-  ['oldDoc', 'finishDoc'],
-  ['nightNeon', 'finishNeon'],
-  ['paperComic', 'finishPaper'],
-  ['risoPress', 'finishRiso'],
-] as const
+/** Every finish in finish_presets.json, named in kineticText `finishes.<id>` (the titles of video2d_lines.json). */
+const PRESETS = Object.keys(FINISH_PRESETS)
+const finishName = (id: string) => `finishes.${id}` as ParseKeys<'kineticText'>
 
 export function SceneFinishControls({ finish, playing, recording, publishing, onChange }: { finish?: SceneFinish; playing?: boolean; recording?: boolean; publishing?: boolean; onChange: (finish: SceneFinish | undefined) => void }) {
   const { t } = useUiTranslation('kineticText')
@@ -25,11 +22,11 @@ export function SceneFinishControls({ finish, playing, recording, publishing, on
   return <fieldset disabled={disabled} className="mt-3 space-y-2 rounded-lg border border-border p-2">
     <legend className="px-1 text-[10px] text-text-muted">{t('finishTitle')}</legend>
     <div className="flex flex-wrap gap-1">
-      {PRESETS.map(([id, key]) => <button key={id} type="button" className={button} onClick={() => onChange(FINISH_PRESETS[id])}>{t(key)}</button>)}
+      {PRESETS.map(id => <button key={id} type="button" className={button} onClick={() => onChange(FINISH_PRESETS[id])}>{t(finishName(id), { defaultValue: id })}</button>)}
       <button type="button" className={button} onClick={() => onChange(undefined)}>{t('finishClear')}</button>
     </div>
     <label className="block text-[9px] text-text-muted">{t('finishTitle')}
-      <input type="range" min={0} max={1} step={0.05} value={amount} onChange={event => onChange({ ...finish, vignette: { amount: Number(event.target.value), softness: finish?.vignette?.softness ?? 0.55 } })} className="w-full" />
+      <input aria-label={t('finishTitle')} type="range" min={0} max={1} step={0.05} value={amount} onChange={event => onChange({ ...finish, vignette: { amount: Number(event.target.value), softness: finish?.vignette?.softness ?? 0.55 } })} className="w-full" />
     </label>
   </fieldset>
 }
@@ -104,9 +101,9 @@ function MotionFields({ layer, disabled, onPath, onSequence }: { layer: SceneLay
   return <fieldset disabled={disabled} className="mt-3 space-y-2 rounded-lg border border-border p-2">
     <legend className="px-1 text-[10px] text-text-muted">{t('pathTitle')}</legend>
     {points.length < 2 ? <button type="button" className={button} onClick={() => onPath({ points: [{ x: 20, y: 70 }, { x: 50, y: 40 }, { x: 80, y: 65 }], orient: true })}>{t('pathAdd')}</button> : <PathPad points={points} orient={orient} onPath={onPath} />}
-    {points.length >= 2 ? <label className="flex items-center gap-2 text-[9px] text-text-muted"><input type="checkbox" checked={orient} onChange={event => onPath({ points, orient: event.target.checked })} />{t('pathOrient')}</label> : null}
+    {points.length >= 2 ? <label className="flex items-center gap-2 text-[9px] text-text-muted"><input aria-label={t('pathOrient')} type="checkbox" checked={orient} onChange={event => onPath({ points, orient: event.target.checked })} />{t('pathOrient')}</label> : null}
     <label className="block text-[9px] text-text-muted">{t('sequenceSources')}
-      <textarea rows={3} defaultValue={sequenceText(layer)} onBlur={event => onSequence(parseSequence({ kind: 'frames', sources: event.target.value.split(/\n+/), fps: 12, loop: 'loop' }))} className="mt-1 w-full rounded border border-border bg-bg-primary p-1 text-[9px]" />
+      <textarea aria-label={t('sequenceSources')} rows={3} defaultValue={sequenceText(layer)} onBlur={event => onSequence(parseSequence({ kind: 'frames', sources: event.target.value.split(/\n+/), fps: 12, loop: 'loop' }))} className="mt-1 w-full rounded border border-border bg-bg-primary p-1 text-[9px]" />
     </label>
   </fieldset>
 }

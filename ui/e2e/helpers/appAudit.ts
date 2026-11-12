@@ -26,7 +26,7 @@ const wizardRoutes: Record<string, { actions: string[]; example: string; support
   'Studios/Character Creator': { actions: ['create_character_kit', 'attach_character_kit_references', 'build_character_kit'], example: 'Crea un Character Kit de un mago con abrigo azul usando la referencia adjunta.' },
   'Studios/Video 2.5D': { actions: ['create_3d_scene', 'add_3d_scene_layer', 'apply_3d_rhythm', 'save_3d_scene', 'export_3d_scene'], example: 'Crea una escena 2.5D, añade esta imagen, guarda la escena y expórtala.' },
   'Studios/Video 3D': { actions: [], example: 'Montar GLB y editar cámaras del mundo 3D requiere el editor.', support: 'manual' },
-  'Studios/Replace character': { actions: [], example: 'Selecciona el vídeo y el fotograma editado en Replace character.', support: 'manual' },
+  'Direct generation/Edit/Replace character': { actions: ['open_tab'], example: 'Abre Generación directa → Editar → Cambiar personaje y selecciona el vídeo y el fotograma.', support: 'manual' },
   'Studios/Animate': { actions: ['open_character_kit_rig'], example: 'Abre el rig del Character Kit. Los ajustes de animación necesitan controles manuales.', support: 'partial' },
   'Production/Director': { actions: ['stage_story_video', 'stage_story_music_video', 'start_director_production'], example: 'Prepara el videoclip de la canción seleccionada y lanza la producción.' },
   'Production/Video Editor': { actions: ['create_video_editor_project', 'add_video_editor_clips', 'trim_video_editor_clip', 'add_video_editor_audio', 'export_video_editor'], example: 'Crea un montaje con estos dos vídeos, añade esta canción y expórtalo.' },

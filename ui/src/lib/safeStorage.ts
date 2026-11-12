@@ -68,6 +68,13 @@ export function safeStorageSet(area: SafeStorageArea, key: string, value: string
   }
 }
 
+/** Storage-shaped view of the session area for helpers that accept a `Storage`. */
+export const safeSessionStorage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> = {
+  getItem: key => safeStorageGet('session', key),
+  setItem: (key, value) => safeStorageSet('session', key, value),
+  removeItem: key => safeStorageRemove('session', key),
+}
+
 export function safeStorageRemove(area: SafeStorageArea, key: string): void {
   memoryFallbacks[area].delete(key)
   fallbackOnlyKeys[area].delete(key)

@@ -136,7 +136,7 @@ test('new music references require their own catalog version without invalidatin
     globalThis.fetch = async () => new Response(JSON.stringify(payload))
     assert.deepEqual(await loadRenderedReferenceScene(music, '/scene-template-previews'), scene)
     globalThis.fetch = async () => new Response(JSON.stringify({ ...payload, catalogVersion: CATALOG_VERSION }))
-    await assert.rejects(loadRenderedReferenceScene(music, '/scene-template-previews'), /identidad|versión/i)
+    await assert.rejects(loadRenderedReferenceScene(music, '/scene-template-previews'), /identity|version/i)
     assert.deepEqual(parseRenderedReferenceScene(referencePayload(), expected), referenceScene())
   } finally { globalThis.fetch = originalFetch }
 })

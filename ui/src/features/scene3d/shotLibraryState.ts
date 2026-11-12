@@ -2,17 +2,17 @@ import { SCENE3D_TEMPLATES, type Scene3DTemplateFilter, type Scene3DTemplateId }
 import { TEMPLATE_SETTINGS, type TemplateSetting } from './templateFilters'
 
 /** Shot types in the library's sidebar, in the order people browse them. */
-export const LIBRARY_CATEGORIES = ['pixel', 'animated', 'perspective', 'creative', 'dark-fantasy', 'psx', 'action', 'cinema', 'drive', 'space', 'music', 'product'] as const satisfies readonly Scene3DTemplateFilter[]
+export const LIBRARY_CATEGORIES = ['pixel', 'animated', 'perspective', 'creative', 'dark-fantasy', 'psx', 'anime', 'action', 'cinema', 'drive', 'space', 'music', 'product', 'transition'] as const satisfies readonly Scene3DTemplateFilter[]
 
-/** What the sidebar can show: recent shots, everything, one type, or the user's own scenarios. */
-export type LibraryCategory = 'recent' | 'all' | 'mine' | typeof LIBRARY_CATEGORIES[number]
+/** What the sidebar can show: recent shots, everything, one type, the server's stages, or the user's own scenarios. */
+export type LibraryCategory = 'recent' | 'all' | 'stages' | 'mine' | typeof LIBRARY_CATEGORIES[number]
 export type LibraryView = { category: LibraryCategory; setting: 'all' | TemplateSetting; query: string }
 
 const RECENT_KEY = 'hocuspocus.shotLibrary.recent'
 const VIEW_KEY = 'hocuspocus.shotLibrary.view'
 const RECENT_LIMIT = 8
 const KNOWN = new Set<string>(SCENE3D_TEMPLATES.map(item => item.id))
-const CATEGORIES = new Set<string>(['recent', 'all', 'mine', ...LIBRARY_CATEGORIES])
+const CATEGORIES = new Set<string>(['recent', 'all', 'stages', 'mine', ...LIBRARY_CATEGORIES])
 
 function read(key: string): unknown {
   try { return JSON.parse(window.localStorage.getItem(key) ?? 'null') } catch { return null }

@@ -17,8 +17,20 @@
     "tokenLabel": "LAN access token",
     "unlock": "Unlock this session"
   },
+  "notices": {
+    "bell": "Notices",
+    "bellCount_one": "{{count}} notice",
+    "bellCount_other": "{{count}} notices",
+    "empty": "No notices"
+  },
   "preflight": {
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "ffmpeg": "ffmpeg was not found on PATH. Video and audio export will fail. Install ffmpeg and restart HocusPocus Lab.",
+    "cuda": "No CUDA GPU detected. HocusPocus Lab's generation pipeline requires an NVIDIA GPU; generation will not work on this machine.",
+    "torch": "PyTorch failed to import — the install may be incomplete. Try Reset then Install in Pinokio.",
+    "diskError": "Only {{gb}} GB free on the output drive. Generation writes large files and will fail soon. Free up space.",
+    "diskWarn": "{{gb}} GB free on the output drive. Model downloads and long runs can exhaust this — keep an eye on free space.",
+    "diskUnknown": "The output drive is low on free space."
   },
   "capabilities": {
     "macosCoreRemote": "macOS · editing and remote providers",
@@ -53,5 +65,12 @@
     "title": "Boot-locked {{mode}} mode · isolated workspace {{workspace}} · paid providers {{paid}}",
     "allowed": "allowed",
     "blocked": "blocked"
+  },
+  "profileNotice": {
+    "defaults": "Until you choose your providers, text uses {{text}} and pictures use {{image}}. Nothing is blocked: you can change them at any time in Settings → Global production profile.",
+    "invalid": "Your saved production profile could not be read ({{reason}}), so the defaults are in use. Save it again in Settings → Global production profile.",
+    "local": "on this computer",
+    "choose": "Choose providers",
+    "dismiss": "Dismiss"
   }
 }

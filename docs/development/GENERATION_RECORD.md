@@ -32,8 +32,11 @@ finalization calls `complete_…` / `cancel_…`. Records live under
 `{workspace}/generation-records/`. Replay of the same reservation loads the
 same `generation_id`. This is still a projection: TaskRegistry owns the task,
 the Story library owns the cue/candidate, and the sidecar owns published
-bytes. Studio generate, Activity tiles and the Library catalog are **not**
-universal GenerationRecord readers yet.
+bytes. **Production review** (`ui/src/features/production-review/project.ts`)
+has a read-only projection, `takeRecordFromGeneration`, and its desk accepts
+`records[]`; the Director dashboard host does not pass any yet, so only tests
+exercise it today. Studio generate, Activity tiles and the Library catalog
+are still **not** universal GenerationRecord readers.
 
 ## Identity graph
 

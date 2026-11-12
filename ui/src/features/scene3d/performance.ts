@@ -31,9 +31,33 @@ export function parseMotion(raw: unknown): Scene3DMotion | undefined {
     faceTravel: value.faceTravel === true,
     turnTo: typeof value.turnTo === 'number' && Number.isFinite(value.turnTo) ? value.turnTo : undefined,
     easing: value.easing === 'smooth' ? 'smooth' : 'linear',
+    ...parseMotionWindow(value.start, value.end),
+    ...optionalField('headingOffset', parseHeadingOffset(value.headingOffset)),
     ...optionalField('points', parseMotionPoints(value.points)),
     ...optionalField('walk', parseMotionWalk(value.walk)),
   }
+}
+
+const MAX_MOTION_SECONDS = 600
+
+/** `start` and `end` of a timed move, each kept only when it is a time in the scene (0-600 s); both given, `start` must come first.
+ * An invalid window is dropped whole, so the object moves over the whole shot as a document without them does. */
+function parseMotionWindow(start: unknown, end: unknown): Pick<Scene3DMotion, 'start' | 'end'> {
+  const time = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= MAX_MOTION_SECONDS ? value : undefined
+  const from = time(start), to = time(end)
+  if ((start != null && from === undefined) || (end != null && to === undefined)) return {}
+  if (from !== undefined && to !== undefined && to <= from) return {}
+  return { ...optionalField('start', from), ...optionalField('end', to) }
+}
+
+/** The scene seconds a move runs over: `start` (0) to `end` (the end of the scene). */
+export function motionWindow(motion: Pick<Scene3DMotion, 'start' | 'end'>, duration: number): { start: number; end: number } {
+  return { start: motion.start ?? 0, end: motion.end ?? duration }
+}
+
+/** Radians added to the travel heading, for a model whose nose is not its +Z (a generated ship facing -X needs PI / 2). */
+function parseHeadingOffset(raw: unknown): number | undefined {
+  return typeof raw === 'number' && Number.isFinite(raw) && Math.abs(raw) <= 2 * Math.PI && raw !== 0 ? raw : undefined
 }
 
 function optionalField<K extends string, V>(key: K, value: V | undefined): { [P in K]?: V } {
@@ -43,7 +67,8 @@ function optionalField<K extends string, V>(key: K, value: V | undefined): { [P 
 export function slotPoseAtTime(slot: Scene3DSlot, seconds: number, duration: number) {
   // A baked walk moves the hips itself; the slot stays at its start.
   if (!slot.motion || isWalkBaked(slot, duration)) return { position: slot.position, rotationY: slot.rotationY }
-  const progress = Math.max(0, Math.min(1, seconds / Math.max(0.001, duration)))
+  const { start, end } = motionWindow(slot.motion, duration)
+  const progress = Math.max(0, Math.min(1, (seconds - start) / Math.max(0.001, end - start)))
   const t = slot.motion.easing === 'smooth' ? progress * progress * (3 - 2 * progress) : progress
   if (slot.motion.points?.length) return waypointPose(slot, t)
   const via = slot.motion.via
@@ -54,7 +79,8 @@ export function slotPoseAtTime(slot: Scene3DSlot, seconds: number, duration: num
     ? 2 * (1 - t) * (via[i] - v) + 2 * t * (slot.motion!.to[i] - via[i])
     : slot.motion!.to[i] - v)
   const facing = slot.motion.faceTravel && Math.hypot(tangent[0], tangent[2]) > .0001
-    ? Math.atan2(tangent[0], tangent[2]) : slot.rotationY + ((slot.motion.turnTo ?? slot.rotationY) - slot.rotationY) * t
+    ? Math.atan2(tangent[0], tangent[2]) + (slot.motion.headingOffset ?? 0)
+    : slot.rotationY + ((slot.motion.turnTo ?? slot.rotationY) - slot.rotationY) * t
   return {
     position,
     rotationY: facing,
@@ -65,7 +91,7 @@ function waypointPose(slot: Scene3DSlot, t: number) {
   const motion = slot.motion!
   const at = pathAt(catmullRomPath(motionPathPoints(slot)), t)
   const height = slot.position[1] + (motion.to[1] - slot.position[1]) * t
-  const rotationY = motion.faceTravel ? at.heading : slot.rotationY + ((motion.turnTo ?? slot.rotationY) - slot.rotationY) * t
+  const rotationY = motion.faceTravel ? at.heading + (motion.headingOffset ?? 0) : slot.rotationY + ((motion.turnTo ?? slot.rotationY) - slot.rotationY) * t
   return { position: [at.x, height, at.z] as unknown as Vec3, rotationY }
 }
 

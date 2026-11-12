@@ -36,14 +36,20 @@ def title_ops(shot: dict, dur: float, style: dict) -> tuple[list[dict], int]:
     return ops, title_cue_count(template, fields, *span)
 
 
-def lyric_ops(log: Callable[[str], None], shot: dict, a: float, b: float, dur: float, score: dict, style: dict, used: int) -> list[dict]:
+def lyric_ops(log: Callable[[str], None], shot: dict, a: float, b: float, dur: float, score: dict, style: dict, used: int,
+              sections: list[str] | None = None) -> list[dict]:
+    """Title cues for the sung lines in this scene. ``sections`` is each score line's song section, for lyric_looks."""
+    from services.production_lyric_looks import look_for
     ops: list[dict] = []
-    template = style.get("lyric_template", "social-caption")
     limit = MAX_TEXTS - bool(style.get("footer"))
-    for index, line in enumerate(score.get("lines") or []):
-        span = lyric_span(line, a, b, dur)
+    sections = sections or []
+    lines = score.get("lines") or []
+    for index, line in enumerate(lines):
+        span = lyric_span(line, a, b, dur, lines[index + 1]["t0"] if index + 1 < len(lines) else None)
         if span is None:
             continue
+        designed = look_for(style, sections[index] if index < len(sections) else "verse")
+        template = designed["template"] if designed else style.get("lyric_template", "social-caption")
         fields = {"line": line["text"]} if template in ("ransom", "dymo") else {"caption": line["text"]}
         cues = title_cue_count(template, fields, *span)
         if used + cues > limit:
@@ -52,12 +58,21 @@ def lyric_ops(log: Callable[[str], None], shot: dict, a: float, b: float, dur: f
         used += cues
         ops.append({"op": "add_title", "id": f"ly{index}", "template": template, "fields": fields,
                     "start": span[0], "duration": span[1]})
-        own = style.get("lyric_style") or {}
-        look = {**theme_lyric_style(style.get("theme")), **(DYMO_READABLE if template == "dymo" and "box" not in own else {}), **own, **seam_look(line, a, b)}
+        look = {**_line_look(designed, template, line, style), **seam_look(line, a, b)}
         if look:
             for cue in TITLE_BUILDERS[template](fields, {"start": span[0], "duration": span[1], "width": 1920, "height": 1080}):
                 ops.append({"op": "update_text", "id": f"ly{index}-{cue['id']}", "patch": look})
     return ops
+
+
+def _line_look(designed: dict | None, template: str, line: dict, style: dict) -> dict:
+    """The lyric look for one line: a designed look (its entrance timed to the words), else the theme's; lyric_style on top."""
+    from services.production_lyric_looks import synced_enter
+    own = style.get("lyric_style") or {}
+    if designed:
+        synced = synced_enter(designed, line)
+        return {**designed["look"], **({"enter": synced} if synced else {}), **own}
+    return {**theme_lyric_style(style.get("theme")), **(DYMO_READABLE if template == "dymo" and "box" not in own else {}), **own}
 
 
 def footer_ops(dur: float, style: dict) -> list[dict]:

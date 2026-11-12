@@ -1,26 +1,37 @@
 import type { defineCapability } from './capabilityRegistry'
+import i18n from '../../i18n'
+import { type WORLD3D_PLAN_OPERATION, world3dPlanMessage } from './world3dTemplatePlanCapability'
 
 export const WORLD3D_TEMPLATE_OPERATIONS = [
   'world3d.templates.list',
   'world3d.templates.catalog',
+  'world3d.templates.suggest',
   'world3d.templates.get',
   'world3d.templates.user.put',
   'world3d.scene.instantiate',
   'world3d.scene.inspect',
   'world3d.scene.patch',
+  'world3d.scene.fix_placement',
+  'world3d.scene.beats',
   'world3d.scene.talk',
+  'world3d.scene.face',
   'world3d.scene.preview',
   'world3d.scene.publish',
   'world3d.scene.apply_query',
+  'scene3d.comic.transition',
 ] as const
 
 export const WORLD3D_TEMPLATE_MUTATIONS = [
   'world3d.templates.user.put',
   'world3d.scene.instantiate',
   'world3d.scene.patch',
+  'world3d.scene.fix_placement',
+  'world3d.scene.beats',
   'world3d.scene.talk',
+  'world3d.scene.face',
   'world3d.scene.publish',
   'world3d.scene.apply_query',
+  'scene3d.comic.transition',
 ] as const
 
 export type World3DTemplateOperation = typeof WORLD3D_TEMPLATE_OPERATIONS[number]
@@ -31,7 +42,10 @@ const MOUNT_SCENE_OPERATIONS = new Set<string>([
   'world3d.scene.instantiate',
   'world3d.scene.apply_query',
   'world3d.scene.patch',
+  'world3d.scene.fix_placement',
+  'world3d.scene.beats',
   'world3d.scene.talk',
+  'world3d.scene.face',
 ])
 
 export function shouldMountWorld3DScene(operation: string): boolean {
@@ -56,7 +70,8 @@ export function world3dTemplateCommandIntent(
 
 export interface AgentWorld3DTemplatesAction {
   type: 'world3d_templates'
-  operation: World3DTemplateOperation
+  /** The plan operation is not in the list the `world3d_templates` capability accepts: the Wizard asks it as `plan_3d_templates`. */
+  operation: World3DTemplateOperation | typeof WORLD3D_PLAN_OPERATION
   input: Record<string, unknown>
 }
 
@@ -65,15 +80,18 @@ const registrars = new WeakSet<object>()
 
 export function world3dTemplateMessage(body: { status?: string; result?: Record<string, unknown> }): string {
   const result = body.result || {}
+  if (Array.isArray(result.plan)) return world3dPlanMessage(result)
   const cards = (Array.isArray(result.candidates) ? result.candidates : Array.isArray(result.templates) ? result.templates : []) as Array<Record<string, unknown>>
   const lines = cards.slice(0, 8).map(card => `${card.id} | ${card.titleEs} | ${card.titleEn} | ${card.format} | ${card.duration}s`).join('\n')
   const scene = result.scene as { sceneId?: string; revision?: number } | undefined
   const chosen = typeof result.chosenId === 'string' ? result.chosenId : ''
-  if (body.status === 'needs_choice' || result.status === 'needs_choice') return `Hay varias tomas. Elige un id exacto.\n${lines}`
-  if (body.status === 'not_found' || result.status === 'not_found') return 'Ninguna toma coincide con la búsqueda.'
-  if (chosen) return `Toma ${chosen}. Escena ${scene?.sceneId || ''} revisión ${scene?.revision ?? ''}.\n${lines}`
+  if (body.status === 'needs_choice' || result.status === 'needs_choice') return i18n.t('wizard:replies.world3dChooseId', { lines })
+  if (body.status === 'not_found' || result.status === 'not_found') return i18n.t('wizard:replies.world3dNone')
+  if (chosen) return i18n.t('wizard:replies.world3dChosen', { id: chosen, scene: scene?.sceneId || '', revision: scene?.revision ?? '', lines })
   if (lines) return lines
-  return `Vídeo 3D ${scene?.sceneId || body.status || 'listo'}`
+  const scenes = (Array.isArray(result.scenes) ? result.scenes : []) as Array<Record<string, unknown>>
+  if (scenes.length) return scenes.map(item => `${item.role ?? ''} ${item.sceneId ?? ''} ${item.file ?? ''}`.trim()).join('\n')
+  return i18n.t('wizard:replies.world3dReady', { label: scene?.sceneId || body.status || i18n.t('wizard:replies.world3dReadyWord') })
 }
 
 export function registerWorld3DTemplateCapabilities(register: typeof defineCapability) {
@@ -94,7 +112,7 @@ export function registerWorld3DTemplateCapabilities(register: typeof defineCapab
       },
       required: ['type', 'operation', 'input'],
     },
-    risk: 'edit', confirmation: 'none', progress: 'Buscando tomas de Vídeo 3D…',
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.searchingVideo3dShots',
     resolve(raw) {
       if (typeof raw.operation !== 'string' || !operations.has(raw.operation) || !raw.input || typeof raw.input !== 'object' || Array.isArray(raw.input)) return null
       return { type: 'world3d_templates', operation: raw.operation as World3DTemplateOperation, input: raw.input as Record<string, unknown> }

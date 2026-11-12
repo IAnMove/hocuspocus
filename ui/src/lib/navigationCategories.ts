@@ -16,16 +16,17 @@ export const DIRECT_GENERATION_MEDIA: Record<GenerationMode, MediaFilter> = {
 }
 
 const STUDIOS = new Set<MediaFilter>([
-  'stories', 'series', 'comics', 'scene3d', 'world3d', 'animate3d', 'characters', 'lips', 'character-replacement',
+  'stories', 'series', 'comics', 'scene3d', 'world3d', 'animate3d', 'characters', 'lips', 'gameAssets',
 ])
 const PRODUCTION = new Set<MediaFilter>(['videoeditor'])
 const MEDIA = new Set<MediaFilter>([
   'all', 'assets', 'projects', 'images', 'videos', 'videoclips', 'trailers',
   'series_episodes', 'audio', 'model3d', 'scenes', 'styles', 'avatars',
-  'multiclip', 'favorites', 'auditdev',
+  'multiclip', 'favorites', 'agents', 'auditdev',
 ])
 
 export function categoryForMediaFilter(filter: MediaFilter): NavigationCategory | null {
+  if (filter === 'character-replacement') return 'direct-generation'
   if (STUDIOS.has(filter)) return 'studios'
   if (PRODUCTION.has(filter)) return 'production'
   if (MEDIA.has(filter)) return 'media'
@@ -79,9 +80,9 @@ export function visibleWorkspaceSurface(state: {
 }
 
 export function categoryForNavigationDestination(destination: string): NavigationCategory | null {
-  if (destination === 'studio') return 'direct-generation'
+  if (destination === 'studio' || destination === 'character_replacement' || destination === 'character-replacement') return 'direct-generation'
   if (destination === 'director' || destination === 'productions' || destination === 'video_editor') return 'production'
-  if (['story_lab', 'series_lab', 'comics', 'video_3d', 'world_3d', 'animate_3d', 'character_creator', 'character_kit', 'lips_creator'].includes(destination)) return 'studios'
+  if (['story_lab', 'series_lab', 'comics', 'video_3d', 'world_3d', 'animate_3d', 'character_creator', 'character_kit', 'lips_creator', 'game_assets'].includes(destination)) return 'studios'
   if (['images', 'videos', 'audio', '3d'].includes(destination)) return 'media'
   return null
 }

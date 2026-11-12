@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { useMemo, useRef, useState } from 'react'
 import { FileAudio, GripVertical, Image as ImageIcon, Info, Loader2, Plus, Video, X } from 'lucide-react'
 import * as api from '../../api/client'
@@ -26,6 +27,8 @@ function newId(): string {
 }
 
 export function OmniReferenceSection() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const params = useStore(s => s.params)
   const modelOptions = useStore(s => s.modelOptions)
@@ -174,7 +177,7 @@ export function OmniReferenceSection() {
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('omni.title')}</label>
+          <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('omni.title')}</label>
           <span
             title={t('omni.orderHint')}
             className="text-text-muted cursor-help"
@@ -196,7 +199,7 @@ export function OmniReferenceSection() {
       >
         {uploading ? <Loader2 size={14} className="animate-spin text-accent-blue" /> : <Plus size={14} className="text-text-muted" />}
         <span className="text-[10px] text-text-secondary">{uploading ? t('omni.uploading') : t('omni.add')}</span>
-        <input
+        <input aria-label={t('omni.title')} id={fieldIds('f0')}
           ref={inputRef}
           type="file"
           accept="image/*,video/*,audio/*,.mkv,.m4v,.flac,.m4a,.aac"
@@ -250,7 +253,7 @@ export function OmniReferenceSection() {
                   <span className="text-[10px] font-medium text-text-primary">{labels[index]}</span>
                   <span className="text-[9px] text-text-muted truncate">{reference.filename}</span>
                 </div>
-                <input
+                <input aria-label={t('omni.rolePlaceholder')}
                   value={reference.role ?? ''}
                   onChange={event => patchReference(index, { role: event.target.value })}
                   placeholder={t('omni.rolePlaceholder')}
@@ -258,6 +261,7 @@ export function OmniReferenceSection() {
                 />
                 {reference.type === 'audio' && (
                   <select
+                    aria-label={t('omni.intentHint')}
                     value={reference.audio_intent ?? 'voice'}
                     onChange={event => patchReference(index, {
                       audio_intent: event.target.value as MiniMaxH3AudioIntent,
@@ -300,7 +304,7 @@ export function OmniReferenceSection() {
                 )}
                 {reference.type === 'video' && (reference.has_audio || reference.audio_path) && (
                   <label className="flex items-center gap-1.5 text-[9px] text-text-secondary cursor-pointer">
-                    <input
+                    <input aria-label={t('omni.includeSoundtrack')}
                       type="checkbox"
                       checked={reference.include_audio !== false}
                       onChange={event => patchReference(index, { include_audio: event.target.checked })}
@@ -312,7 +316,7 @@ export function OmniReferenceSection() {
               </div>
               <button
                 onClick={() => update(references.filter((_, itemIndex) => itemIndex !== index))}
-                title={t('omni.removeRef')}
+                title={t('omni.removeRef')} aria-label={t('omni.removeRef')}
                 className="p-1 self-start text-text-muted hover:text-indicator-error"
               >
                 <X size={13} />
@@ -325,6 +329,7 @@ export function OmniReferenceSection() {
       {references.length > 0 && (
         <div className="flex items-center justify-end gap-2">
           <select
+            aria-label={t('omni.detailHint')}
             value={detail}
             onChange={event => setParam('minimax_h3_reference_detail', event.target.value as 'match' | 'max')}
             title={t('omni.detailHint')}

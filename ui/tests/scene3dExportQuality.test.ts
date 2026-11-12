@@ -3,6 +3,9 @@ import test from 'node:test'
 import { startWorld3DExport } from '../src/features/scene3d/exportLock.ts'
 import { DRAFT_RENDER, FrameAccumulator, MAX_SUPERSAMPLED_SIDE, NO_MOTION_BLUR, motionBlurOf, renderQualityOf, subframeTimes, supersampledSize } from '../src/features/scene3d/exportQuality.ts'
 import { applyScene3DTemplate } from '../src/features/scene3d/templates.ts'
+import { DirectionalLight, Group, Mesh } from 'three'
+import { hideEmptyCutoutsInExport, setWorldExportQuality, type GpuWorld } from '../src/features/scene3d/gpu.ts'
+import type { Scene3DSlot } from '../src/features/scene3d/types.ts'
 
 test('a plan without quality fields renders as draft', () => {
   assert.deepEqual(renderQualityOf({ width: 1920, height: 1080 }), DRAFT_RENDER)
@@ -74,4 +77,23 @@ test('every 8-bit value survives the linear round trip within one step', () => {
     one.add(Uint8ClampedArray.from([value, value, value, 255]))
     assert.ok(Math.abs(one.result()[0] - value) <= 1, `value ${value}`)
   }
+})
+
+test('a thumbnail plan keeps the editor placeholders that an export hides', () => {
+  assert.deepEqual(renderQualityOf({ supersample: 2, samples: 4, placeholders: true }), { supersample: 2, samples: 4, placeholders: true })
+  assert.deepEqual(renderQualityOf({ placeholders: 'yes' }), DRAFT_RENDER, 'only an exact true asks for placeholders')
+  const cutout = { id: 'figure', slot: 'subject_1', media: 'image', surface: 'cutout', sourceUrl: '', clip: null,
+    position: [0, 0, 0], rotationY: 0, scale: 1 } as Scene3DSlot
+  const world = () => ({ renderer: { shadowMap: {} }, dir: new DirectionalLight(), floor: new Mesh(), dressing: null,
+    slots: new Map([[cutout.id, { root: new Group(), kind: 'image' }]]) }) as unknown as GpuWorld
+  const visible = (target: GpuWorld) => target.slots.get(cutout.id)!.root.visible
+  const exported = world(), thumbnail = world()
+  setWorldExportQuality(exported, true, renderQualityOf({ supersample: 2, samples: 4 }))
+  setWorldExportQuality(thumbnail, true, renderQualityOf({ supersample: 2, samples: 4, placeholders: true }))
+  hideEmptyCutoutsInExport(exported, [cutout])
+  hideEmptyCutoutsInExport(thumbnail, [cutout])
+  assert.equal(visible(exported), false, 'an export draws nothing for an empty cutout')
+  assert.equal(visible(thumbnail), true, 'a thumbnail shows where the figure stands, as the editor does')
+  setWorldExportQuality(thumbnail, false)
+  assert.equal(thumbnail.exportPlaceholders, false, 'the next export hides empty cutouts again')
 })

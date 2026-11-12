@@ -18,7 +18,7 @@ export function applyImageColorKey(material: MeshBasicMaterial | MeshStandardMat
   const previousCacheKey = material.customProgramCacheKey.bind(material)
   // Capture before replacing the callback: the default cache key reads it.
   const cacheKey = previousCacheKey()
-  material.customProgramCacheKey = () => `${cacheKey}-hocuspocus-color-key-v1`
+  material.customProgramCacheKey = () => `${cacheKey}-hocuspocus-color-key-v2`
   material.onBeforeCompile = (shader, renderer) => {
     previousCompile(shader, renderer)
     shader.uniforms.hpKeyColor = { value: color }
@@ -39,6 +39,13 @@ export function applyImageColorKey(material: MeshBasicMaterial | MeshStandardMat
         vec3 hpOriginalColor = hpKeySRGB(texture2D(map, vMapUv).rgb);
         float hpDistance = distance(hpOriginalColor, hpKeyColor) / sqrt(3.);
         diffuseColor.a *= smoothstep(hpKeyTolerance, hpKeyTolerance + hpKeySoftness, hpDistance);
+        // Despill: the key colour that bleeds into the edges of the pieces (a magenta or green halo) is taken
+        // out, as far as the key's own channels rise above the others.
+        vec3 hpKeyHigh = step(.5, hpKeyColor);
+        vec3 hpHigh = mix(vec3(1.), diffuseColor.rgb, hpKeyHigh);
+        vec3 hpLow = mix(vec3(0.), diffuseColor.rgb, 1. - hpKeyHigh);
+        float hpSpill = max(0., min(hpHigh.r, min(hpHigh.g, hpHigh.b)) - max(hpLow.r, max(hpLow.g, hpLow.b)));
+        diffuseColor.rgb -= hpKeyHigh * hpSpill;
       #endif
       #include <alphatest_fragment>
     `)

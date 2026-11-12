@@ -12,7 +12,7 @@ import uuid
 from copy import deepcopy
 from typing import Any
 
-from services import core_remote_image, core_workspace as core, execution_mode
+from services import core_remote_image, core_workspace as core, execution_mode, remote_image_generation
 from services.generation_output_name import (
     OutputNameError,
     attach_output_name,
@@ -24,7 +24,7 @@ from services.image_generation_spec import ImageGenerationSpecError, freeze_imag
 from services.job_lifecycle import take_submission_priority
 from services.minimax_image_service import MiniMaxImageError, prepare_prompt
 from services.task_command_admission import TaskCommandConflict
-from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES, TaskRegistry
+from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES, TaskRegistry, get_task_registry
 from routers.system_capabilities import require_capability_http
 
 _JOB_STATUS = {
@@ -38,8 +38,6 @@ _JOB_STATUS = {
     "interrupted": "interrupted",
 }
 
-_REGISTRIES: dict[str, TaskRegistry] = {}
-_LOCK = threading.Lock()
 _DISPATCH_OWNER = f"core-{uuid.uuid4().hex}"
 _DISPATCH_LOCK = threading.Lock()
 
@@ -54,13 +52,10 @@ def _registry(workspace: str) -> TaskRegistry:
         folder = core.workspace_dir(workspace)
     except ValueError as error:
         raise command_error(422, "invalid_workspace", "Use an explicit valid output workspace") from error
-    with _LOCK:
-        existing = _REGISTRIES.get(folder)
-        if existing is not None:
-            return existing
-        registry = TaskRegistry(folder, interrupt_stale=True)
-        _REGISTRIES[folder] = registry
-        return registry
+    # One registry per folder for the whole process (task_manager's cache). A second TaskRegistry for the same
+    # database runs interrupt_unfinished() again the first time it is built and flips the tasks the first one is
+    # running; the delete route's forget_task_registry() also clears only that cache.
+    return get_task_registry(folder)
 
 
 def _job_status(value: Any) -> str | None:
@@ -128,6 +123,7 @@ def _freeze(command: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         require_capability_http("wangp_local")
     if command.get("operation") != "generation.image":
         raise command_error(422, "unsupported_operation", "This runtime admits generation.image only")
+    sent, command = command, remote_image_generation.complete_remote_command(command)
     if type(command.get("version")) is int and command["version"] == 2:
         from services.studio_image_spec import freeze_studio_image_spec
         frozen = freeze_studio_image_spec(command)
@@ -135,9 +131,12 @@ def _freeze(command: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             **deepcopy(frozen["effective"]["input"]["params"]),
             "workspace": frozen["effective"]["input"]["workspace"],
         }
-        return frozen, params
-    frozen = freeze_image_generation_spec(command)
-    return frozen, deepcopy(frozen["effective"]["input"])
+    else:
+        frozen = freeze_image_generation_spec(command)
+        params = deepcopy(frozen["effective"]["input"])
+    if command is not sent:
+        frozen["original"] = deepcopy(sent)  # steps, guidance and seed may be left out: the caller's spelling stays the original
+    return frozen, params
 
 
 def _require_minimax_image(params: dict[str, Any]) -> None:
@@ -258,6 +257,7 @@ class CoreGenerationCommands:
             _require_minimax_image(params)
             execution_mode.validate_remote_provider(workspace, "minimax-image")
             # Fail closed before admission so a transport retry can reuse intent_id.
+            remote_image_generation.require_api_key(core.services_raw())
             prepare_prompt(str(params.get("prompt") or ""))
             core_remote_image.encode_subject_reference(_subject_reference(params), workspace)
             registry = _registry(workspace)
@@ -270,6 +270,7 @@ class CoreGenerationCommands:
                 effective=frozen["effective"],
                 task_fields=_task_fields(workspace, job_id, params),
                 fingerprint_version=frozen["fingerprint_version"],
+                notes=remote_image_generation.ignored_notes(params),
             )
             result = admitted["receipt"]["result"]
             # A concurrent replay must not mistake claim → job creation for a

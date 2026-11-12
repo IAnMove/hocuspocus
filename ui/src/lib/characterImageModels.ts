@@ -1,5 +1,6 @@
 import type { ModelDef } from '../types'
 import { getModelMode } from '../stores/useStore'
+import { PREFERRED_IMAGE_MODEL } from './preferredModels'
 
 /** These editors need a source image; Qwen Image 2.1 also supports plain text. */
 export function characterImageNeedsReference(model: Pick<ModelDef, 'model_type' | 'architecture'>): boolean {
@@ -14,6 +15,7 @@ export function characterImageModels(models: ModelDef[], withReference: boolean)
 
 export function preferredCharacterImageModel(models: ModelDef[], withReference: boolean): string {
   const preferred = (withReference && models.find(model => model.model_type.startsWith('qwen_image_edit')))
+    || models.find(model => model.model_type === PREFERRED_IMAGE_MODEL)
     || models.find(model => model.model_type === 'qwen_image_21')
     || models.find(model => model.model_type.startsWith('qwen_image'))
     || models[0]

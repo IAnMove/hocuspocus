@@ -23,14 +23,16 @@ no longer matches still needs Install or Update.
 ## Available recipes
 
 All local AI recipes require **x64 and NVIDIA**. Selection checks OS,
-architecture and the NVIDIA driver; an unknown driver is explicitly unverified.
+architecture, the NVIDIA driver and the GPU compute capability
+(`nvidia-smi --query-gpu=compute_cap`); an unknown driver or capability is
+explicitly unverified.
 An unsupported optional engine is reported and skipped. This is installation
 compatibility, not a promise that every model fits in the available VRAM.
 
 Every machine installs exactly one main runtime in `app/env`. `core` declares
 `fallbackFor: "wangp"`: it is selected only where WanGP cannot run (AMD, Intel,
-CPU-only, unknown GPU, Linux ARM, Apple Silicon, or an NVIDIA driver below the
-CUDA minimum) and is marked `supersededBy: "wangp"` elsewhere. Selecting both
+CPU-only, unknown GPU, Linux ARM, Apple Silicon, a pre-Turing NVIDIA GPU or an
+NVIDIA driver below the CUDA minimum) and is marked `supersededBy: "wangp"` elsewhere. Selecting both
 would make each Update replace the other's receipt in the shared environment.
 Installation stops only when neither can run (Intel Mac, Windows ARM, other
 OSes). Core installs FastAPI, the UI and FFmpeg without Torch; `launch.py` boots
@@ -44,23 +46,88 @@ gains a supported NVIDIA setup installs WanGP into the same environment.
 | Core/remote, fallback | Both, plus Apple Silicon; Linux ARM | `app/env` (venv) | 3.10 / none / none |
 | HocusPocus / WanGP, including native H3 | Both | `app/env` (venv) | 3.10 / 2.7.0 Linux, 2.7.1 Windows / 12.8 |
 | Hunyuan3D, optional | Both | `app/services/hunyuan3d/env` (conda) | 3.10 / 2.7.0 / 12.8 |
-| H3 **Legacy**, ComfyUI | Both | `app/services/minimax_h3/env` (conda) | 3.11 / 2.10.0 / 13.0 |
+| H3 **Legacy**, ComfyUI, optional | Both | `app/services/minimax_h3/env` (conda) | 3.11 / 2.10.0 / 13.0 |
 | SAM, optional | Both | `app/services/sam/env` (conda) | 3.12 / 2.7.0 / 12.8 |
 | UniRig, optional | Linux | `app/services/rigging/env` (conda) | 3.11 / 2.7.0 / 12.8 |
 
 Procedural rigging is CPU-only (NumPy + pygltflib) and runs with the main
 `app/env` interpreter on every machine, core included; the Hunyuan3D env is
-only a fallback for installs not yet updated. Hunyuan3D, SAM and UniRig are
-optional (`defaultInstall: false`): Install skips them, the Advanced menu
-installs them, and Update refreshes them only where their env exists. Only
-the Hunyuan3D installer checks the Windows compiler.
+only a fallback for installs not yet updated. Only the Hunyuan3D installer
+checks the Windows compiler.
+
+## Optional components
+
+The base install is `core` or `wangp` (native H3 included). Everything else is a
+component listed once in [`install_catalog.json`](../../app/runtime/install_catalog.json):
+FLUX 3 / Drama 3, Hunyuan3D, TRELLIS.2, SAM, UniRig and H3 Legacy. Install asks which
+to add (a checkbox dialog showing each size and the free disk space; unticked means
+"not now"), the Advanced menu installs or updates each one later, and Update refreshes
+only the components whose environment exists. Nothing else enumerates them:
+`install_components.js` (Pinokio) and `services/install_catalog.py` (server) read the
+same file, so a new component is one catalog entry plus its `<id>_install.js`, which
+`scripts/check_runtime_profiles.cjs` and `tests/test_install_catalog.py` verify.
+
+## Installation tab
+
+Operator workflow, reclaimable space, HTTP examples and pitfalls:
+[Settings > Installation](../install/HOWUSEIT.md).
+
+Settings > Installation (`ui/src/components/Installation`) lists the same components with their
+state, measured or estimated size and the free disk space, and installs, updates or removes each
+one. The server side is `services/install_manager.py` behind `GET /api/v1/system/install`,
+`POST .../{id}/install`, `POST .../{id}/uninstall` and `GET .../{id}/output`, mounted by
+`create_system_capabilities_router`, so the core runtime serves it too.
+
+- **Install runs the component's own Pinokio script** (`pterm start <id>_install.js --ref
+  pinokio://127.0.0.1:42000/api/<folder>`), so the menu and the tab can never drift. `pterm` runs
+  detached with its output in `app/.runtime/install-jobs/<id>.log`. It streams the script's
+  terminal, always exits 0, and Pinokio stops the script if the client dies, so success is decided
+  by re-reading what is installed, never by the exit code. Stopping or restarting HocusPocus
+  during an install can interrupt it.
+- **Without Pinokio** (no `pterm`, or a checkout outside `<pinokio>/api/`) the tab shows state and
+  can remove, but Install is disabled. `HOCUS_PINOKIO_REF` and `HOCUS_PINOKIO_PORT` override the
+  address.
+- **One change at a time**, persisted in `app/.runtime/install-jobs/<id>.json`; a job whose client
+  has vanished after a server restart is closed from the installed state.
+- **Uninstall** deletes what `install_catalog.json` lists plus `app/.runtime/<engine>.managed`, on a
+  thread, and refuses a link (a shared environment) or an engine that is running.
+- Installing is not offered to MCP or the Wizard yet: it downloads gigabytes, so a person starts
+  it from the tab.
+
+Each entry also lists the folders Uninstall may delete. They must be generated folders
+inside `app/services` (a test rejects tracked files and any path outside it), the
+engine's environment is always one of them, and downloaded model files are never
+included: they belong to the Storage Manager.
+
+H3 Legacy keeps `defaultInstall: true` in `profiles.json` even though Install no longer
+adds it. That field is part of the install fingerprint, so changing it would mark every
+existing install stale and reinstall about 6 GB. The catalog carries the policy instead
+(`install_catalog.optional_engines()`), and `defaultInstall` only distinguishes the base
+from everything else for code that predates the catalog.
 
 CUDA 13 requires driver 580 or newer. CUDA 12 recipes use NVIDIA's minor
 compatibility floor; newer drivers are recommended, especially for JIT kernels.
+Every CUDA recipe also needs compute capability **7.5 (Turing) or newer**: the
+cu128 wheels (Torch, xformers, SageAttention, Flash Attention) and CUDA 13 ship
+no kernels for Pascal or older, so a GTX 10xx would download gigabytes and fail
+on the first kernel. Preflight reads `compute_cap` from `nvidia-smi` (the
+weakest GPU counts), reports "GPU older than Turing" and installs core instead;
+an nvidia-smi too old to know the field leaves the capability unverified. The
+floor is `runtime_profiles.COMPUTE_CAPABILITY_MINIMUM`, outside `profiles.json`,
+so it does not change install fingerprints.
 Hunyuan and UniRig still need a compatible CUDA compiler; Hunyuan on Windows
 needs Visual Studio Build Tools. The installer actually imports Torch and runs
 a small CUDA calculation before accepting each environment. It does not execute
-models as part of this check.
+models as part of this check. Windows WanGP also runs one xFormers attention
+call when the recipe lists `xformers.ops`. The pinned xFormers build treats
+FlashAttention-3 as usable on every GPU of compute capability 9.0 or newer, but
+that kernel is Hopper-only. On Blackwell (compute capability 10.0 and 12.0,
+including the RTX 5090) the launch aborts the process, so the probe runs only
+through compute capability 9.0. A newer GPU still imports `xformers.ops` and
+still runs the plain CUDA calculation. WanGP uses SageAttention or SDPA there.
+`scripts/runtime_verify.py` is part of every engine's install fingerprint, so
+the next Update reinstalls the main studio, and any optional engine whose
+environment is already present, once.
 
 UniRig pins Blender's Python module to `bpy==4.2.22`, within the 4.2 LTS
 API. The 4.2 Linux wheels name CPython 3.11 but their embedded `WHEEL` metadata
@@ -69,6 +136,16 @@ declares CPython 3.9; `uv pip check` rejects that mismatch. For the pinned
 Python 3.11 and checks its version, then corrects that tag and its RECORD hash.
 Other mismatches remain errors. Installation keeps `uv pip check` and imports `bpy`, Flash Attention,
 Torch Scatter/Cluster and SpConv before writing a successful runtime receipt.
+
+decord 0.6.0 (WanGP and SAM on Linux) has the same kind of upstream mistake: its
+`manylinux2010_x86_64` wheel is named `py3-none` but its `WHEEL` file says `cp36-cp36m`,
+so `uv pip check` stops a fresh install with "built for a different platform". Before
+the check, `scripts/runtime_wheel_tags.py` corrects that one known tag (and its RECORD
+hash) on Linux x86_64, only after `decord` imports. Windows (`py3-none-any`) and macOS
+are untouched, and any other version, tag or failure is left for uv to report. The
+script is deliberately not part of the install fingerprint: only a new install needs
+it, so existing installs must not look out of date. A new known tag is one `KNOWN_TAGS`
+entry.
 
 ### Windows native toolchain
 
@@ -141,7 +218,10 @@ error message. Child scripts explicitly return success; parents check this
 receipt because Pinokio can otherwise continue after an aborted child.
 
 **Reset is destructive:** it removes managed environments, vendor checkouts and
-the UI build, including the existing Hunyuan model cache under `app/ckpts/model3d`.
+the UI build, including the existing Hunyuan model cache under `app/ckpts/model3d`,
+the Seed-VC checkout (`app/postprocessing/seedvc`), SAM checkpoints
+(`app/services/sam/checkpoints`), manually installed 3D runtimes
+(`app/services/model3d_runtimes`) and the UI build lock (`ui/.hocus-ui-build.lock`).
 It is not necessary for routine updates or retries.
 
 Read `/api/v1/runtime-capabilities` on the running app for the selected recipes
@@ -173,9 +253,11 @@ Pinokio itself through successful preflight, successful child completion, and a
 silent failed child whose parent must not publish completion.
 
 Remaining work: full Windows/Linux installation and model smoke on the final
-branch; local AMD ROCm/Intel/MPS/CPU recipes (core covers those machines today); a UI for optional components; transactional
-environment replacement with automatic rollback. Current Update repairs in
-place and stops on failure; it does not promise rollback to the previous stack.
+branch; local AMD ROCm/Intel/MPS/CPU recipes (core covers those machines today);
+transactional environment replacement with automatic rollback. Current Update
+repairs in place and stops on failure; it does not promise rollback to the
+previous stack. The optional-component UI is Settings > Installation
+([operator guide](../install/HOWUSEIT.md)).
 
 References: [Python venv](https://docs.python.org/3/library/venv.html),
 [NVIDIA CUDA release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html),

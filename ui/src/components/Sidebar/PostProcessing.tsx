@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Mic } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -33,6 +34,8 @@ const flashvsrOptions = [
 ]
 
 export function PostProcessing() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const [open, setOpen] = useState(false)
   const processors = useWangpProcessors()
@@ -108,17 +111,17 @@ export function PostProcessing() {
       {open && (
         <div className="mt-3 space-y-4">
           {generationMode !== 'image' && <label className="block text-xs">{t('wangp.interpolation')}
-            <select className="w-full bg-bg-tertiary rounded-lg p-2" value={temporal} onChange={event => setParam('temporal_upsampling', event.target.value)}>
+            <select aria-label={t('wangp.interpolation')} className="w-full bg-bg-tertiary rounded-lg p-2" value={temporal} onChange={event => setParam('temporal_upsampling', event.target.value)}>
               <option value="">{t('chrome.none')}</option>
               {processors.filter(option => option.kind === 'temporal').map(option => <option key={option.value} value={option.value} disabled={!option.enabled}>{option.label}{option.reason ? ` (${option.reason})` : ''}</option>)}
             </select>
           </label>}
           {/* Spatial Upsampling */}
           <div>
-            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+            <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
               {t('post.spatial')}
             </label>
-            <select
+            <select aria-label={t('post.spatial')} id={fieldIds('f0')}
               value={spatialUpsampling}
               onChange={e => setSpatialUpsampling(e.target.value)}
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -134,10 +137,10 @@ export function PostProcessing() {
           {/* Film Grain Intensity */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('post.grainIntensity')}</label>
+              <label htmlFor={fieldIds('f1')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('post.grainIntensity')}</label>
               <span className="text-xs text-text-secondary">{filmGrainIntensity.toFixed(2)}</span>
             </div>
-            <input
+            <input aria-label={t('post.grainIntensity')} id={fieldIds('f1')}
               type="range"
               min={0}
               max={1}
@@ -151,10 +154,10 @@ export function PostProcessing() {
           {filmGrainIntensity > 0 && (
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('post.grainSaturation')}</label>
+                <label htmlFor={fieldIds('f2')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('post.grainSaturation')}</label>
                 <span className="text-xs text-text-secondary">{filmGrainSaturation.toFixed(2)}</span>
               </div>
-              <input
+              <input aria-label={t('post.grainSaturation')} id={fieldIds('f2')}
                 type="range"
                 min={0}
                 max={1}

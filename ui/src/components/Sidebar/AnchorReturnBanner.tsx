@@ -65,6 +65,10 @@ export function AnchorReturnBanner() {
             ? t('anchor.cancelRecast')
             : isRepaint
               ? t('anchor.cancelRepaint')
+              : t('anchor.cancelEdit')} aria-label={isRecast
+            ? t('anchor.cancelRecast')
+            : isRepaint
+              ? t('anchor.cancelRepaint')
               : t('anchor.cancelEdit')}
           className="ml-auto p-0.5 rounded hover:bg-accent-blue/20 text-accent-blue/80 hover:text-accent-blue"
         >

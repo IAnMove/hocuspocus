@@ -18,7 +18,7 @@ export function SeriesProductionMethods({ series, update, onOpenReferences, epis
   const pendingCount = episode?.shots.filter(shot => canBatchAssignSeriesShot(shot) && seriesShotMethod(series, shot) !== method).length || 0
   return <SectionCard title={t('production.title')} description={t('production.description')}>
     <div className="grid gap-2 sm:grid-cols-2">{SERIES_PRODUCTION_METHODS.map(method => <label key={method} className="flex items-start gap-3 rounded-lg border border-border p-3">
-      <input type="checkbox" className="mt-1 accent-violet-500" checked={allowed.includes(method)} disabled={allowed.length === 1 && allowed.includes(method)}
+      <input aria-label={t(`production.methods.${method}`)} type="checkbox" className="mt-1 accent-violet-500" checked={allowed.includes(method)} disabled={allowed.length === 1 && allowed.includes(method)}
         onChange={event => update(current => ({ ...current, allowedProductionMethods: event.target.checked
           ? [...allowedSeriesMethods(current), method] : allowedSeriesMethods(current).filter(item => item !== method) }))} />
       <span><span className="block text-xs font-semibold text-text-primary">{t(`production.methods.${method}`)}</span><span className="mt-1 block text-[11px] text-text-muted">{t(`production.hints.${method}`)}</span></span>
@@ -28,7 +28,7 @@ export function SeriesProductionMethods({ series, update, onOpenReferences, epis
       <p className="text-xs text-text-secondary">{t('production.bulkHint')}</p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="min-w-0 flex-1 text-xs text-text-secondary">{t('production.bulkMethod')}
-          <select className={`${selectClass} mt-1`} value={method} onChange={event => setChosenMethod(event.target.value as SeriesProductionMethod | '')}>
+          <select aria-label={t('production.bulkMethod')} className={`${selectClass} mt-1`} value={method} onChange={event => setChosenMethod(event.target.value as SeriesProductionMethod | '')}>
             <option value="">{t('production.bulkChoose')}</option>
             {allowed.map(value => <option key={value} value={value}>{t(`production.methods.${value}`)}</option>)}
           </select>

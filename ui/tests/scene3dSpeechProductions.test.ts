@@ -88,8 +88,12 @@ test('handoff stays in its workspace and is not consumed when backup fails', () 
   const doc = buildSpeechProduction(input())
   queueSpeechProduction(doc, storage)
   assert.equal(takeSpeechProduction('another-workspace', storage), null)
-  assert.throws(() => takeSpeechProduction('production', storage, () => { throw new Error('QuotaExceeded') }))
   assert.deepEqual(takeSpeechProduction('production', storage), doc)
+  assert.equal(takeSpeechProduction('production', storage), null)
+  // A backup that fails (storage quota) must not leave the handoff behind,
+  // or every later event would replay the failure.
+  queueSpeechProduction(doc, storage)
+  assert.throws(() => takeSpeechProduction('production', storage, () => { throw new Error('QuotaExceeded') }))
   assert.equal(takeSpeechProduction('production', storage), null)
 })
 

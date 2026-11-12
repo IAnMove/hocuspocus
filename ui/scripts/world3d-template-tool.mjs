@@ -1,15 +1,21 @@
-// Compile one Video 3D template, or paint cheap software frames of a document.
+// Compile one Video 3D template, paint cheap software frames of a document, or turn the pictures standing in for models.
 import { readFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 import { createHash } from 'node:crypto'
 import { applyScene3DTemplate } from '../src/features/scene3d/templates.ts'
+import { buildComicPair } from '../src/features/scene3d/comicPage.ts'
+import { chooseComicLayout, paintComicPage } from '../src/features/scene3d/comicLayout.ts'
 import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { renderScene3DSoftware } from '../src/features/scene3d/softwareRender.ts'
+import { turnPicturesToCamera } from '../src/features/scene3d/pictureStandIn.ts'
 
 const command = process.argv[2]
 if (command === 'document') write(compileDocument(process.argv[3]))
 else if (command === 'preview') write(preview(JSON.parse(readFileSync(0, 'utf8'))))
-else throw new Error('use document <id> or preview')
+else if (command === 'turn-pictures') write(turnPictures(JSON.parse(readFileSync(0, 'utf8'))))
+else if (command === 'comic') write(compileComic(JSON.parse(readFileSync(0, 'utf8'))))
+else if (command === 'comic-layout') write(compileLayout(JSON.parse(readFileSync(0, 'utf8'))))
+else throw new Error('use document <id>, preview, turn-pictures, comic or comic-layout')
 
 function compileDocument(id) {
   let document
@@ -24,6 +30,25 @@ function compileDocument(id) {
   return parsed
 }
 
+function compileLayout(body) {
+  const layout = chooseComicLayout(body.format, body.count, body.seed ?? 0, body.fromPanel, body.toPanel)
+  const pixels = paintComicPage(layout)
+  return {
+    pageW: layout.pageW, pageH: layout.pageH, cells: layout.cells,
+    png: encodePng(layout.pageW, layout.pageH, pixels).toString('base64'),
+  }
+}
+
+function compileComic(body) {
+  const pair = buildComicPair(body)
+  const exit = parseScene3DDocument(pair.exit)
+  const enter = parseScene3DDocument(pair.enter)
+  if (!exit || !enter || exit.templateId !== pair.exit.templateId || enter.templateId !== pair.enter.templateId) {
+    throw new Error('invalid_world3d_document')
+  }
+  return { exit, enter }
+}
+
 function preview(body) {
   const document = parseScene3DDocument(body.document)
   if (!document) throw new Error('invalid_world3d_document')
@@ -34,6 +59,15 @@ function preview(body) {
     pending: document.slots.filter(slot => !slot.sourceUrl).map(slot => ({ id: slot.id, role: slot.slot, media: slot.media })),
     loadErrors: [],
   }
+}
+
+/** The turn of each picture in `ids` once turnPicturesToCamera has turned it toward the camera along the shot. */
+function turnPictures(body) {
+  const document = parseScene3DDocument(body.document)
+  if (!document) throw new Error('invalid_world3d_document')
+  const ids = new Set(body.ids)
+  turnPicturesToCamera(document, ids)
+  return { rotations: Object.fromEntries(document.slots.filter(slot => ids.has(slot.id)).map(slot => [slot.id, slot.rotationY])) }
 }
 
 function frame(document, time) {

@@ -37,3 +37,25 @@ test('the slot panel parents a prop to the right hand and can let it go', async 
     assert.equal(screen.queryByRole('combobox', { name: 'Hand cup' }), null)
   } finally { cleanup() }
 })
+
+test('the hand turn fields store radians and start from the slot yaw', async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { Scene3DHoldControls } = await import('../src/features/scene3d/Scene3DHoldControls.tsx')
+  const seen: { hold?: Scene3DSlot['hold'] } = {}
+  function Harness() {
+    const [prop, setProp] = useState<Scene3DSlot>(() => ({ ...cup(), rotationY: Math.PI / 2, hold: { carrier: 'hero', hand: 'right' } }))
+    return <Scene3DHoldControls slot={prop} slots={[hero(), prop]} disabled={false} onChange={patch => {
+      seen.hold = patch.hold
+      setProp(current => ({ ...current, ...patch }))
+    }} />
+  }
+  try {
+    render(<Harness />)
+    assert.equal((screen.getByRole('spinbutton', { name: 'Hand turn Y (°) cup' }) as HTMLInputElement).value, '90')
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Hand turn X (°) cup' }), { target: { value: '-90' } })
+    const rotation = seen.hold?.rotation ?? []
+    assert.equal(rotation.length, 3)
+    assert.ok(Math.abs(rotation[0] + Math.PI / 2) < 1e-9 && Math.abs(rotation[1] - Math.PI / 2) < 1e-9 && rotation[2] === 0)
+    assert.equal((screen.getByRole('spinbutton', { name: 'Hand turn X (°) cup' }) as HTMLInputElement).value, '-90')
+  } finally { cleanup() }
+})

@@ -1057,7 +1057,7 @@ test.describe('Media gallery on a touch phone', () => {
       await page.getByRole('button', { name: 'History', exact: true }).click()
       const panel = page.locator('aside').filter({ hasText: 'History' })
       await expect(panel).toBeInViewport()
-      await panel.getByRole('button', { name: MIXED[7].name, exact: true }).click()
+      await panel.getByRole('button', { name: `Open ${MIXED[7].name}`, exact: true }).click()
       await expect(panel).not.toBeInViewport()
       await expect(page.getByTestId('media-feed').locator('[data-feed-index="7"]')).toBeInViewport()
     } finally {

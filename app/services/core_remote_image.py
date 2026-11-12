@@ -6,7 +6,7 @@ import time
 import uuid
 from typing import Any
 
-from services import core_workspace as core
+from services import core_workspace as core, remote_image_generation, workspace_busy
 from services.minimax_image_service import (
     MiniMaxImageError,
     SUPPORTED_ASPECT_RATIOS,
@@ -24,60 +24,10 @@ _LOCK = threading.Lock()
 _ACTIVE = {"queued", "waiting_resource", "running", "cancelling"}
 
 
-def catalog_entry() -> dict[str, Any]:
-    return {
-        "model_type": MODEL_ID,
-        "name": "MiniMax Image-01",
-        "description": "Remote MiniMax Image-01. Requires an API key in Settings → Services.",
-        "family": "minimax",
-        "architecture": "minimax_image",
-        "resource_requirements": {"tier": "remote", "backend": "minimax", "note": "Remote API"},
-        "is_i2v": False,
-        "is_t2v": False,
-        "guidance_max_phases": 1,
-        "fps": 0,
-        "supports_end_frame": False,
-        "supports_audio": False,
-        "supports_ref_images": True,
-        "is_downloaded": True,
-        "nsfw_only": False,
-        "director": {
-            "image": {"compatible": True, "reason": ""},
-            "video": {},
-            "supports_audio_input": False,
-            "generates_audio": False,
-            "supports_voice_reference": False,
-            "max_image_refs": 1,
-        },
-    }
-
-
-def model_options() -> dict[str, Any]:
-    return {
-        "model_type": MODEL_ID,
-        "architecture": "minimax_image",
-        "guidance_max_phases": 1,
-        "lock_guidance_phases": True,
-        "sliding_window": False,
-        "motion_amplitude": False,
-        "flow_shift": False,
-        "tea_cache": False,
-        "returns_audio": False,
-        "any_audio_prompt": False,
-        "audio_scale_name": "",
-        "lock_inference_steps": True,
-        "lock_guidance_scale": True,
-        "no_negative_prompt": True,
-        "i2v_class": False,
-        "t2v_class": False,
-        "image_outputs": True,
-        "supports_end_frame": False,
-        "fps": 0,
-    }
-
-
-def defaults() -> dict[str, Any]:
-    return {"prompt": "", "resolution": "1024x1024", "image_mode": 1, "generation_mode": "image"}
+# The catalog entry, options and defaults are the full runtime's too: one definition in remote_image_generation.
+catalog_entry = remote_image_generation.catalog_entry
+model_options = remote_image_generation.model_options
+defaults = remote_image_generation.defaults
 
 
 def is_minimax_image_request(body: dict[str, Any]) -> bool:
@@ -118,7 +68,8 @@ def _public(job: dict[str, Any]) -> dict[str, Any]:
     payload.update(status_output_fields(
         payload["output_files"], workspace=workspace, workspace_dir=workspace_directory,
     ))
-    return payload
+    from services.output_names import annotate_generation_view
+    return annotate_generation_view(payload, job)
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:
@@ -130,6 +81,19 @@ def get_job(job_id: str) -> dict[str, Any] | None:
 def list_active() -> list[dict[str, Any]]:
     with _LOCK:
         return [_public(job) for job in _JOBS.values() if job.get("status") in _ACTIVE]
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict[str, Any]]:
+    """MiniMax image jobs that still write into their workspace (``services.workspace_busy`` probe).
+
+    Reads the stored records, not ``list_active()``: the public payload has no workspace.
+    """
+    with _LOCK:
+        return [
+            {"jobId": job_id, "status": job.get("status"), "workspace": job.get("workspace")}
+            for job_id, job in _JOBS.items()
+            if workspace_busy.is_active(job.get("status"))
+        ]
 
 
 def cancel_job(job_id: str) -> dict[str, Any] | None:
@@ -211,6 +175,8 @@ def start_job(
     if ratio not in SUPPORTED_ASPECT_RATIOS:
         ratio = aspect_ratio_for_resolution(str(body.get("resolution") or "1024x1024"))
     execution_mode.validate_remote_provider(workspace, "minimax-image")
+    if not remote_image_generation.api_key(core.services_raw()):
+        raise MiniMaxImageError(remote_image_generation.KEY_MISSING, 409)
     subject = encode_subject_reference(str(body.get("subject_reference") or ""), workspace)
     job_id = str(job_id or "").strip() or uuid.uuid4().hex
     now = time.time()
@@ -266,6 +232,7 @@ def _run(job_id: str) -> None:
         _patch(
             job_id, status="completed", phase="completed", progress=100, step=1,
             message="Image ready", output_files=[result["name"]], finished_at=time.time(),
+            output_name_requested=result.get("requested_name"),
         )
     except MiniMaxImageError as exc:
         _patch(job_id, status="failed", phase="failed", message=str(exc), error=str(exc), finished_at=time.time())

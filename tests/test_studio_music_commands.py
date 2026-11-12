@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from routers.image_generation_commands import create_image_generation_commands_router, image_command_handlers
-from routers.studio_music_commands import music_command_catalog
+from services.studio_music_commands import music_command_catalog
 from services.native_generation_operation import NativeGenerationOperation
 from services.studio_music_spec import freeze_studio_music_spec
 from services.image_generation_runtime import create_image_generation_commands
@@ -15,6 +15,16 @@ from services.wangp_submission import JsonRequest, prepare_generation_inputs
 from tests.test_image_generation_commands import FakeNative, _command as image_command, _run
 from tests.test_studio_music_preparation import ACE_DEFINITION
 from tests.test_studio_speech_resources import write_wave
+
+
+def test_the_catalog_description_names_every_model_type_the_command_accepts():
+    """gen-04: the description named two of the three registered models, so an agent never tried yue2."""
+    from services.studio_music_spec import STUDIO_MUSIC_MODEL_TYPES
+
+    catalog = music_command_catalog()
+    assert set(catalog["musicModelTypes"]) == set(STUDIO_MUSIC_MODEL_TYPES)
+    for model_type in STUDIO_MUSIC_MODEL_TYPES:
+        assert model_type in catalog["description"], model_type
 
 
 def music_command(intent="music-intent"):

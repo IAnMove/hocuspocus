@@ -1,0 +1,63 @@
+{
+  "imageModel": "fastest_installed_qwen21_turbo",
+  "imageModelOrder": [
+    "qwen_image_21_viggle_turbo",
+    "qwen_image_21_turbo",
+    "qwen_image_21"
+  ],
+  "prop": {
+    "resolution": "1024x1024",
+    "background": {
+      "flat_styles": "screen",
+      "painted_or_realistic": "grey_u2net"
+    },
+    "flatStyles": [
+      "cartulina",
+      "paper",
+      "cartoon",
+      "anime",
+      "pixel"
+    ],
+    "candidates": 2
+  },
+  "wall": {
+    "longSide": 1536,
+    "multiple": 32
+  },
+  "texture": {
+    "resolution": "1024x1024",
+    "tile_m": 1.0,
+    "seamMax": 1.5,
+    "extraPasses": 1,
+    "bandDivisor": 8
+  },
+  "removeBackground": {
+    "auto": true,
+    "hazeMax": 0.2,
+    "borderShare": 0.9,
+    "colorDistance": 190,
+    "cropMargin": 0.02
+  },
+  "imageParams": {
+    "qwen_image_21_turbo": {
+      "num_inference_steps": 8,
+      "guidance_scale": 1
+    },
+    "qwen_image_21_viggle_turbo": {
+      "num_inference_steps": 6,
+      "guidance_scale": 1
+    },
+    "qwen_image_21": {
+      "num_inference_steps": 40,
+      "guidance_scale": 1
+    }
+  },
+  "imageNegativePrompt": {
+    "qwen_image_21_turbo": false,
+    "qwen_image_21_viggle_turbo": false,
+    "qwen_image_21": true
+  },
+  "skin": {
+    "floorShade": 0.7
+  }
+}

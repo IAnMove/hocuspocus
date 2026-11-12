@@ -1,0 +1,26 @@
+{
+  "note": "Which sheet a figure draws at an angle off the line to the camera (0 faces the camera, 90 faces screen right, 180 turns its back): the table the renderer (ui/tests/directionalWalkSector.test.ts) and the script check (tests/test_series_directional.py) both assert, so the two cannot drift apart. `walking` is for a figure that faces where it goes: the larger part of its movement decides, and only a walk within 12 degrees of the diagonal is three-quarter (walkDiagonalDeg of app/shared/directional_sprites.json). `standing` is the equal 45 degree sectors. A negative angle is the same sector seen from the left.",
+  "walkDiagonalDeg": 12,
+  "cases": [
+    {"angle": 0, "walking": "front", "standing": "front"},
+    {"angle": 10, "walking": "front", "standing": "front"},
+    {"angle": 20, "walking": "front", "standing": "front"},
+    {"angle": 25, "walking": "front", "standing": "front34"},
+    {"angle": 30, "walking": "front", "standing": "front34"},
+    {"angle": 33, "walking": "front", "standing": "front34"},
+    {"angle": 34, "walking": "front34", "standing": "front34"},
+    {"angle": 45, "walking": "front34", "standing": "front34"},
+    {"angle": 57, "walking": "front34", "standing": "front34"},
+    {"angle": 58, "walking": "side", "standing": "front34"},
+    {"angle": 70, "walking": "side", "standing": "side"},
+    {"angle": 90, "walking": "side", "standing": "side"},
+    {"angle": 110, "walking": "side", "standing": "side"},
+    {"angle": 123, "walking": "side", "standing": "back34"},
+    {"angle": 124, "walking": "back34", "standing": "back34"},
+    {"angle": 135, "walking": "back34", "standing": "back34"},
+    {"angle": 147, "walking": "back34", "standing": "back34"},
+    {"angle": 148, "walking": "back", "standing": "back34"},
+    {"angle": 160, "walking": "back", "standing": "back"},
+    {"angle": 180, "walking": "back", "standing": "back"}
+  ]
+}

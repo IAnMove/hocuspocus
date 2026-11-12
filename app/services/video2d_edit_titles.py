@@ -16,6 +16,20 @@ def _cue(cue_id: str, text: str, frame: dict, extra: dict) -> dict:
     return cue
 
 
+def _leave(preset: str, duration: float) -> dict:
+    """Every template leaves before its end: the exit plays in the last part of the cue."""
+    return {"exit": {"preset": preset, "duration": duration}}
+
+
+def _after(frame: dict) -> float:
+    """A second line (the chapter title, the call to action) follows the first by up to half a second."""
+    return frame["start"] + min(0.5, frame["duration"] * 0.2)
+
+
+# Each slam word but the last stays under the next one this long, so the plate never shows the picture between words.
+_SLAM_OVERLAP = 0.06
+
+
 def _field(fields: dict, key: str) -> str:
     if key not in fields or fields[key] is None:
         return ""
@@ -38,27 +52,27 @@ def _vertical(frame: dict) -> bool:
 def _lower_third(fields: dict, frame: dict) -> list:
     y = 72 if _vertical(frame) else 78
     return [
-        _cue("date", _field(fields, "date") or "1991", frame, {"y": y - 8, "size": 14, "font": "display", "weight": 400, "align": "left", "x": 12, "enter": {"preset": "slide-right", "duration": 0.45}, "box": {"kind": "bar", "color": "#e85d4c", "opacity": 1, "padding": 0.2}}),
-        _cue("caption", _field(fields, "caption") or "", frame, {"y": y, "size": 5, "font": "condensed", "x": 12, "align": "left", "enter": {"preset": "fade", "duration": 0.4}}),
+        _cue("date", _field(fields, "date") or "1991", frame, {"y": y - 8, "size": 14, "font": "display", "weight": 400, "align": "left", "x": 12, "enter": {"preset": "slide-right", "duration": 0.45}, **_leave("slide-left", 0.35), "box": {"kind": "bar", "color": "#e85d4c", "opacity": 1, "padding": 0.2}}),
+        _cue("caption", _field(fields, "caption") or "", frame, {"y": y, "size": 5, "font": "condensed", "x": 12, "align": "left", "enter": {"preset": "fade", "duration": 0.4}, **_leave("fade", 0.3)}),
     ]
 
 
 def _chorus(fields: dict, frame: dict) -> list:
-    return [_cue("chorus", _field(fields, "line") or "", frame, {"font": "marker", "y": 62 if _vertical(frame) else 48, "enter": {"preset": "words", "duration": 1.1}, "loop": "pulse", "box": {"kind": "paper", "color": "#f4e7cf", "opacity": 0.94, "padding": 0.4}, "color": "#2a2118"})]
+    return [_cue("chorus", _field(fields, "line") or "", frame, {"font": "marker", "y": 62 if _vertical(frame) else 48, "enter": {"preset": "words", "duration": 1.1}, **_leave("fade", 0.3), "loop": "pulse", "box": {"kind": "paper", "color": "#f4e7cf", "opacity": 0.94, "padding": 0.4}, "color": "#2a2118"})]
 
 
 def _title_card(fields: dict, frame: dict) -> list:
-    cues = [_cue("title", _field(fields, "title") or "", frame, {"font": "display", "weight": 400, "size": 16, "y": 46, "enter": {"preset": "blur", "duration": 0.7}, "box": {"kind": "plate", "color": "#07080d", "opacity": 1, "padding": 0}})]
+    cues = [_cue("title", _field(fields, "title") or "", frame, {"font": "display", "weight": 400, "size": 16, "y": 46, "enter": {"preset": "blur", "duration": 0.7}, **_leave("fade", 0.4), "box": {"kind": "plate", "color": "#07080d", "opacity": 1, "padding": 0}})]
     subtitle = _field(fields, "subtitle")
     if subtitle:
-        cues.append(_cue("sub", subtitle, frame, {"y": 62, "size": 5, "font": "serif", "enter": {"preset": "fade", "duration": 0.5}}))
+        cues.append(_cue("sub", subtitle, frame, {"y": 62, "size": 5, "font": "serif", "enter": {"preset": "fade", "duration": 0.5}, **_leave("fade", 0.3)}))
     return cues
 
 
 def _end_card(fields: dict, frame: dict) -> list:
     return [
-        _cue("end", _field(fields, "title") or "", frame, {"font": "display", "weight": 400, "size": 12, "y": 44}),
-        _cue("cta", _field(fields, "cta") or "", frame, {"y": 60, "size": 5, "font": "sans"}),
+        _cue("end", _field(fields, "title") or "", frame, {"font": "display", "weight": 400, "size": 12, "y": 44, "enter": {"preset": "rise", "duration": 0.5}, **_leave("fade", 0.4)}),
+        _cue("cta", _field(fields, "cta") or "", frame, {"y": 60, "size": 5, "font": "sans", "start": _after(frame), "enter": {"preset": "scale", "duration": 0.3}, "loop": "pulse", **_leave("fade", 0.3)}),
     ]
 
 
@@ -75,19 +89,19 @@ def _js_number(text: str):
 
 
 def _year_counter(fields: dict, frame: dict) -> list:
-    cues = [_cue("count", "{value}", frame, {"font": "display", "weight": 400, "size": 18, "y": 42, "counter": {"from": _js_number(_field(fields, "from")), "to": _js_number(_field(fields, "to")), "decimals": 0, "ease": "ease"}})]
+    cues = [_cue("count", "{value}", frame, {"font": "display", "weight": 400, "size": 18, "y": 42, "counter": {"from": _js_number(_field(fields, "from")), "to": _js_number(_field(fields, "to")), "decimals": 0, "ease": "ease"}, **_leave("fade", 0.3)})]
     label = _field(fields, "label")
     if label:
-        cues.append(_cue("label", label, frame, {"y": 62, "size": 5, "font": "condensed"}))
+        cues.append(_cue("label", label, frame, {"y": 62, "size": 5, "font": "condensed", **_leave("fade", 0.3)}))
     return cues
 
 
 def _quote(fields: dict, frame: dict) -> list:
     width = 78 if _vertical(frame) else 60
-    cues = [_cue("quote", "\u201c" + (_field(fields, "quote") or "") + "\u201d", frame, {"font": "serif", "italic": True, "size": 7, "y": 46, "maxWidth": width, "enter": {"preset": "typewriter", "duration": 1.4}})]
+    cues = [_cue("quote", "\u201c" + (_field(fields, "quote") or "") + "\u201d", frame, {"font": "serif", "italic": True, "size": 7, "y": 46, "maxWidth": width, "enter": {"preset": "typewriter", "duration": 1.4}, **_leave("fade", 0.4)})]
     author = _field(fields, "author")
     if author:
-        cues.append(_cue("author", author, frame, {"y": 64, "size": 4, "font": "sans"}))
+        cues.append(_cue("author", author, frame, {"y": 64, "size": 4, "font": "sans", **_leave("fade", 0.3)}))
     return cues
 
 
@@ -98,21 +112,25 @@ def _trailer(fields: dict, frame: dict) -> list:
     each = frame["duration"] / len(lines)
     cues = []
     for index, line in enumerate(lines):
-        sliced = {**frame, "start": frame["start"] + each * index, "duration": each}
-        cues.append(_cue(f"slam-{index + 1}", line, sliced, {"font": "display", "weight": 400, "size": 14, "y": 50, "enter": {"preset": "impact", "duration": 0.18}, "box": {"kind": "plate", "color": "#000000", "opacity": 1, "padding": 0}}))
+        last = index == len(lines) - 1
+        sliced = {**frame, "start": frame["start"] + each * index, "duration": each + (0 if last else _SLAM_OVERLAP)}
+        cues.append(_cue(f"slam-{index + 1}", line, sliced, {
+            "font": "display", "weight": 400, "size": 14, "y": 50, "enter": {"preset": "impact", "duration": 0.18},
+            **(_leave("fade", 0.3) if last else _leave("none", 0.05)), "box": {"kind": "plate", "color": "#000000", "opacity": 1, "padding": 0},
+        }))
     return cues
 
 
 def _chapter(fields: dict, frame: dict) -> list:
     return [
-        _cue("kicker", (_field(fields, "kicker") or "").upper(), frame, {"y": 40, "size": 3, "font": "condensed", "uppercase": True, "letterSpacing": 0.2}),
-        _cue("chapter", _field(fields, "title") or "", frame, {"y": 50, "size": 12, "font": "display", "weight": 400}),
+        _cue("kicker", (_field(fields, "kicker") or "").upper(), frame, {"y": 40, "size": 3, "font": "condensed", "uppercase": True, "letterSpacing": 0.2, "enter": {"preset": "typewriter", "duration": 0.6}, **_leave("fade", 0.3)}),
+        _cue("chapter", _field(fields, "title") or "", frame, {"y": 50, "size": 12, "font": "display", "weight": 400, "start": _after(frame), "enter": {"preset": "wipe", "duration": 0.6}, **_leave("fade", 0.4)}),
     ]
 
 
 def _social(fields: dict, frame: dict) -> list:
     tall = _vertical(frame)
-    return [_cue("social", _field(fields, "caption") or "", frame, {"y": 72 if tall else 84, "size": 4.5, "maxWidth": 76 if tall else 70, "font": "sans", "box": {"kind": "pill", "color": "#11131a", "opacity": 0.82, "padding": 0.45, "radius": 0.8}})]
+    return [_cue("social", _field(fields, "caption") or "", frame, {"y": 72 if tall else 84, "size": 4.5, "maxWidth": 76 if tall else 70, "font": "sans", "enter": {"preset": "rise", "duration": 0.35}, **_leave("fade", 0.25), "box": {"kind": "pill", "color": "#11131a", "opacity": 0.82, "padding": 0.45, "radius": 0.8}})]
 
 
 _RANSOM_FONTS = ("display", "marker", "serif", "condensed")
@@ -143,7 +161,7 @@ def _ransom_cue(word: str, index: int, count: int, frame: dict, tall: bool) -> d
         "x": x, "y": y, "size": 7 if tall else 8, "font": _RANSOM_FONTS[index % 4], "weight": 700,
         "align": "center", "uppercase": True, "rotation": _RANSOM_TILT[index % 8], "color": "#1c140f",
         "start": frame["start"] + min(index * 0.12, frame["duration"] * 0.5), "end": frame["start"] + frame["duration"],
-        "enter": {"preset": "impact", "duration": 0.2},
+        "enter": {"preset": "impact", "duration": 0.2}, **_leave("fade", 0.25),
         "box": {"kind": "paper", "color": _RANSOM_PAPER[index % 4], "opacity": 1, "padding": 0.28},
         "stroke": dict(_INK), "shadow": dict(_NO_SHADOW),
     })
@@ -178,7 +196,7 @@ def _dymo_look(text: str, dark: bool, tall: bool) -> dict:
         "x": 50, "y": 72 if tall else 78, "size": 4.5 if tall else 5, "font": "mono", "weight": 700,
         "align": "center", "uppercase": True, "letterSpacing": 0.06, "maxWidth": 84 if tall else 78,
         "rotation": _dymo_tilt(text), "color": "#141210" if dark else "#f4efe6",
-        "enter": {"preset": "words", "duration": 0.8},
+        "enter": {"preset": "words", "duration": 0.8}, **_leave("wipe", 0.3),
         "box": {"kind": "tape", "color": "#f2b705" if dark else "#141210", "opacity": 1, "padding": 0.55, "radius": 0.18},
         "stroke": {"color": "#141210", "width": 0}, "shadow": {"color": "#141210", "blur": 0, "x": 0, "y": 0},
     }
@@ -194,7 +212,7 @@ def _card(fields: dict, frame: dict) -> list:
     tall = _vertical(frame)
     return [_cue("card", _field(fields, "title") or "Musktopia", frame, {
         "x": 50, "y": 44 if tall else 46, "size": 10 if tall else 12, "font": "display", "weight": 400,
-        "align": "center", "rotation": -1, "color": "#1a140f", "enter": {"preset": "rise", "duration": 0.45},
+        "align": "center", "rotation": -1, "color": "#1a140f", "enter": {"preset": "rise", "duration": 0.45}, **_leave("fall", 0.3),
         "box": {"kind": "card", "color": "#f7f1e4", "opacity": 1, "padding": 0.62, "radius": 0.08},
         "stroke": dict(_INK), "shadow": dict(_NO_SHADOW),
     })]
@@ -223,7 +241,7 @@ def _desktop(fields: dict, frame: dict) -> list:
         if not allowed[key]["min"] <= value <= allowed[key]["max"]:
             _fail("invalid_input", f"desktop {key} is out of range")
         params[key] = value
-    return [_cue("desktop", "", frame, {"x": 50, "y": 50, "size": 10, "graphic": {"id": "tiling", "params": params}})]
+    return [_cue("desktop", "", frame, {"x": 50, "y": 50, "size": 10, "graphic": {"id": "tiling", "params": params}, **_leave("fade", 0.3)})]
 
 
 TITLE_BUILDERS = {

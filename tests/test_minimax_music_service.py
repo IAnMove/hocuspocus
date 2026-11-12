@@ -37,6 +37,7 @@ def test_generates_three_persistent_candidates(tmp_path):
         lyrics="[Verse]\nWe cross the night\n[Chorus]\nBring us home",
         count=3,
         output_dir=str(tmp_path),
+        model="music-3.0",
         session=session,
     )
 
@@ -58,6 +59,7 @@ def test_correlates_candidate_outputs_with_canonical_task_ids(tmp_path):
         lyrics="[Verse]\nWe cross the night",
         count=1,
         output_dir=str(tmp_path),
+        model="music-3.0",
         session=FakeSession(),
         task_id="task-minimax-music-candidate-1",
         root_task_id="task-minimax-music-root",
@@ -81,6 +83,7 @@ def test_cancelled_resource_wait_never_calls_minimax(tmp_path):
             lyrics="[Verse]\nWe cross the night",
             count=1,
             output_dir=str(tmp_path),
+            model="music-3.0",
             session=session,
             task_id="task-minimax-music-cancelled",
             cancelled=lambda: True,
@@ -141,7 +144,7 @@ def test_requires_key_and_vocal_lyrics(tmp_path):
 
     try:
         minimax_music_service.generate_candidates(
-            api_key="secret", prompt="pop", lyrics="", count=1, output_dir=str(tmp_path)
+            api_key="secret", prompt="pop", lyrics="", count=1, output_dir=str(tmp_path), model="music-3.0",
         )
     except minimax_music_service.MiniMaxMusicError as error:
         assert "Lyrics" in str(error)

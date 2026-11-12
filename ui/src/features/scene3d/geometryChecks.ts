@@ -4,7 +4,7 @@
 Samples come from the stage (`geometrySample`): world boxes of every loaded model at one scene time.
 This module only reads them, so it runs anywhere and is the same in the browser and the server render.
 */
-import type { Vec3 } from './types'
+import type { Scene3DSlot, Vec3 } from './types'
 
 export type GeometrySlotSample = {
   id: string
@@ -49,7 +49,17 @@ export function geometrySampleTimes(duration: number): number[] {
   return times
 }
 
-export function checkGeometry(samples: readonly GeometrySample[]): GeometryReport {
+/** Bodies seated with `rest` (`world3d.scene.patch`): the seat and the table they rest on or at, by id. Their boxes overlap
+ * by design; the server's joint-based contact check (`layout.contacts`) judges those pairs instead. */
+export function restContacts(slots: readonly Pick<Scene3DSlot, 'id' | 'rest'>[] | undefined): Record<string, string[]> {
+  const found: Record<string, string[]> = {}
+  for (const slot of slots ?? []) {
+    if (slot.rest?.on) found[slot.id] = [slot.rest.on, ...(slot.rest.at ? [slot.rest.at] : [])]
+  }
+  return found
+}
+
+export function checkGeometry(samples: readonly GeometrySample[], rests: Record<string, string[]> = {}): GeometryReport {
   const flags = new Map<string, { code: GeometryCode; slot: string; other?: string; times: number[]; detail: string }>()
   const flag = (code: GeometryCode, slot: string, t: number, detail: string, other?: string) => {
     const key = `${code}\0${slot}\0${other ?? ''}`
@@ -63,7 +73,7 @@ export function checkGeometry(samples: readonly GeometrySample[]): GeometryRepor
       if (slot.character && !slot.visible) flag('out_of_frame', slot.id, sample.t, 'the character is outside the camera view')
       if (inside(sample.camera, slot, 0.05)) flag('camera_inside', slot.id, sample.t, 'the camera is inside this model')
     }
-    checkOverlaps(sample, flag)
+    checkOverlaps(sample, flag, rests)
   }
   const step = stepOf(samples)
   const warnings = [...flags.values()].flatMap(entry => intervals(entry.times, step)
@@ -84,12 +94,13 @@ function checkGround(slot: GeometrySlotSample, t: number, flag: Flag) {
   else if (gap > FLOAT * height) flag('floating', slot.id, t, 'the character does not touch the floor')
 }
 
-function checkOverlaps(sample: GeometrySample, flag: Flag) {
+function checkOverlaps(sample: GeometrySample, flag: Flag, rests: Record<string, string[]>) {
   const { slots } = sample
   for (let i = 0; i < slots.length; i++) {
     for (let j = i + 1; j < slots.length; j++) {
       const a = slots[i], b = slots[j]
       if (!a.character && !b.character) continue
+      if (rests[a.id]?.includes(b.id) || rests[b.id]?.includes(a.id)) continue
       if (sharedShare(a, b) > OVERLAP) {
         const [body, other] = a.character ? [a, b] : [b, a]
         flag('intersects', body.id, sample.t, 'this body goes through another model', other.id)

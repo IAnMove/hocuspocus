@@ -1,0 +1,97 @@
+{
+ "version": 1,
+ "note": "What a screen effect lasts and how big it is when a Series script gives no duration or size (services/series_fx_classes.py). Every effect of scene_effects.json is classified here; tests/test_series_shot_extras.py checks it. A value the script gives always wins.",
+ "classes": {
+  "presence": {
+   "what": "Continuous or atmospheric: an aura, a shield, light, weather, smoke, a screen grade. Lasts the whole shot unless the script says otherwise.",
+   "duration": "shot"
+  },
+  "hit": {
+   "what": "A moment: an impact, a burst, a flash, a wave, a beam. Lasts `duration` seconds of its own (0.25-1).",
+   "duration": 1
+  }
+ },
+ "sizes": {
+  "note": "`size` of an effect is % of the frame's shorter side. `cover`: a presence effect that fills a place: it covers the subject (the cue names a cast member or gives x/y; per framing) or, with neither, the whole screen. `framing`: an object or a hit, proportioned to the framing. `own`: size means something else for this effect (drop size, glyph height, pattern height, a clear circle) or the effect fills the frame: the default is left alone. `scale` multiplies the table value (capped at 200) for effects that draw small inside their box.",
+  "cover": {
+   "screen": 178,
+   "subject": {
+    "wide": 80,
+    "two": 125,
+    "medium": 190,
+    "close": 200,
+    "default": 125
+   }
+  },
+  "framing": {
+   "wide": 65,
+   "two": 80,
+   "medium": 100,
+   "close": 120,
+   "default": 80
+  }
+ },
+ "warning": {
+  "code": "fx_presence_too_short",
+  "belowSeconds": 2,
+  "inShotsLongerThanSeconds": 4
+ },
+ "effects": {
+  "sparks": {"class": "hit", "size": "framing", "duration": 0.8, "scale": 1.5},
+  "explosion": {"class": "hit", "size": "framing", "duration": 1},
+  "fireworks": {"class": "hit", "size": "framing", "duration": 1, "scale": 1.4},
+  "confetti": {"class": "hit", "size": "framing", "duration": 1, "scale": 1.3},
+  "rain": {"class": "presence", "size": "own"},
+  "snow": {"class": "presence", "size": "own"},
+  "embers": {"class": "presence", "size": "cover"},
+  "smoke": {"class": "presence", "size": "framing"},
+  "fog": {"class": "presence", "size": "own"},
+  "bubbles": {"class": "presence", "size": "cover"},
+  "stars": {"class": "presence", "size": "cover"},
+  "portal": {"class": "presence", "size": "framing"},
+  "shockwave": {"class": "hit", "size": "framing", "duration": 1},
+  "lightning": {"class": "hit", "size": "framing", "duration": 0.5},
+  "speedlines": {"class": "hit", "size": "framing", "duration": 0.8},
+  "scanline": {"class": "presence", "size": "own"},
+  "etching": {"class": "presence", "size": "own"},
+  "aurora": {"class": "presence", "size": "cover"},
+  "laser": {"class": "hit", "size": "framing", "duration": 0.8},
+  "magic_circle": {"class": "presence", "size": "framing"},
+  "arcane_missiles": {"class": "hit", "size": "framing", "duration": 1, "scale": 1.3},
+  "summoning_gate": {"class": "presence", "size": "framing"},
+  "black_hole": {"class": "presence", "size": "framing"},
+  "ice_burst": {"class": "hit", "size": "framing", "duration": 1},
+  "meteor_shower": {"class": "presence", "size": "cover"},
+  "lightning_storm": {"class": "presence", "size": "cover"},
+  "anime_aura": {"class": "presence", "size": "cover"},
+  "energy_orb": {"class": "presence", "size": "framing", "scale": 1.3},
+  "energy_beam": {"class": "hit", "size": "framing", "duration": 1},
+  "sword_slash": {"class": "hit", "size": "framing", "duration": 0.5},
+  "manga_impact": {"class": "hit", "size": "framing", "duration": 0.6},
+  "impact_flash": {"class": "hit", "size": "own", "duration": 0.25},
+  "impact_invert": {"class": "hit", "size": "own", "duration": 0.25},
+  "fire": {"class": "presence", "size": "framing"},
+  "shield": {"class": "presence", "size": "cover"},
+  "tornado": {"class": "presence", "size": "framing"},
+  "splash": {"class": "hit", "size": "framing", "duration": 1},
+  "dust": {"class": "presence", "size": "cover"},
+  "media_portal": {"class": "presence", "size": "framing"},
+  "code_rain": {"class": "presence", "size": "own"},
+  "psx": {"class": "presence", "size": "own"},
+  "n64": {"class": "presence", "size": "own"},
+  "nes": {"class": "presence", "size": "own"},
+  "snes": {"class": "presence", "size": "own"},
+  "gameboy": {"class": "presence", "size": "own"},
+  "gameboy_color": {"class": "presence", "size": "own"},
+  "genesis": {"class": "presence", "size": "own"},
+  "vhs": {"class": "presence", "size": "own"},
+  "crt": {"class": "presence", "size": "own"},
+  "c64": {"class": "presence", "size": "own"},
+  "candlelight": {"class": "presence", "size": "own"},
+  "vignette": {"class": "presence", "size": "own"},
+  "film_grain": {"class": "presence", "size": "own"},
+  "light_rays": {"class": "presence", "size": "own"},
+  "glitch": {"class": "presence", "size": "own"},
+  "canvas": {"class": "presence", "size": "own"}
+ }
+}

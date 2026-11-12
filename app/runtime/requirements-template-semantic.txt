@@ -1,0 +1,3 @@
+# No extra packages. Template search uses transformers and torch from the studio
+# environment. The weights are intfloat/multilingual-e5-small (MIT), downloaded
+# by app/scripts/download_template_semantic.py into app/services/template_semantic_model.

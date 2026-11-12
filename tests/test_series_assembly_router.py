@@ -341,3 +341,134 @@ def test_a_finished_cut_keeps_its_thumbnail_on_its_holder(tmp_path, monkeypatch)
     thumbnail = series["assets"][series["episodesById"]["episode-1"]["thumbnailAssetId"]]
     assert thumbnail["kind"] == "image" and thumbnail["isDerivedThumbnail"] is True and thumbnail["uri"].endswith(".thumb.jpg")
     assert thumbnail["metadata"]["assemblyAssetId"] == status["assetId"] and thumbnail["metadata"]["time"] == 4.2
+
+
+def test_an_episode_mode_assembly_keeps_each_clips_bed_and_lays_it_while_finishing(tmp_path, monkeypatch):
+    import routers.series_assembly as assembly
+
+    seen = []
+
+    def finished(output_path, *_args, ambience=None, **_kwargs):
+        seen.append(ambience)
+        beds = {"applied": True, "beds": [{"file": "sfx-street.wav"}]} if ambience else None
+        return {"subtitles": {"written": False, "reason": "stub"}, "loudness": {"applied": False, "reason": "stub"},
+                **({"ambience": beds} if beds else {})}
+    monkeypatch.setattr(assembly, "finish_episode", finished)
+
+    def concatenate(paths, output_path):
+        shutil.copyfile(paths[0], output_path)
+        return True
+
+    endpoints, library = _client(tmp_path, concatenate)
+    series = library["seriesById"]["series-1"]
+    shots = {shot["id"]: shot for shot in series["episodesById"]["episode-1"]["shots"]}
+    shots["shot-1"]["locationId"], shots["shot-2"]["locationId"] = "street", "void"
+    start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
+    get_status = endpoints["/api/v1/series/assembly/jobs/{job_id}"]
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed" and seen == [None], "shot mode: the shots carry their ambience"
+
+    series = library["seriesById"]["series-1"]
+    series["soundDesign"] = {"ambienceMode": "episode", "ambienceByLocation": {"street": {"file": "sfx-street.wav"}}}
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed", status
+    assert seen[-1] == [{"locationId": "street", "file": "sfx-street.wav", "volume": 0.22}, {"locationId": "void"}], "in episode order"
+    assert SeriesJobStore(str(tmp_path), "assembly").load(status["jobId"])["ambience"] == seen[-1], "a resume lays the same beds"
+    asset = library["seriesById"]["series-1"]["assets"][status["assetId"]]
+    assert asset["metadata"]["ambience"]["applied"] is True
+
+    episode = library["seriesById"]["series-1"]["episodesById"]["episode-1"]
+    for shot in episode["shots"]:
+        shot["attempts"].append({"id": f"{shot['id']}-es", "status": "completed", "outputAssetIds": ["asset-2"]})
+    episode["languageVersions"] = {"spanish": {"dialogue": {}, "cards": {},
+                                               "approvedAttemptIds": {"shot-1": "shot-1-es", "shot-2": "shot-2-es"}}}
+    request = SeriesAssemblyStartRequest(workspace="default", language="spanish")
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", request)["jobId"])
+    assert status["status"] == "completed" and seen[-1] == seen[-2], "a language version lies on the same beds"
+
+
+def test_the_episode_score_is_kept_on_the_job_and_laid_while_finishing(tmp_path, monkeypatch):
+    import routers.series_assembly as assembly
+
+    seen = []
+
+    def finished(output_path, *_args, score=None, **_kwargs):
+        seen.append(score)
+        return {"subtitles": {"written": False, "reason": "stub"}, "loudness": {"applied": False, "reason": "stub"},
+                **({"score": {"applied": True, "cues": [{"file": "mus-theme.wav"}]}} if score else {})}
+    monkeypatch.setattr(assembly, "finish_episode", finished)
+
+    def concatenate(paths, output_path):
+        shutil.copyfile(paths[0], output_path)
+        return True
+
+    endpoints, library = _client(tmp_path, concatenate)
+    start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
+    get_status = endpoints["/api/v1/series/assembly/jobs/{job_id}"]
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed" and seen == [None], "no score, no score step"
+
+    episode = library["seriesById"]["series-1"]["episodesById"]["episode-1"]
+    shots = {shot["id"]: shot for shot in episode["shots"]}
+    shots["shot-2"]["layout2d"] = {"music": {"file": "mus-song.wav", "volume": 0.5}}
+    episode["score"] = [{"fromShotId": "shot-1", "toShotId": "shot-2", "file": "mus-theme.wav", "volume": 0.2,
+                         "fadeIn": 1.0, "fadeOut": 2.0, "duck": True}, {"fromShotId": "shot-9", "file": "mus-x.wav"}]
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed", status
+    assert seen[-1] == {"cues": [{"file": "mus-theme.wav", "volume": 0.2, "fadeIn": 1.0, "fadeOut": 2.0, "duck": True,
+                                  "firstClip": 0, "lastClip": 1}],
+                        "music": [False, True], "skipped": ["Score cue 2: the episode has no shot shot-9"]}, "in episode order"
+    assert SeriesJobStore(str(tmp_path), "assembly").load(status["jobId"])["score"] == seen[-1], "a resume lays the same score"
+    assert library["seriesById"]["series-1"]["assets"][status["assetId"]]["metadata"]["score"]["applied"] is True
+    assert status["message"].endswith("1 score cue.")
+
+    episode = library["seriesById"]["series-1"]["episodesById"]["episode-1"]
+    for shot in episode["shots"]:
+        shot["attempts"].append({"id": f"{shot['id']}-es", "status": "completed", "outputAssetIds": ["asset-2"]})
+    episode["languageVersions"] = {"spanish": {"dialogue": {}, "cards": {},
+                                               "approvedAttemptIds": {"shot-1": "shot-1-es", "shot-2": "shot-2-es"}}}
+    request = SeriesAssemblyStartRequest(workspace="default", language="spanish")
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", request)["jobId"])
+    assert status["status"] == "completed" and seen[-1] == seen[-2], "a language version lies on the same score"
+
+
+def test_the_live_runtimes_join_keeps_wangps_concat_and_takes_transitions(tmp_path, monkeypatch):
+    """_launch_runtime hands the router WanGP's concatenate_multi_clip_videos, which takes no ``transitions``."""
+    import ast
+    from pathlib import Path
+
+    from services import core_series_assembly
+
+    tree = ast.parse((Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py").read_text(encoding="utf-8"))
+    wired = [keyword.value for node in ast.walk(tree) if isinstance(node, ast.Call)
+             and getattr(node.func, "id", None) == "create_series_assembly_router"
+             for keyword in node.keywords if keyword.arg == "concatenate_clips"]
+    assert [ast.unparse(value) for value in wired] == [
+        "_series_join_with_transitions(wgp.concatenate_multi_clip_videos)"]
+    legacy, core = [], []
+
+    def concatenate_multi_clip_videos(clip_paths, output_path, audio_path=None, audio_start_sec=0.0,
+                                      abort_callback=None, pad_audio=False, audio_duration_sec=None):
+        legacy.append(([os.path.basename(path) for path in clip_paths], audio_path, abort_callback is not None))
+        shutil.copyfile(clip_paths[0], output_path)
+        return True
+
+    def core_join(paths, output_path, *, abort_callback=None, transitions=None):
+        core.append(transitions)
+        shutil.copyfile(paths[0], output_path)
+        return True
+
+    monkeypatch.setattr(core_series_assembly, "concatenate_clips", core_join)
+    endpoints, library = _client(tmp_path, core_series_assembly.with_transitions(concatenate_multi_clip_videos))
+    start = endpoints["/api/v1/series/{series_id}/episodes/{episode_id}/assembly/start"]
+    get_status = endpoints["/api/v1/series/assembly/jobs/{job_id}"]
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed", status
+    assert legacy == [(["one.mp4", "two.mp4"], None, True)], "no transition: WanGP's join, called as before"
+    assert core == []
+
+    shots = {shot["id"]: shot for shot in library["seriesById"]["series-1"]["episodesById"]["episode-1"]["shots"]}
+    shots["shot-2"]["transitionIn"] = {"kind": "dissolve", "seconds": 0.5}
+    status = _wait_for_terminal(get_status, start("series-1", "episode-1", SeriesAssemblyStartRequest(workspace="default"))["jobId"])
+    assert status["status"] == "completed", status
+    assert len(legacy) == 1 and core == [[None, {"kind": "dissolve", "seconds": 0.5}]]

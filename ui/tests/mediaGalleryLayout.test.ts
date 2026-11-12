@@ -10,6 +10,7 @@ import {
   buildGalleryLayout,
   feedMediaHeight,
   galleryAspect,
+  galleryOverscan,
   gridColumns,
   mosaicAspect,
   neighborIndex,
@@ -118,6 +119,14 @@ test('visible range covers exactly the blocks crossing the viewport', () => {
   assert.ok(layout.blocks[range.last].top < offset + 578)
   assert.ok(range.last + 1 >= layout.blocks.length || layout.blocks[range.last + 1].top >= offset + 578)
   assert.deepEqual(visibleBlocks(buildGalleryLayout('feed', [], 386, 578), 0, 578, 0), { first: 0, last: -1 })
+})
+
+test('a short landscape feed keeps the third one-up card mounted', () => {
+  const layout = buildGalleryLayout('feed', library(6), 844, 390)
+  const overscan = galleryOverscan('feed', 150, layout.blocks)
+  const range = visibleBlocks(layout, 0, 150, overscan)
+  assert.ok(range.last >= 2)
+  assert.equal(galleryOverscan('grid', 150, layout.blocks), 150)
 })
 
 test('anchor follows the same item across inserts and view changes', () => {

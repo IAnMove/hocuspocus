@@ -1,3 +1,7 @@
+// The i18next instance src/i18n initializes at app start. E2E specs load this module in Node,
+// where src/i18n's locale JSON cannot load, so it is not imported here.
+import i18n from 'i18next'
+
 export const REVIEW_DECISIONS_STORAGE_KEY = 'hocuspocus.scene-template-review.v1'
 export const REVIEW_DECISIONS_SCHEMA_VERSION = 1 as const
 
@@ -88,18 +92,18 @@ export function parseReviewChoicesResult(
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return invalidChoices(catalogVersion, templates, 'Las decisiones guardadas no son JSON válido; se mantienen como pendientes.')
+    return invalidChoices(catalogVersion, templates, i18n.t('scene3d:reviewDecisions.invalidJson'))
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return invalidChoices(catalogVersion, templates, 'Las decisiones guardadas tienen un formato desconocido; se mantienen como pendientes.')
+    return invalidChoices(catalogVersion, templates, i18n.t('scene3d:reviewDecisions.unknownFormat'))
   }
 
   const record = parsed as Record<string, unknown>
   if (record.schemaVersion !== REVIEW_DECISIONS_SCHEMA_VERSION || record.catalogVersion !== catalogVersion) {
-    return invalidChoices(catalogVersion, templates, 'Las decisiones pertenecen a otra versión del catálogo; no se importan aprobaciones antiguas.')
+    return invalidChoices(catalogVersion, templates, i18n.t('scene3d:reviewDecisions.otherCatalogVersion'))
   }
   if (!record.choices || typeof record.choices !== 'object' || Array.isArray(record.choices)) {
-    return invalidChoices(catalogVersion, templates, 'Las decisiones no contienen una tabla válida; se mantienen como pendientes.')
+    return invalidChoices(catalogVersion, templates, i18n.t('scene3d:reviewDecisions.invalidTable'))
   }
 
   const known = new Map(templates.map(template => [template.id, template]))
@@ -123,7 +127,7 @@ export function parseReviewChoicesResult(
     }
   }
   return ignored
-    ? { state: initial, warning: 'Se ignoraron decisiones con IDs o versiones que ya no coinciden con el catálogo.' }
+    ? { state: initial, warning: i18n.t('scene3d:reviewDecisions.ignoredMismatch') }
     : { state: initial }
 }
 
@@ -144,7 +148,7 @@ export function loadReviewChoicesResult(
   try {
     return parseReviewChoicesResult(storage.getItem(REVIEW_DECISIONS_STORAGE_KEY), catalogVersion, templates)
   } catch {
-    return invalidChoices(catalogVersion, templates, 'No se pudo leer el almacenamiento; las decisiones quedan pendientes en esta sesión.')
+    return invalidChoices(catalogVersion, templates, i18n.t('scene3d:catalogReview.storageReadFailed'))
   }
 }
 

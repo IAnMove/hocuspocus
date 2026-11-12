@@ -3,16 +3,19 @@ import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { SystemSettingsPanel } from './SystemSettingsPanel'
 import { ServicesSettingsPanel } from './ServicesSettingsPanel'
+import { InstallationPanel } from '../Installation/InstallationPanel'
 import { HorizontalScrollTabs } from '../common/HorizontalScrollTabs'
 
 /**
  * Settings drawer — global panel for hardware/perf and external-service
- * configuration. Two tabs in both Studio and Director modes:
+ * configuration. Three tabs in both Studio and Director modes:
  *
  *   Performance    — VRAM coefficient, profile, hardware tier, etc.
  *                    (mounts <SystemSettingsPanel />)
  *   Integrations   — LLM provider, API keys, NSFW master gate, etc.
  *                    (mounts <ServicesSettingsPanel />)
+ *   Installation   — optional engines: what is installed, add or remove.
+ *                    (mounts <InstallationPanel />)
  *
  * Director-mode-specific controls used to live in a third "Parameters"
  * tab here, but everything in that tab was either:
@@ -36,6 +39,7 @@ export function SettingsDrawer() {
   const tabs = [
     { id: 'performance' as const, label: t('tabs.performance') },
     { id: 'integrations' as const, label: t('tabs.integrations') },
+    { id: 'installation' as const, label: t('tabs.installation') },
   ]
 
   return (
@@ -100,6 +104,10 @@ export function SettingsDrawer() {
 
           {settingsTab === 'integrations' && (
             <ServicesSettingsPanel />
+          )}
+
+          {settingsTab === 'installation' && (
+            <InstallationPanel />
           )}
         </div>
       </div>

@@ -49,7 +49,7 @@ export function Scene3DAnimationControls({ slot, clips, duration, disabled, onCh
           className="ml-2 min-h-10 w-20 rounded border border-border bg-bg-tertiary px-2"
           onChange={event => onChange({ clipPlayback: parseClipPlayback({ ...playback, start: event.target.valueAsNumber }) })} />
       </label>
-      <label className="flex min-h-10 items-center gap-2 text-xs"><input type="checkbox" disabled={disabled} checked={playback.loop}
+      <label className="flex min-h-10 items-center gap-2 text-xs"><input aria-label={t('animationLoop')} type="checkbox" disabled={disabled} checked={playback.loop}
         onChange={event => onChange({ clipPlayback: { ...playback, loop: event.target.checked } })} />{t('animationLoop')}</label>
       <button type="button" disabled={disabled || !fitted} title={t('animationFitHint')}
         className="min-h-10 rounded border border-border px-3 text-xs disabled:opacity-40"

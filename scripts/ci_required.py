@@ -11,6 +11,8 @@ import sys
 SUCCESS = "success"
 
 # Display names must match job ``name:`` strings in .github/workflows/ci.yml.
+# "UI E2E boot" is a three-shard matrix; the workflow passes needs.ui-e2e.result,
+# which is success only when all three shards succeeded.
 REQUIRED_JOB_NAMES = (
     "Clean-repo guard + Python checks",
     "Python tests A",

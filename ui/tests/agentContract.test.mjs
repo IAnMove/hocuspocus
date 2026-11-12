@@ -190,7 +190,7 @@ test('application adapters navigate and verify targets without rendering React',
   try {
     const adapters = createDefaultApplicationAdapters()
     assert.deepEqual(Object.keys(adapters).sort(), [
-      'characterKit', 'comic', 'lipsCreator', 'openTab', 'productionWorks', 'queue', 'seriesLab', 'storyLab', 'studio', 'tools', 'video3d', 'videoEditor', 'videoclips', 'workspace', 'world3dTemplates',
+      'animeCharacter', 'blobBody', 'characterAnimations', 'characterFaces', 'characterKit', 'comic', 'lipsCreator', 'lipsyncRedo', 'mediaTools', 'openTab', 'productionWorks', 'queue', 'realCharacter', 'roomSets', 'seriesLab', 'seriesShots', 'storyLab', 'studio', 'tools', 'video2dTemplates', 'video3d', 'videoEditor', 'videoclips', 'workspace', 'world3dTemplates',
     ])
     const story = await adapters.storyLab.open()
     assert.equal(useStore.getState().mediaFilter, 'stories')
@@ -198,6 +198,9 @@ test('application adapters navigate and verify targets without rendering React',
     const lips = await adapters.openTab('lips_creator')
     assert.equal(useStore.getState().mediaFilter, 'lips')
     assert.equal(lips.target.id, 'lips_creator')
+    const gameAssets = await adapters.openTab('game_assets')
+    assert.equal(useStore.getState().mediaFilter, 'gameAssets')
+    assert.equal(gameAssets.target.id, 'game_assets')
     const director = await adapters.openTab('director')
     assert.equal(useStore.getState().sidebarMode, 'director')
     assert.equal(useStore.getState().sidebarOpen, true)
@@ -300,7 +303,7 @@ test('generate_comic refuses a different comic than the one just created', async
   assert.equal(bindGenerateComicTarget('', 'comic-open', 'Abierto'), 'comic-open')
   assert.throws(
     () => bindGenerateComicTarget('comic-new', 'comic-old', 'Viejo'),
-    /recién creado/,
+    /project just created/,
   )
 })
 
@@ -310,7 +313,7 @@ test('start_director_production refuses an older production than the one just st
   assert.equal(bindDirectorProductionTarget('', 'prod-open', 'Abierto'), 'prod-open')
   assert.throws(
     () => bindDirectorProductionTarget('prod-new', 'prod-old', 'Viejo'),
-    /recién preparada/,
+    /production just prepared/,
   )
 })
 
@@ -417,7 +420,7 @@ test('comic artwork inventory and task selection cover missing failed pages and 
   assert.equal(inventory.provider, 'minimax')
   const missing = selectComicArtworkTasks(project, { scope: 'missing' })
   assert.equal(missing.length, 72)
-  assert.equal(formatComicArtworkProgress(missing[20], 12, 72), 'página 4/12 · viñeta 21/72')
+  assert.equal(formatComicArtworkProgress(missing[20], 12, 72), 'page 4/12 · panel 21/72')
   const firstPage = selectComicArtworkTasks(project, { pages: [1] })
   assert.equal(firstPage.length, 6)
   const completedIds = project.director.plan.pages[0].panels.map(panel => panel.id)
@@ -455,7 +458,7 @@ test('comic artwork inventory and task selection cover missing failed pages and 
   assert.equal(first.generated, 65)
   assert.equal(first.failed, 1)
   assert.equal(first.cancelled, false)
-  assert.ok(progress.some(message => message.includes('página 4/12 · viñeta 21/72')))
+  assert.ok(progress.some(message => message.includes('page 4/12 · panel 21/72')))
   const mid = useComicStore.getState().project
   assert.equal(mid.director.completedPanelIds.length, 71)
   assert.deepEqual(mid.director.failedPanelIds, [failedId])
@@ -519,7 +522,7 @@ test('factual biography blocks render until review and snapshot exposes comic pr
       type: 'generate_comic', imageProvider: 'minimax', imageModel: 'image-01',
       scope: 'missing', pages: [], pilot: false, biographyReview: false, confirm: true,
     }),
-    /biografía factual/,
+    /factual biography/,
   )
   const snapshot = buildAgentAppSnapshot()
   assert.equal(snapshot.comic.title, 'Vida de Ada')

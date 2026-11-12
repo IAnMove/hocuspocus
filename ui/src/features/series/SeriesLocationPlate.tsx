@@ -49,12 +49,12 @@ export function SeriesLocationPlate({ workspace, series, location, pollMs = POLL
     <p className="text-[10px] text-text-muted">{hasPlate ? t('plates.active') : t('plates.hint')}</p>
     <div className="flex flex-wrap items-end gap-2">
       <label className="text-[10px]">{t('plates.scene')}
-        <select className={inputClass} value={scene} disabled={rendering} onChange={event => setScene(event.target.value)}>
+        <select aria-label={t('plates.scene')} className={inputClass} value={scene} disabled={rendering} onChange={event => setScene(event.target.value)}>
           <option value="">{scenes.length ? t('plates.choose') : t('plates.noScenes')}</option>
           {scenes.map(item => <option key={item.name} value={item.name}>{item.name.replace(/\.world3d\.scene\.json$/, '')}</option>)}
         </select></label>
       <label className="text-[10px]">{t('plates.seconds')}
-        <input className={`${inputClass} w-20`} type="number" min={2} max={20} step={1} value={seconds} disabled={rendering}
+        <input aria-label={t('plates.seconds')} className={`${inputClass} w-20`} type="number" min={2} max={20} step={1} value={seconds} disabled={rendering}
           onChange={event => setSeconds(Math.min(20, Math.max(2, Number(event.target.value) || 6)))} /></label>
       <button className={secondaryButton} disabled={!scene || rendering} onClick={() => void start()}>{t('plates.render')}</button>
     </div>

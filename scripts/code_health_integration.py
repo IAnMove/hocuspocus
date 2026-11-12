@@ -8,7 +8,8 @@ import re
 import shutil
 import subprocess
 import tempfile
-from pathlib import Path
+from dataclasses import replace
+from pathlib import Path, PurePosixPath
 
 import code_health as health
 
@@ -60,13 +61,121 @@ LIFECYCLE_SCRIPTS = frozenset({"preinstall", "install", "postinstall", "prepubli
                                "postprepare", "dependencies"})
 
 
-def measurement_manifest(source: str) -> str:
-    manifest = json.loads(source)
-    # ESLint is invoked directly, so a script only matters when npm runs it on install
-    # (an added `atmos:capture` or a changed `test` command measures nothing differently).
-    scripts = manifest.get("scripts") if isinstance(manifest.get("scripts"), dict) else {}
-    manifest["scripts"] = {name: value for name, value in scripts.items() if name in LIFECYCLE_SCRIPTS}
-    return json.dumps(manifest, sort_keys=True)
+DEPENDENCY_FIELDS = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
+
+
+def config_packages(source: str) -> set[str]:
+    """Only static package imports are supported; local/dynamic config needs review."""
+    if re.search(r"\b(?:import|from|require)\s*(?:/\*|//)", source):
+        raise ValueError("Comment-separated ESLint configuration imports are unsupported")
+    if re.search(r"\b(?:import|require)\s*\(", source):
+        raise ValueError("Dynamic ESLint configuration imports are unsupported")
+    packages = {"eslint"}  # source_complexity invokes this package's bin directly.
+    for specifier in re.findall(r"\b(?:from\s*|import\s*)['\"]([^'\"]+)['\"]", source):
+        if not re.fullmatch(r"(?:@[\w.-]+/)?[\w-][\w.-]*(?:/[\w.-]+)*", specifier):
+            raise ValueError(f"Unsupported ESLint configuration import: {specifier}")
+        parts = specifier.split("/")
+        packages.add("/".join(parts[:2]) if specifier.startswith("@") else parts[0])
+    return packages
+
+
+def dependency_map(record: dict, field: str) -> dict[str, str]:
+    value = record.get(field, {})
+    if not isinstance(value, dict) or any(not isinstance(name, str) or not isinstance(spec, str)
+                                          for name, spec in value.items()):
+        raise ValueError(f"Invalid measurement dependency map: {field}")
+    return value
+
+
+def resolve_package(packages: dict, importer: str, name: str) -> str | None:
+    if not re.fullmatch(r"(?:@[\w.-]+/)?[\w-][\w.-]*", name):
+        raise ValueError(f"Invalid measurement dependency name: {name}")
+    folder = PurePosixPath(importer)
+    for parent in (folder, *folder.parents):
+        if parent.name != "node_modules":
+            candidate = str(parent / "node_modules" / name)
+            if candidate in packages:
+                return candidate
+    return None
+
+
+def dependency_edges(packages: dict, path: str, record: dict) -> dict:
+    dependencies = dependency_map(record, "dependencies")
+    optional = dependency_map(record, "optionalDependencies")
+    peers = dependency_map(record, "peerDependencies")
+    meta = record.get("peerDependenciesMeta", {})
+    if not isinstance(meta, dict) or any(not isinstance(value, dict) for value in meta.values()):
+        raise ValueError(f"Invalid peer dependency metadata: {path}")
+    edges = {}
+    for name in dependencies.keys() | optional.keys() | peers.keys():
+        target = resolve_package(packages, path, name)
+        optional_only = name in optional or (name not in dependencies and meta.get(name, {}).get("optional") is True)
+        if target is None and not optional_only:
+            raise ValueError(f"Missing measurement dependency: {path} -> {name}")
+        edges[name] = target
+    return edges
+
+
+def measurement_manifest(source: str, lock_source: str, config_source: str) -> str:
+    """Fingerprint the installed analyzer closure and every install-script package."""
+    manifest, lock = json.loads(source), json.loads(lock_source)
+    if not isinstance(manifest, dict) or not isinstance(lock, dict) or lock.get("lockfileVersion") != 3:
+        raise ValueError("Measurement requires a package manifest and npm v3 lockfile")
+    packages = lock.get("packages")
+    if not isinstance(packages, dict) or not isinstance(packages.get(""), dict):
+        raise ValueError("Missing measurement lockfile root")
+    if any(not isinstance(record, dict) or record.get("link") for record in packages.values()):
+        raise ValueError("Unsupported linked or invalid measurement lockfile package")
+    scripts = dependency_map(manifest, "scripts")
+    root_hooks = bool(LIFECYCLE_SCRIPTS.intersection(scripts))
+    # A root hook can call other scripts or inspect any installed dependency.
+    manifest["scripts"] = scripts if root_hooks else {}
+    pending = {path for path, record in packages.items() if path and (
+        root_hooks or record.get("hasInstallScript") or record.get("gypfile")
+        or LIFECYCLE_SCRIPTS.intersection(dependency_map(record, "scripts"))
+    )}
+    for name in config_packages(config_source):
+        path = resolve_package(packages, "", name)
+        if path is None:
+            raise ValueError(f"Missing ESLint measurement package: {name}")
+        pending.add(path)
+    selected = {}
+    while pending:
+        path = pending.pop()
+        if path in selected:
+            continue
+        record = packages[path]
+        if any(not isinstance(record.get(key), str) or not record[key] for key in ("version", "resolved", "integrity")):
+            raise ValueError(f"Missing locked measurement package identity: {path}")
+        edges = dependency_edges(packages, path, record)
+        selected[path] = {"record": record, "resolved_dependencies": edges}
+        pending.update(target for target in edges.values() if target is not None)
+    for record in (manifest, packages[""]):
+        for field in DEPENDENCY_FIELDS:
+            if field in record:
+                record[field] = {name: spec for name, spec in dependency_map(record, field).items()
+                                 if root_hooks or resolve_package(packages, "", name) in selected}
+    # Keep all other root metadata (including overrides and package-manager settings).
+    lock["packages"] = {"": packages[""], **selected}
+    return json.dumps({"manifest": manifest, "lock": lock}, sort_keys=True)
+
+
+def unmeasured_inputs(source: str, lock_source: str, fingerprint: str) -> dict[tuple[str, ...], object]:
+    """Keep the complement: npm can execute undeclared native install hooks."""
+    manifest, lock = json.loads(source), json.loads(lock_source)
+    packages = lock["packages"]
+    selected = set(json.loads(fingerprint)["lock"]["packages"]) - {""}
+    inputs = {("package", path): record for path, record in packages.items() if path and path not in selected}
+    for origin, record in (("manifest", manifest), ("lock", packages[""])):
+        for field in DEPENDENCY_FIELDS:
+            for name, spec in dependency_map(record, field).items():
+                if resolve_package(packages, "", name) not in selected:
+                    inputs[(origin, field, name)] = spec
+    return inputs
+
+
+def removed_only(previous: dict, current: dict) -> bool:
+    return all(key in previous and previous[key] == value for key, value in current.items())
 
 
 def release_chain(base: str, head: str) -> list[str]:
@@ -107,11 +216,15 @@ def release_chain(base: str, head: str) -> list[str]:
 
 def read_trees(chain: list[str]) -> tuple[list[dict[str, str]], dict[str, str]]:
     trees, blobs, inputs = [], set(), None
+    fingerprints = {}
+    previous_unmeasured = None
     for sha in chain:
         tree = {}
         measurement = {}
         for mode, kind, blob, path in tree_entries(sha):
             if path in MEASUREMENT_INPUTS:
+                if kind != "blob" or mode not in {"100644", "100755"}:
+                    raise ValueError(f"Unsupported measurement inputs at {sha}: {path}")
                 measurement[path] = blob
             if health._is_product(path):
                 if kind != "blob" or mode not in {"100644", "100755"}:
@@ -120,10 +233,20 @@ def read_trees(chain: list[str]) -> tuple[list[dict[str, str]], dict[str, str]]:
                 blobs.add(blob)
         if set(measurement) != set(MEASUREMENT_INPUTS):
             raise ValueError(f"Missing measurement inputs at {sha}")
-        measurement["ui/package.json"] = measurement_manifest(git("show", f"{sha}:ui/package.json"))
+        dependency_inputs = ("ui/package.json", "ui/package-lock.json", "ui/eslint.config.js")
+        key = tuple(measurement[path] for path in dependency_inputs)
+        if key not in fingerprints:
+            sources = [git("show", f"{sha}:{path}") for path in dependency_inputs]
+            fingerprint = measurement_manifest(*sources)
+            fingerprints[key] = fingerprint, unmeasured_inputs(*sources[:2], fingerprint)
+        measurement["ui/package.json"], unmeasured = fingerprints[key]
+        del measurement["ui/package-lock.json"]
         if inputs is not None and measurement != inputs:
             raise ValueError(f"Policy, analyzer or UI measurement inputs changed at {sha}")
+        if previous_unmeasured is not None and not removed_only(previous_unmeasured, unmeasured):
+            raise ValueError(f"Unmeasured UI dependencies added or changed at {sha}; separate review required")
         inputs = measurement
+        previous_unmeasured = unmeasured
         trees.append(tree)
     batch = subprocess.run(
         ["git", "-C", str(ROOT), "cat-file", "--batch"],
@@ -160,7 +283,7 @@ def source_complexity(trees: list[dict[str, str]], sources: dict[str, str]) -> d
                 if suffix == ".py":
                     collector = health._PythonFunctionCollector(path)
                     collector.visit(health.ast.parse(sources[blob], filename=path))
-                    metrics[key] = [item.complexity for item in collector.metrics]
+                    metrics[key] = list(collector.metrics)
                 else:
                     (folder / "src" / f"{blob}{suffix}").write_text(sources[blob], encoding="utf-8")
                     metrics[key] = []
@@ -184,16 +307,23 @@ def source_complexity(trees: list[dict[str, str]], sources: dict[str, str]) -> d
                     match = re.search(r"complexity of (\d+)", message["message"])
                     if not match:
                         raise ValueError("Unrecognized ESLint complexity result")
-                    metrics[key].append(int(match.group(1)))
+                    label = message["message"].split(" has a complexity", 1)[0]
+                    metrics[key].append(health.FunctionMetric("", label, int(message["line"]), int(match.group(1))))
         if seen != {key for key in metrics if key[1] != ".py"}:
             raise ValueError("Historical UI measurement omitted source files")
     return metrics
 
 
 def checkpoint(tree: dict[str, str], sources: dict[str, str], metrics: dict) -> dict:
+    """One integration step, measured like collect(), with the move and split evidence."""
     lines = {path: len(sources[blob].splitlines()) for path, blob in tree.items()}
-    functions = {path: metrics[(blob, Path(path).suffix)] for path, blob in tree.items()}
-    values = [value for items in functions.values() for value in items]
+    # The same blob can sit at another path in another tree (a moved file).
+    functions = {
+        path: [replace(item, path=path) for item in metrics[(blob, Path(path).suffix)]]
+        for path, blob in tree.items()
+    }
+    measured = [item for items in functions.values() for item in items]
+    values = [item.complexity for item in measured]
     return {
         "policy": health.POLICY, "policy_version": health.POLICY_VERSION,
         "measurement": {"ui": "complete"}, "product_paths": sorted(tree),
@@ -201,12 +331,15 @@ def checkpoint(tree: dict[str, str], sources: dict[str, str], metrics: dict) -> 
             "production_lines": sum(lines.values()),
             "complex_functions": sum(value >= health.COMPLEXITY_WARNING for value in values),
             "max_complexity": max(values, default=0), "functions_measured": len(values),
+            "decisions": sum(value - 1 for value in values),
         },
         "hotspots": {path: count for path, count in lines.items() if count >= health.HOTSPOT_LINES},
         "complexity_hotspots": {
-            path: max(items) for path, items in functions.items()
-            if items and max(items) >= health.COMPLEXITY_WARNING
+            path: max(item.complexity for item in items) for path, items in functions.items()
+            if items and max(item.complexity for item in items) >= health.COMPLEXITY_WARNING
         },
+        # Split credit at each step needs the same evidence as the PR check.
+        "fingerprints": health._fingerprint_records(measured),
     }
 
 
@@ -215,7 +348,9 @@ def compare_release(current: dict, baseline: dict, chain: list[str], reports: li
     if len(chain) != len(reports) or not reports:
         raise ValueError("Missing integration checkpoint reports")
     for expected, measured in ((baseline, reports[0]), (current, reports[-1])):
-        for key in ("production_lines", "complex_functions", "max_complexity", "functions_measured"):
+        for key in ("production_lines", "complex_functions", "max_complexity", "functions_measured", "decisions"):
+            if key == "decisions" and key not in expected.get("summary", {}):
+                continue  # written by an analyzer from before the decision total
             if expected.get("summary", {}).get(key) != measured["summary"][key]:
                 raise ValueError(f"Historical and full-tree measurements disagree: {key}")
         for key in ("product_paths", "hotspots", "complexity_hotspots"):

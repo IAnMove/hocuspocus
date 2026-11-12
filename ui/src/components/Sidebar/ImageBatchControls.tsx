@@ -2,7 +2,7 @@ import { lazy, Suspense, useRef, useState } from 'react'
 import type { ApiOutput } from '../../api/outputs'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
-import { imageBatchPairs, MAX_IMAGE_BATCH_JOBS } from '../../features/studio/imageBatch'
+import { imageBatchStatus, MAX_IMAGE_BATCH_JOBS } from '../../features/studio/imageBatch'
 import { forgetLocalImage, rememberLocalImage } from '../../lib/localEditImages'
 import { setStudioImageMask } from '../../features/studio/imageInputActions'
 import { ImageCropButton } from '../common/ImageCropButton'
@@ -16,8 +16,11 @@ export function ImageBatchControls() {
   const settings = useStore(state => state.imageBatch)
   const workspace = useStore(state => state.activeWorkspace)
   const edit = useStore(state => state.imageStudioIntent === 'edit')
+  const intent = useStore(state => state.imageStudioIntent)
   const prompt = useStore(state => String(state.params.prompt || ''))
   const mask = useStore(state => state.params.image_mask)
+  const imageRefs = useStore(state => state.imageRefs)
+  const imageRefRows = useStore(state => state.imageRefRows)
   const [open, setOpen] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const sources = settings?.sources ?? []
@@ -30,7 +33,7 @@ export function ImageBatchControls() {
     for (const item of items) if (!next.some(other => other.url === item.url)) next.push(item)
     patch({ sources: next })
   }
-  const count = imageBatchPairs(prompt, settings, edit).length
+  const count = imageBatchStatus('image', intent, prompt, mask, settings, { primary: imageRefs, rows: imageRefRows }).count
   return <section className="space-y-2 rounded border border-border p-2" aria-label={t('imageBatch.title')}>
     <label className="flex items-center justify-between gap-2 text-xs">
       {t('imageBatch.promptMode')}
@@ -39,13 +42,13 @@ export function ImageBatchControls() {
         <option value="lines">{t('imageBatch.lines')}</option>
       </select>
     </label>
-    {edit && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={enabled} onChange={event => patch({ enabled: event.target.checked })} />{t('imageBatch.enable')}</label>}
+    {edit && <label className="flex items-center gap-2 text-xs"><input aria-label={t('imageBatch.enable')} type="checkbox" checked={enabled} onChange={event => patch({ enabled: event.target.checked })} />{t('imageBatch.enable')}</label>}
     {enabled && <>
       <div className="flex gap-2 text-xs">
         <button type="button" className="rounded border border-border p-2" onClick={() => input.current?.click()}>{common('picker.fromDevice')}</button>
         <button type="button" className="rounded border border-border p-2" onClick={() => setOpen(true)}>{common('picker.fromLibrary')}</button>
       </div>
-      <input ref={input} type="file" accept="image/*" multiple className="hidden" data-testid="image-batch-files" onChange={event => {
+      <input ref={input} aria-label={common('picker.fromDevice')} type="file" accept="image/*" multiple className="hidden" data-testid="image-batch-files" onChange={event => {
         const files = [...(event.target.files || [])].filter(file => file.type.startsWith('image/'))
         add(files.map(file => ({ name: file.name, type: 'image', mode: null, size: file.size, created_at: Date.now() / 1000, url: rememberLocalImage(file) })))
         event.target.value = ''

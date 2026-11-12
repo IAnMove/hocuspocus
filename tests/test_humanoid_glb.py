@@ -12,7 +12,7 @@ from pygltflib import GLTF2
 from services.humanoid_rig import rotation as rot
 from services.humanoid_rig.errors import NotHumanoid
 from services.humanoid_rig.names import BONE_NAMES
-from services.humanoid_rig.rig import rig_humanoid
+from services.humanoid_rig.rig import RIG_VERSION, rig_humanoid
 from services.procedural_3d.compose import compose_glb
 from services.procedural_3d.glb_inspector import inspect_glb_bytes
 from tests.humanoid_bodies import as_glb, body
@@ -188,7 +188,7 @@ def test_an_a_pose_mesh_rests_exactly_and_carries_its_rig_facts():
     assert left_arm.rotation is not None and abs(left_arm.rotation[2]) > 0.2
     hips = next(node for node in gltf.nodes if node.name == "Hips")
     marker = hips.extras["hocuspocus_humanoid"]
-    assert marker["version"] == 2 and marker["facing"] == 1
+    assert marker["version"] == RIG_VERSION and marker["facing"] == 1
     assert 30.0 <= marker["arm_down"] <= 80.0 and marker["chest_front"] > 0.0
     assert [animation.name for animation in gltf.animations] == ["Walk", "Wave"]
     assert sidecar["pose"] == "a" and [clip["name"] for clip in sidecar["clips"]] == ["Walk", "Wave"]

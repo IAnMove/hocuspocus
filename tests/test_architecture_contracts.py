@@ -4,6 +4,9 @@ import ast
 import json
 from pathlib import Path
 
+import pytest
+
+from scripts import architecture_contracts
 from scripts.architecture_contracts import (
     ROOT,
     ROUTE_FIXTURE,
@@ -11,6 +14,8 @@ from scripts.architecture_contracts import (
     extract_route_table,
     extract_wire_inventory,
 )
+
+RUNTIME_ROUTE_FIXTURE = ROOT / "tests" / "fixtures" / "route_table_runtime.json"
 
 
 WGP_ALLOWLIST = {
@@ -105,6 +110,86 @@ def test_static_route_table_matches_launch_and_mounted_router_order() -> None:
     assert [route["ordinal"] for route in fixture["routes"]] == list(range(len(fixture["routes"])))
 
 
+def test_static_route_table_names_the_served_routes_in_served_order() -> None:
+    """The static table (no import) and the served table (fake-wgp import) list the same app routes.
+
+    tests/characterization/test_route_table_runtime.py checks the served table
+    against its fixture; this keeps the two fixtures in step without importing.
+    """
+    def rows(path, *, served: bool) -> list[tuple]:
+        routes = json.loads(path.read_text(encoding="utf-8"))["routes"]
+        return [
+            (route["method"], route["path"], route["endpoint"], route["source"], route["status_code"])
+            for route in routes
+            if not served or str(route["source"]).startswith("app/")
+        ]
+
+    assert rows(ROUTE_FIXTURE, served=False) == rows(RUNTIME_ROUTE_FIXTURE, served=True), (
+        "route_table.json and route_table_runtime.json disagree. Run scripts/architecture_contracts.py --write "
+        "with the app's Python and review both diffs."
+    )
+
+
+def _routes_of(source: str) -> list[dict]:
+    function = ast.parse(source).body[0]
+    return architecture_contracts._decorated_routes(function, owner="app/routers/example.py")
+
+
+def test_route_paths_must_be_string_literals(monkeypatch) -> None:
+    computed = "@router.get(f'{PREFIX}/items')\ndef list_items():\n    pass\n"
+    with pytest.raises(ValueError, match="not a string literal"):
+        _routes_of(computed)
+    with pytest.raises(ValueError, match="not a string literal"):
+        _routes_of("@router.post(PREFIX + '/items')\ndef add_item():\n    pass\n")
+    monkeypatch.setitem(
+        architecture_contracts.NON_LITERAL_ROUTE_PATHS,
+        ("app/routers/example.py", "list_items"),
+        "example: listed with a reason",
+    )
+    assert [route["path"] for route in _routes_of(computed)] == ["f'{PREFIX}/items'"]
+
+
+def test_add_api_route_is_recorded_in_source_order() -> None:
+    source = "\n".join([
+        "def create_example_router():",
+        "    router = APIRouter()",
+        "    @router.get('/first')",
+        "    def first():",
+        "        pass",
+        "    router.add_api_route('/second', second, methods=['POST'])",
+        "    router.add_api_route('/third', third, methods=['PUT', 'PATCH'])",
+        "    return router",
+        "def second():",
+        "    pass",
+        "def third():",
+        "    pass",
+        "",
+    ])
+    tree = ast.parse(source)
+    factory = tree.body[0]
+    decorated = []
+    for node in ast.walk(factory):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            decorated.extend(architecture_contracts._decorated_routes(node, owner="app/routers/example.py"))
+    added = architecture_contracts._add_api_routes(factory, owner="app/routers/example.py")
+    routes = sorted(decorated + added, key=lambda item: item["_line"])
+    assert [(route["method"], route["path"], route["endpoint"]) for route in routes] == [
+        ("GET", "/first", "first"),
+        ("POST", "/second", "second"),
+        ("PUT", "/third", "third"),
+        ("PATCH", "/third", "third"),
+    ]
+    assert all(route["source"] == "app/routers/example.py" for route in routes)
+    assert all(route["status_code"] is None for route in routes)
+
+
+def test_stacked_route_decorators_register_bottom_up() -> None:
+    routes = _routes_of(
+        "@router.get('/first')\n@router.head('/second')\ndef both():\n    pass\n"
+    )
+    assert [(route["method"], route["path"]) for route in routes] == [("HEAD", "/second"), ("GET", "/first")]
+
+
 def test_architecture_wire_inventory_has_no_unclassified_readers() -> None:
     fixture = json.loads(WIRE_FIXTURE.read_text(encoding="utf-8"))
     assert fixture == {"version": 1, "entries": extract_wire_inventory()}
@@ -181,3 +266,37 @@ def test_launch_binds_live_wgp_immediately_after_bootstrap_import() -> None:
         ):
             events.append("bind_wgp")
     assert events == ["import_wgp", "import_bind_wgp", "bind_wgp"]
+
+
+def test_full_root_builds_the_runtime_context_after_binding_wgp_and_core_does_not() -> None:
+    launch = ast.parse((ROOT / "app" / "_launch_runtime.py").read_text(encoding="utf-8"))
+    order: list[str] = []
+    for node in launch.body:
+        if (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "bind_wgp"
+        ):
+            order.append("bind_wgp")
+        elif (
+            isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "build_context"
+        ):
+            order.append("build_context")
+            assert [keyword.arg for keyword in node.value.keywords if keyword.arg == "profile"] == ["profile"]
+            assert ast.literal_eval(
+                next(keyword.value for keyword in node.value.keywords if keyword.arg == "profile")
+            ) == "full"
+        elif (
+            isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "FastAPI"
+        ):
+            order.append("FastAPI")
+    assert order == ["bind_wgp", "build_context", "FastAPI"]
+    core = (ROOT / "app" / "core_runtime.py").read_text(encoding="utf-8")
+    assert "services.kernel" not in core and "build_context" not in core

@@ -1,6 +1,9 @@
 """Foot landings recorded per humanoid clip, for footsteps that follow the animation."""
 import numpy as np
 import pytest
+
+pytest.importorskip("pygltflib")
+
 from pygltflib import GLTF2
 
 from services.humanoid_rig.animate import animate_humanoid

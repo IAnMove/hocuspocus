@@ -13,6 +13,9 @@
   "search": "Buscar en prompts, nombres o tags…",
   "allCollections": "Todas las colecciones",
   "allGroups": "Todos los grupos",
+  "collection": "Colección",
+  "group": "Grupo",
+  "sortBy": "Orden",
   "sort": {
     "source": "Orden de la fuente",
     "newest": "Más recientes",

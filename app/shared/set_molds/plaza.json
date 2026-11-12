@@ -1,0 +1,262 @@
+{
+  "id": "plaza",
+  "title": {
+    "es": "Plaza",
+    "en": "Square"
+  },
+  "kind": "exterior",
+  "sizes": {
+    "small": [
+      12.8,
+      11.2,
+      5.4
+    ],
+    "medium": [
+      16.0,
+      14.0,
+      6.0
+    ],
+    "large": [
+      20.0,
+      17.5,
+      6.72
+    ]
+  },
+  "walls": [
+    "back"
+  ],
+  "openings": [],
+  "blocks": [
+    {
+      "id": "fountain",
+      "kind": "fountain",
+      "box": [
+        0.0,
+        0.0,
+        -4.0,
+        3.0,
+        0.6,
+        3.0
+      ],
+      "surfaces": [
+        "fountain_front",
+        "fountain_top"
+      ]
+    }
+  ],
+  "surfaces": [
+    "floor",
+    "wall_back",
+    "fountain_front",
+    "fountain_top"
+  ],
+  "marks": [
+    {
+      "id": "speaker_a",
+      "pose": "stand",
+      "position": [
+        -0.6,
+        0.0,
+        -0.6
+      ],
+      "facing": 0
+    },
+    {
+      "id": "speaker_b",
+      "pose": "stand",
+      "position": [
+        0.6,
+        0.0,
+        0.6
+      ],
+      "facing": 180
+    },
+    {
+      "id": "third",
+      "pose": "stand",
+      "position": [
+        0.0,
+        0.0,
+        -2.0
+      ],
+      "facing": 0
+    },
+    {
+      "id": "fourth",
+      "pose": "stand",
+      "position": [
+        -2.2,
+        0.0,
+        0.9
+      ],
+      "facing": 0
+    },
+    {
+      "id": "entrance",
+      "pose": "stand",
+      "position": [
+        2.5,
+        0.0,
+        -5.5
+      ],
+      "facing": 0
+    }
+  ],
+  "cameras": [
+    {
+      "id": "two_shot",
+      "position": [
+        0.0,
+        1.7,
+        3.4
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.6
+      ],
+      "fov": 65
+    },
+    {
+      "id": "ots_a",
+      "position": [
+        -2.6,
+        1.7,
+        -2.0
+      ],
+      "lookAt": [
+        0.6,
+        1.1,
+        0.6
+      ],
+      "fov": 50
+    },
+    {
+      "id": "ots_b",
+      "position": [
+        2.6,
+        1.7,
+        2.0
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.6
+      ],
+      "fov": 50
+    },
+    {
+      "id": "wide",
+      "position": [
+        0.0,
+        5.75,
+        6.0
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.6
+      ],
+      "fov": 65
+    },
+    {
+      "id": "close_1",
+      "position": [
+        -0.9,
+        1.6,
+        1.3
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.6
+      ],
+      "fov": 50
+    },
+    {
+      "id": "close_2",
+      "position": [
+        0.9,
+        1.6,
+        -1.3
+      ],
+      "lookAt": [
+        0.6,
+        1.1,
+        0.6
+      ],
+      "fov": 50
+    },
+    {
+      "id": "entrance",
+      "position": [
+        -2.5,
+        1.7,
+        1.5
+      ],
+      "lookAt": [
+        2.5,
+        1.1,
+        -5.5
+      ],
+      "fov": 50
+    }
+  ],
+  "lights": "daylight",
+  "propAnchors": [
+    {
+      "id": "floor_left",
+      "on": "floor",
+      "position": [
+        -5.0,
+        0.0,
+        -3.0
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "floor_right",
+      "on": "floor",
+      "position": [
+        5.0,
+        0.0,
+        -3.0
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "fountain_top",
+      "on": "fountain_top",
+      "position": [
+        0.0,
+        0.6,
+        -4.0
+      ],
+      "maxHeight": 1.5
+    },
+    {
+      "id": "floor_far",
+      "on": "floor",
+      "position": [
+        0.0,
+        0.0,
+        -6.0
+      ],
+      "maxHeight": 2
+    }
+  ],
+  "defaultSkin": {
+    "floor": {
+      "color": "#b9ad98"
+    },
+    "wall_back": {
+      "color": "#a9bccb"
+    },
+    "fountain_front": {
+      "color": "#8e8a80"
+    },
+    "fountain_top": {
+      "color": "#8e8a80"
+    }
+  }
+}

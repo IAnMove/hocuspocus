@@ -1,5 +1,6 @@
 import { rememberPrompt } from '../lib/promptHistory'
 import { BASE } from './http'
+import { safeStorageSet } from '../lib/safeStorage'
 
 async function quickVideoBatchResponse(response: Promise<Response>, fallback: string) {
   const resolved = await response
@@ -50,6 +51,8 @@ export interface StoryMusicCandidateRequest {
   lyrics: string
   count: 1 | 2 | 3
   model?: 'music-3.0' | 'music-2.6' | 'music-cover' | 'minimax_music3' | 'ace_step_v1_5_xl_sft_lm_4b'
+  /** The person confirmed the MiniMax API cost in Story Lab; the server refuses paid music without it. */
+  paid_music_confirmed?: true
   reference_audio_filename?: string
   instrumental?: boolean
   workspace?: string
@@ -263,7 +266,7 @@ export async function generateStorySection(params: {
     workspace: params.workspace,
     source: 'generation',
   })
-  window.localStorage.setItem('maestro-last-story-plan-job', accepted.jobId)
+  safeStorageSet('local', 'maestro-last-story-plan-job', accepted.jobId)
   onProgress?.(accepted)
   const cancelRemote = () => {
     void fetch(
@@ -304,7 +307,7 @@ export async function generateStorySection(params: {
       if (status.status === 'completed') {
         const result = status.result?.result
         if (!result) throw new Error('Story Lab job completed without a draft')
-        window.localStorage.setItem('maestro-last-story-plan-result', JSON.stringify({
+        safeStorageSet('local', 'maestro-last-story-plan-result', JSON.stringify({
           jobId: accepted.jobId,
           projectId: params.project.id,
           scope: params.scope,
@@ -602,7 +605,7 @@ export async function resumeStoryGeneration(
     }
     if (status.status === 'completed') {
       if (!status.result?.result) throw new Error('Story Lab job completed without a draft')
-      window.localStorage.setItem('maestro-last-story-plan-result', JSON.stringify({
+      safeStorageSet('local', 'maestro-last-story-plan-result', JSON.stringify({
         jobId,
         result: status.result.result,
       }))

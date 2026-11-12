@@ -1176,12 +1176,10 @@ class LTX2:
                             f"{outpaint_label.title()} IC-LoRA "
                             f"{outpaint_filename} is unavailable."
                         )
-                        if official_outpaint_stack:
-                            raise FileNotFoundError(message)
-                        print(
-                            f"[LTX2] WARNING: {message} "
-                            "Generation will proceed without it."
-                        )
+                        # Both stacks fail: without its IC-LoRA the model
+                        # draws an unrelated picture and the job would still
+                        # end "Done" (HocusPocus patch, final-edit E2).
+                        raise FileNotFoundError(message)
         else:
             for letter, signature in control_map.items():
                 if letter in video_prompt_type:

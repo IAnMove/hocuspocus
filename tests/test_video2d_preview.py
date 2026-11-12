@@ -236,3 +236,30 @@ def test_contact_sheet_bytes_are_stable_for_a_portrait_document(tmp_path):
     }
     assert first["result"]["url"].startswith("/api/v1/file/video2d-contact-")
     SHEET.write_bytes(left)
+
+
+def test_a_still_paints_one_time_at_the_scene_size_and_keeps_a_named_image(monkeypatch, tmp_path):
+    painted = []
+    monkeypatch.setattr("services.video2d_preview.paint_contact_sheet",
+                        lambda document, times, size: painted.append((times, size)) or b"\x89PNG\r\n\x1a\nstill")
+    root = _bind_workspace(tmp_path)
+    try:
+        document = _document(width=1920, height=1080, name="Start frame")
+        command = {"version": 1, "operation": OPERATION, "input": {"document": document, "times": [1.5], "workspace": "show",
+                                                                  "still": True, "output_name": "start-frame"}}
+        first = execute(command)["result"]
+        second = execute(command)["result"]
+        unnamed = execute({**command, "input": {key: value for key, value in command["input"].items() if key != "output_name"}})["result"]
+    finally:
+        bind_preview_workspace(None)
+    assert painted[0] == ([1.5], (1920, 1080, 24)), "a still is not capped at 960"
+    assert first["file"] == "start-frame.png" and second["file"] == "start-frame(2).png" and first["still"] is True
+    assert unnamed["file"] == "Start-frame-still.png"
+    assert (root / "show" / "start-frame.png").read_bytes().endswith(b"still")
+    sidecar = json.loads((root / "show" / "start-frame.meta.json").read_text())
+    assert sidecar["origin"]["tool"] == OPERATION
+    with pytest.raises(PreviewError) as two:
+        execute({**command, "input": {**command["input"], "times": [0, 1]}})
+    assert two.value.code == "preview_bad_times"
+    with pytest.raises(PreviewError):
+        execute({"version": 1, "operation": OPERATION, "input": {"document": document, "times": [0], "output_name": "x"}})

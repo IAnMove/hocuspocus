@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { ChevronDown, ChevronUp, ImagePlus, Loader2, Trash2, Upload } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { button, panel, Field } from './storyLabChrome'
@@ -26,11 +27,11 @@ export function LocationEditor({
       <div className="flex justify-between gap-2">
         <h4 className="text-sm font-semibold text-text-primary">{location.name}</h4>
         <div className="flex items-center gap-1">
-          <button className={button} disabled={index === 0} title={t('location.moveUp')} onClick={() => update(current => {
+          <button className={button} disabled={index === 0} title={t('location.moveUp')} aria-label={t('location.moveUp')} onClick={() => update(current => {
             moveItem(current.world.locations, index, index - 1)
             return current
           })}><ChevronUp size={13} /></button>
-          <button className={button} disabled={index === total - 1} title={t('location.moveDown')} onClick={() => update(current => {
+          <button className={button} disabled={index === total - 1} title={t('location.moveDown')} aria-label={t('location.moveDown')} onClick={() => update(current => {
             moveItem(current.world.locations, index, index + 1)
             return current
           })}><ChevronDown size={13} /></button>
@@ -38,7 +39,7 @@ export function LocationEditor({
             current.world.locations = current.world.locations.filter(item => item.id !== location.id)
             pruneUnusedAssets(current)
             return current
-          })}><Trash2 size={14} /></button>
+          })} title={controlLabel('a11y.removeLocation')} aria-label={controlLabel('a11y.removeLocation')}><Trash2 size={14} /></button>
         </div>
       </div>
       <div className="grid md:grid-cols-2 gap-3">

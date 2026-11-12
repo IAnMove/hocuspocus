@@ -11,42 +11,164 @@ from starlette.concurrency import run_in_threadpool
 
 from services.mcp_intent import IntentConflict, check_intent_id, intent_digest, load_intent, store_intent
 from services.scene_documents import WORKSPACE_RE
+from services.world3d_grades import GRADE_NAMES
+from services.world3d_look import RENDER_LOOKS
+from services.world3d_modifiers import LENS_NAMES, LIGHT_NAMES
+from services.scene3d_comic import comic_transition
+from services.world3d_blank_scene import WARNING_DOC
+from services.world3d_scene_fit import FIT_DOC
+from services.world3d_beats import BEATS_DOC, VERBS as BEAT_VERBS, beat_scene
+from services.world3d_scene_layout import LAYOUT_DOC
+from services.world3d_scene_contacts import CONTACTS_DOC
+from services.world3d_furniture import FURNITURE_DOC
+from services.world3d_rest_fields import PLACING_DOC, SEATED_RECIPE
+from services.world3d_scene_frame import BLANK_DOC, BLANK_ID, CAMERA_DOC, FRAME_DOC, STILL_DOC, blank_scene
+from services.world3d_talk import CUE_DOC
+from services.world3d_world_fx import WORLD_FX_DOC
 from services.world3d_scenes import (
     World3DSceneError, compile_template_document, inspect_scene, instantiate_template, patch_scene, preview_scene,
     publish_scene, put_user_template, talk_scene,
 )
 from services.world3d_template_catalog import (
-    CATALOG_OPERATION, World3DTemplateError, require_card, search_templates, user_template_document,
+    CATALOG_OPERATION, SUGGEST_BEATS, SUGGEST_MAX_LIMIT, World3DTemplateError, page_templates, require_card,
+    search_report, suggest_templates, thumbnail_url, user_template_document,
 )
+from services.world3d_template_compact import compact_report
+from services.world3d_template_plan import OPERATION as PLAN_OPERATION, plan_templates
+from services.world3d_template_plan_input import MAX_AVOID, MAX_SHOTS, MAX_TEXT
+from services.world3d_template_vocabulary import FORMATS, KINDS, MOVES, SHOT_SIZES, USES
 
 _LOCK = threading.RLock()
 _ID = {"type": "string", "minLength": 1, "maxLength": 120}
 _WORKSPACE = {"type": "string", "pattern": WORKSPACE_RE.pattern}
+_RENDER_LOOK = {"enum": ["none", *RENDER_LOOKS], "description": "Whole-frame look. toon: cel shading and ink outlines on 3D model slots (images and cutouts unchanged). n64: low-resolution retro. none: authored materials."}
+_TOON = {"type": "object", "additionalProperties": False, "description": "Settings of renderLook toon, merged into the stored ones.", "properties": {
+    "steps": {"type": "integer", "minimum": 2, "maximum": 4, "description": "Light bands (default 3)"},
+    "outline": {"type": "number", "minimum": 0, "maximum": 8, "description": "Ink width in pixels of a 1080p frame (default 3; 0 = no ink)"},
+    "ink": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "Ink colour (default #141018)"},
+    "shade": {"enum": ["classic", "anime"], "description": "classic: bands of one hue (default). anime: cool-tinted shadow close to the lit colour, no smooth ambient gradient, thin rim of light"}}}
+_MOTION_LAB = {"type": "object", "additionalProperties": False,
+               "description": "Native procedural scene controls. A partial patch merges into the stored settings; omitted fields retain their values.",
+               "properties": {
+                   "bpm": {"type": "number", "minimum": 40, "maximum": 240, "default": 120},
+                   "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647, "default": 7},
+                   "title": {"type": "string", "maxLength": 24, "default": "HOCUS", "description": "Trimmed before storing"},
+                   "color": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "default": "#54ddff"},
+                   "secondaryColor": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "default": "#ffb86b"},
+                   "density": {"type": "integer", "minimum": 200, "maximum": 3000, "default": 900},
+                   "amplitude": {"type": "number", "minimum": 0.1, "maximum": 3, "default": 1},
+                   "speed": {"type": "number", "minimum": 0.1, "maximum": 3, "default": 1},
+                   "sound": {"type": "boolean", "default": True},
+                   "volume": {"type": "number", "minimum": 0, "maximum": 1, "default": 0.35},
+               }}
 _MUTATIONS = {
     "world3d.scene.instantiate", "world3d.scene.patch", "world3d.scene.publish",
     "world3d.scene.apply_query", "world3d.templates.user.put", "world3d.scene.talk",
+    "world3d.scene.face", "scene3d.comic.transition", "world3d.scene.beats", "world3d.scene.fix_placement",
 }
+_ROLES = {"type": "array", "maxItems": 4, "items": {"enum": ["subject_1", "subject_2", "background", "prop"]}}
+_CARD_TRAITS = ("Each card also says what the built shot does: shot (close, medium, wide, far, plate), distance (m), moves (the camera: "
+                "push, pull, slide, rise, descend, arc, orbit, zoom, roll, ride, track, shake), moving (what the template itself animates: "
+                "camera, subjects, props, screens, effects, backdrop, texts), still (true: only the cast's own clip or speech moves the picture), "
+                "subjects, props, screens, authoredFor (model or cutout), floor (none: frame waist-up or against the sky), uses "
+                "(dialogue, talk, reaction, figure, establishing, action, speed, impact, reveal, product, music, drive, transition, title, "
+                "look, plate), kind (scene, stage, camera, look, transition, title), place (a dressing, world or mold id) and travel "
+                "(true: a subject crosses the set). A query is matched word by word in Spanish or English through a shared vocabulary "
+                "(diálogo, plano general, persecución, cocina, triste...). Words no card knows come back as unknown_words and do not "
+                "count. match is full when every known word is in the card; when no card has them all, the best cards with at least "
+                "half of them (one of two) come back as partial and the reply says partial: true. Filters: shot, use, move, kind, place, "
+                "travel, subjects (at least that many subject slots, 0-2), format (landscape, portrait). preview is the URL of our own "
+                "render of the built shot at mid-shot (GET it to see the shot; empty slots show as the editor's placeholders; a 503 "
+                "thumbnail_unavailable is retryable; a 409 examples_not_installed names the example collections to download first) and is null on personal templates; reference is a film still of the real "
+                "technique, for inspiration only, never our render.")
+_FILTERS = {"shot": {"enum": list(SHOT_SIZES)}, "use": {"enum": list(USES)}, "move": {"enum": list(MOVES)},
+            "subjects": {"type": "integer", "minimum": 0, "maximum": 2}, "format": {"enum": list(FORMATS)},
+            "kind": {"enum": list(KINDS)}, "place": {"type": "string", "maxLength": 120}, "travel": {"type": "boolean"}}
+_FILTER_NAMES = tuple(_FILTERS)
+_COMPACT = {"type": "boolean", "description": "true: every card is {id, title, shot, moves, format, why} (a few hundred bytes) instead of the full card. Default false."}
+_PLAN_SHOT = {"type": "object", "additionalProperties": False, "required": ["key"], "properties": {
+    "key": {"type": "string", "minLength": 1, "maxLength": 80, "description": "Your name for the shot (s1, e3s04); the plan answers under it."},
+    "text": {"type": "string", "maxLength": MAX_TEXT, "description": "The shot as a writer phrases it, in Spanish or English. May be empty: the plan then chooses by variety."},
+    "speakers": {"type": "integer", "minimum": 0, "maximum": 4, "description": "Who talks: 0 an establishing shot, 1 a talk shot, 2 or more a dialogue."},
+    "subjects": {"type": "integer", "minimum": 0, "maximum": 2, "description": "Subject slots the cast needs (the card must have that many); defaults to what speakers imply."},
+    "place": {"type": "string", "maxLength": 120, "description": "Where, in plain words (cocina, rooftop). Shots that say the same place keep one family."},
+    "shot": {"enum": list(SHOT_SIZES), "description": "The shot size you would like; a card of that size scores higher."},
+    "moving": {"type": "boolean", "description": "true: prefer a card that moves; false: prefer a fixed one."}}}
+_PLAN = {"shots": {"type": "array", "minItems": 1, "maxItems": MAX_SHOTS, "items": _PLAN_SHOT},
+         "format": {"enum": list(FORMATS)}, "avoid": {"type": "array", "maxItems": MAX_AVOID, "items": _ID, "description": "Template ids never to take."},
+         "per_shot": {"type": "integer", "minimum": 1, "maximum": 3, "description": "Cards per shot: the primary and its alternates (default 3)."},
+         "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647, "description": "Another seed gives another valid plan; the same input and seed give the same one."},
+         "language": {"enum": ["es", "en"], "description": "Language of the titles (default en)."}}
+_SUGGEST = {"line": {"type": "string", "maxLength": 400, "description": "The shot as a writer phrases it: what happens, in Spanish or English."},
+            "speakers": {"type": "integer", "minimum": 0, "maximum": 4, "description": "Who talks: 0 asks an establishing shot, 1 a talk shot, 2 or more a dialogue with that many subject slots."},
+            "place": {"type": "string", "maxLength": 120, "description": "Where, in plain words (cocina, rooftop, bosque)."},
+            "mood": {"type": "string", "maxLength": 120, "description": "The feeling, in plain words (triste, tense, laugh)."},
+            "beat": {"enum": list(SUGGEST_BEATS), "description": "The use the shot serves; wins over the one speakers implies."},
+            "format": {"enum": list(FORMATS)}, "kind": {"enum": list(KINDS)},
+            "limit": {"type": "integer", "minimum": 1, "maximum": SUGGEST_MAX_LIMIT}, "compact": _COMPACT}
+_BEATS = {"type": "array", "minItems": 1, "maxItems": 64, "items": {
+    "type": "object", "additionalProperties": False, "required": ["t", "who", "verb"], "properties": {
+        "t": {"type": "number", "minimum": 0, "description": "Scene seconds, from 0 to the end of the scene"}, "who": _ID, "verb": {"enum": list(BEAT_VERBS)},
+        "at": {"description": "appear: [x, z]. fx: an object id, [x, y, z] metres, or \"collision\""},
+        "to": {"description": "go: [x, z], [x, y, z] or {near: object_id, distance_m?}"}, "via": {"description": "go: [x, z] or [x, y, z] that bends the path"},
+        "duration": {"type": "number", "exclusiveMinimum": 0}, "speed_mps": {"type": "number", "exclusiveMinimum": 0}, "face": {"type": "boolean"},
+        "easing": {"enum": ["linear", "smooth"]}, "headingOffset": {"type": "number"}, "toward": {"description": "face: an object id or [x, z]"},
+        "action": {"type": "string", "maxLength": 120}, "kind": {"type": "string", "maxLength": 40}, "scale": {"type": "number"},
+        "color": {"type": "string"}, "intensity": {"type": "number"}, "sound": {"type": "boolean"}, "volume": {"type": "number"}}}}
 _OPERATIONS = {
-    "world3d.templates.list": (False, "Search Video 3D shots. Returns at most 8 short cards unless limit is set, never the whole library.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}}, []),
-    CATALOG_OPERATION: (False, "Bounded Video 3D template search shared with list. Does not dump every description.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}}, []),
-    "world3d.templates.get": (False, "Return one exact Video 3D template card and its editable document. Unknown ids fail and never fall back to another shot.", {"template_id": _ID}, ["template_id"]),
-    "world3d.templates.user.put": (True, "Register a personal Video 3D template in the workspace. Browser localStorage is left untouched. Ids must start with user-.", {"id": _ID, "title": {"type": "string"}, "description": {"type": "string"}, "document": {"type": "object"}}, ["id", "title", "document"]),
-    "world3d.scene.instantiate": (True, "Create an editable scene from an exact template id.", {"template_id": _ID}, ["template_id"]),
-    "world3d.scene.inspect": (False, "List object ids, markers, traits and the current revision.", {"scene_id": _ID}, ["scene_id"]),
-    "world3d.scene.patch": (True, "Bind resources by object id, or by role only when that role is unique. Requires base_revision.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "bindings": {"type": "array"}, "camera": {"type": "object"}, "playbackSpeed": {"type": "number"}, "duration": {"type": "number"}}, ["scene_id", "base_revision"]),
-    "world3d.scene.talk": (True, "Make an image object talk as a Character Kit cutout: its approved pose, the mouth drawing for each cue (audio.mouth_cues output, Rhubarb A-H/X) and its blink. Each line has start (scene seconds), cues and optionally audio (a workspace or upload URL) that joins the scene soundtrack. Calling it again replaces that object's lines. Requires base_revision.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "object_id": _ID, "role": {"type": "string"}, "kit_id": _ID, "pose": {"type": "string", "maxLength": 120}, "blink": {"type": "boolean"}, "lines": {"type": "array", "maxItems": 24, "items": {"type": "object", "additionalProperties": False, "required": ["start", "cues"], "properties": {"start": {"type": "number", "minimum": 0, "maximum": 600}, "cues": {"type": "array", "maxItems": 10000}, "audio": {"type": ["string", "object"]}, "gain": {"type": "number", "minimum": 0, "maximum": 1}}}}}, ["scene_id", "base_revision", "kit_id", "lines"]),
-    "world3d.scene.preview": (False, "Paint cheap frames of the modified revision at concrete times. The frames are this scene, not the template thumbnail.", {"scene_id": _ID, "times": {"type": "array"}, "expected_revision": {"type": "integer"}}, ["scene_id"]),
-    "world3d.scene.publish": (True, "Save the working scene through the editor gallery so export reads the same document.", {"scene_id": _ID}, ["scene_id"]),
-    "world3d.scene.apply_query": (True, "Search and instantiate only when the top card strictly outranks the next. Otherwise return the cards and create nothing.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}}, ["query"]),
+    "world3d.templates.list": (False, "Search or list Video 3D shots. With a query, limit defaults to 8 and is at most 24. With no query, cards stay in id order and limit defaults to 50, the maximum. offset pages either; the reply includes total. roles keeps templates that have every listed role (for a cast and a painted set: [\"subject_1\", \"background\"]); setting keeps one place (studio, city, sea, stage, space...); category is a category (cinema, action, product, music, space, drive) or a tag (anime, pixel, psx, dark-fantasy, creative, perspective, animated). workspace is required. " + _CARD_TRAITS, {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}, "offset": {"type": "integer", "minimum": 0}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, []),
+    CATALOG_OPERATION: (False, "Bounded Video 3D template search shared with list. Does not dump every description. roles, setting, category and the trait filters (shot, use, move, kind, place, travel, subjects, format) work as in list, and every card carries the same traits and match; the reply lists unknown_words.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, "compact": _COMPACT, **_FILTERS}, []),
+    "world3d.templates.get": (False, "Return one exact Video 3D template card, its editable document and previewUrl, the URL of our own render of the shot at mid-shot (GET it to see the shot; null on personal templates). The card's reference is a film still, for inspiration only. Unknown ids fail and never fall back to another shot.", {"template_id": _ID}, ["template_id"]),
+    "world3d.templates.suggest": (False, "Suggest up to limit (default 3, at most 8) Video 3D cards for a shot described as a writer would: line, speakers, place, mood, beat, format, kind. Each card adds a reason in plain words (subjects, shot, moves, uses, place); the reply carries unknown_words and the filters it derived. Read-only: it never instantiates. Same cards and match rule as list.", _SUGGEST, []),
+    PLAN_OPERATION: (False, "Choose the Video 3D cards of a whole list of shots in ONE call, with variety: call it once for all the shots, then world3d.templates.suggest only to replace one. shots: [{key, text, speakers?, subjects?, place?, shot?, moving?}] (speakers as in suggest; subjects the subject slots the cast needs; shot the size you want; moving true asks a card that moves). Every shot is ranked with the catalog search, then the list is chosen in order: no template twice in a row, none more than twice (four when its place comes up again), shot sizes and camera moves alternating, avoid ids never taken, a still card only when nothing else fits. A place word (cocina and kitchen are one place) weighs more than the free words of a long line, and shots that name the same place keep one family: a stage-<mold> card with another roomCamera each time, or one scene and the cards played in its world. format portrait takes portrait cards (people talking get the vertical-dialogue-* and vertical-talk-* cards, drawn for 9:16) and, when too few fit, landscape cards marked adapted (width 1080 and height 1920 in their scene3d, the export reframes the camera); without format the plan is for the production's 16:9 frame and takes landscape cards. per_shot (1-3, default 3) is the primary and its alternates; seed gives another valid plan, the same input and seed the same one. Each entry is {id, title, shot, moves, format, why, scene3d}: scene3d holds the keys to copy into a production scene3d shot (a Series kind 3d shot reads template and roomCamera). The reply is {plan: [{key, primary, alternates, warnings}], summary: {templates_used, repeats, formats}}. Shipped cards only (a personal template is not one the production compiler reads). Read-only: it never instantiates.", _PLAN, ["shots"]),
+    "world3d.templates.user.put": (True, "Register a personal Video 3D template in the workspace. Browser localStorage is left untouched. Ids must start with user-. " + WARNING_DOC, {"id": _ID, "title": {"type": "string"}, "description": {"type": "string"}, "document": {"type": "object"}}, ["id", "title", "document"]),
+    "world3d.scene.instantiate": (True, "Create an editable scene from an exact template id. " + BLANK_DOC, {"template_id": _ID, "width": {"type": "integer"}, "height": {"type": "integer"}, "duration": {"type": "number"}}, ["template_id"]),
+    "world3d.scene.inspect": (False, "List object ids, markers, traits and the current revision. " + LAYOUT_DOC + " " + CONTACTS_DOC + " " + WARNING_DOC, {"scene_id": _ID}, ["scene_id"]),
+    "world3d.scene.patch": (True, "Bind resources by object id, or by role only when that role is unique. Requires base_revision. The reply is the inspect view of the new revision (camera, layout.items with boundsM), so check where things landed. " + SEATED_RECIPE + " " + WARNING_DOC, {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "bindings": {"type": "array", "description": "{object_id or role, source_url, media, clip {index, name}, clipPlayback {speed, start, loop}, position, rotationX (radians, optional), rotationY (radians), rotationZ (radians, optional; omitted leaves the stored tilt), scale, height, furniture, beside, rest, motion, collide, clips, hold, appearance}. motion: {to [x, y, z], via?, points?, faceTravel?, headingOffset?, turnTo?, easing? linear|smooth, start?, end?}; start and end are scene seconds (default 0 and the end of the scene): before start the object sits at its position, between them it moves, after end it stays at to (so a plane that flies from 1 s to 3 s is {to, start: 1, end: 3}); a window cannot be combined with a baked walk. collide: false exempts the object from the collision warnings (a ghost, a spirit). add: true creates a new prop object (model3d or image cutout) with that id when the template has none. scale: a model is drawn 1.7 m x scale tall (its bounding-box height, whatever its length). " + FIT_DOC + " clips: a clip sequence that drives the model instead of clip, [{clip {index, name}, start (scene s), duration?, fade? (0.3), speed? 0.1-4, offset?, loop?}]. hold: carried in another model object's whole hand, {carrier (object id), hand left|right, offset? [x,y,z] m in the hand bone's frame, rotation? [x,y,z] radians, Euler XYZ in that frame after the bone's rotation (replaces rotationY)}. appearance: hidden until start, then materializes, {start, duration? 0.9, color? #rrggbb}. directional (an image cutout): a 2D figure that shows the sheet facing the camera and walks, {sheets [{motion walk|idle, dir front|front34|side|back34|back (side looks right; the left is its mirror), source, columns, rows, count, cell {width, height}, fps?, loop?}], heading? (degrees against the camera at the start: 0 toward it, 90 screen right, 180 away, or toward|right|away|left), walk? {to [x, z] m, speed m/s, start s}, speech? [[start, end] s]: it stands and shows a sheet that has a mouth (mouth/eyes {offsetX, offsetY, scale} on the sheet), else its pose, while it speaks, lightTint? 0-1 (0.6: the share of the key light's colour and strength it takes; 0 is off); side_r, front34_r and back34_r are a kit's own left-looking sheets, which beat the mirror}. null removes clips, hold, appearance or directional. " + FURNITURE_DOC + " " + PLACING_DOC}, "camera": {"type": "object", "description": CAMERA_DOC}, "width": {"type": "integer", "description": FRAME_DOC}, "height": {"type": "integer", "description": FRAME_DOC}, "fps": {"enum": [24, 30, 60]}, "playbackSpeed": {"type": "number"}, "motionStep": {"enum": [0, 2, 3, 4], "description": "Stop-motion: the picture holds 2, 3 or 4 frames; 0 removes it."}, "stopMotionJitter": {"type": "number", "minimum": 0, "maximum": 2, "description": "Shake of each stop-motion hold in pixels; 0 removes it."}, "duration": {"type": "number"}, "retime": {"type": "boolean", "description": "With duration: stretch the template's effects, texts, appearances and clip cues to the new length."}, "soundtrack": {"type": "array", "maxItems": 32, "description": "The scene's own sound (ids scene-*: ambience, stinger, music): {id, audio (workspace or upload URL), start, gain}. Talk tracks stay."}, "renderLook": _RENDER_LOOK, "toon": _TOON, "screenFx": {"type": "array", "maxItems": 32, "description": "Screen effects over the frame (ids shot-*; kinds from scene_effects.json: speed lines, manga impact, flashes...): {id, kind, start, end, x, y, size, intensity, color, rotation, sound, volume, from}; from {x, y} (% of the frame) starts a laser or lightning there and runs it to x/y. Replaces earlier shot-* effects; the template's own stay."}, "worldFx": {"type": "array", "maxItems": 64, "description": WORLD_FX_DOC}, "voiceOver": {"type": "array", "maxItems": 24, "description": "Speech with no talking object (a narrator, a radio voice): [{audio (workspace or upload URL), start, gain}]. It ducks the music like a talking cutout and replaces earlier voice-over."}, "light": {"anyOf": [{"enum": list(LIGHT_NAMES)}, {"type": "object"}], "description": "A named light (" + ", ".join(LIGHT_NAMES) + ") that replaces the sun and sets the ambient share, or a light object {kind: directional, direction [x, y, z], intensity 0-10, color #rrggbb}."}, "grade": {"enum": list(GRADE_NAMES), "description": "A colour grade: the document look (tone mapping, exposure), a gel over the lamp and screen effects with ids grade-*. A later grade replaces them; the template's and the shot's effects stay."}, "lens": {"enum": list(LENS_NAMES), "description": "A full-frame lens: the camera fov, and a framing's fovFrom/fovTo scaled by the same ratio."}, "camera_template": {**_ID, "description": "A kind: camera card id (cine-dolly-in, cine-low-angle...) whose camera and framing replace this scene's; the scene keeps its duration, cast and place. Another kind fails with invalid_camera_template."}}, ["scene_id", "base_revision"]),
+    "world3d.scene.talk": (True, "Make an image object talk as a Character Kit cutout: its approved pose, the mouth drawing for each cue (audio.mouth_cues output, Rhubarb A-H/X) and its blink. " + CUE_DOC + " Each line has start (scene seconds), cues and optionally audio (a workspace or upload URL) that joins the scene soundtrack. Calling it again replaces that object's lines. A model that already has a 2D face (world3d.scene.face) takes the same cues, blink and soundtrack and stays a model; a model without that face is refused. Requires base_revision.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "object_id": _ID, "role": {"type": "string"}, "kit_id": _ID, "pose": {"type": "string", "maxLength": 120}, "blink": {"type": "boolean"}, "lines": {"type": "array", "maxItems": 24, "items": {"type": "object", "additionalProperties": False, "required": ["start", "cues"], "properties": {"start": {"type": "number", "minimum": 0, "maximum": 600}, "cues": {"type": "array", "maxItems": 10000}, "audio": {"type": ["string", "object"]}, "gain": {"type": "number", "minimum": 0, "maximum": 1}}}}}, ["scene_id", "base_revision", "kit_id", "lines"]),
+    "world3d.scene.face": (True, "Paint a 2D Character Kit face on a model slot: a cap on the Head bone, slightly outside the head. The kit needs nine approved mouths. The painted face reads from the front, within about 40 degrees either side: two people face to face seen from the side show little of it, so frame them from a three-quarter camera (or give each speaker a shot). Place it with center and radii (metres), or face_anchor {center, size as a diameter or radii}, or the model's extras.faceAnchor, or the Head bone's own vertices. pose is the expression at the start (neutral when the kit has it). span [horizontal, vertical] degrees of head the face covers (default 80 x 80; anime kits default to 96 x 116). shape plane hangs the kit as a flat picture on the Head bone instead of the cap (a painted head with its hair; it does not turn with the camera), sized by plane [width, height, lift] in head radii (default 3.3 x 3.3, lift -0.5); shape mesh paints the picture into the model\'s own face material (a lofted anime head), lit with the body, with skin (#rrggbb) under the drawing; an anime_head kit defaults to mesh. taper (0-0.6) narrows the cap toward the chin like the lofted egg head (0.35); fit [cu, cv, ru, rv] (fractions of the picture: the drawn skull's centre and half-size) projects a whole painted head from the front over 200 x 180 degrees, rows under the chin transparent. expressions [{start, pose}] change it during the shot. Then world3d.scene.talk uses the same mouth cues, blink and soundtrack. Requires base_revision.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "object_id": _ID, "role": {"type": "string"}, "kit_id": _ID, "pose": {"type": "string", "maxLength": 120}, "bone": {"type": "string", "maxLength": 80}, "center": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number"}}, "radii": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number"}}, "size": {"type": "number", "minimum": 1, "maximum": 1.2}, "span": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number", "minimum": 60, "maximum": 150}}, "shape": {"enum": ["cap", "plane", "mesh"]}, "skin": {"type": "string", "maxLength": 7}, "plane": {"type": "array", "minItems": 2, "maxItems": 3, "items": {"type": "number", "minimum": -3, "maximum": 8}}, "taper": {"type": "number", "minimum": 0, "maximum": 0.6}, "fit": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "number", "minimum": 0, "maximum": 1}}, "face_anchor": {"type": "object"}, "source_url": {"type": "string"}, "expressions": {"type": "array", "maxItems": 32, "items": {"type": "object", "additionalProperties": False, "required": ["pose"], "properties": {"start": {"type": "number", "minimum": 0}, "pose": {"type": "string", "maxLength": 120}}}}}, ["scene_id", "base_revision", "kit_id"]),
+    "world3d.scene.fix_placement": (True, "Move every object the placement check names to the position that fixes it (sunk into a support, hanging off its edge, outside the room, below the floor, floating), in one revision. The reply is the inspect view of the new revision plus fixed: [{object_id, position}]; objects the check does not name stay where they are, and a scene with nothing to fix is returned unchanged with fixed: []. Cropped and tiny are about the camera, not the position, so they are never moved. Read layout.placement first; pass only: [object ids] to fix some.", {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "only": {"type": "array", "maxItems": 32, "items": _ID, "description": "Object ids to fix; omitted fixes every object with a position fix."}}, ["scene_id", "base_revision"]),
+    "world3d.scene.beats": (True, BEATS_DOC, {"scene_id": _ID, "base_revision": {"type": "integer", "minimum": 1}, "beats": _BEATS}, ["scene_id", "base_revision", "beats"]),
+    "world3d.scene.preview": (False, "Paint cheap frames of the modified revision at concrete times: flat boxes at 160 x 90 that show where things are and what the camera frames, not how they look (no clips, faces or seats). The frames are this scene, not the template thumbnail. " + STILL_DOC, {"scene_id": _ID, "times": {"type": "array"}, "expected_revision": {"type": "integer"}, "still": {"type": "boolean"}}, ["scene_id"]),
+    "world3d.scene.publish": (True, "Save the working scene through the editor gallery so export reads the same document. name (optional) names the saved scene <name>-<scene id>; the template's title otherwise. Export it with scenes.world3d.export (its document) and poll scenes.world3d.export.receipt {intent_id} until the task is completed. " + WARNING_DOC, {"scene_id": _ID, "name": {"type": "string", "maxLength": 80}}, ["scene_id"]),
+    "world3d.scene.apply_query": (True, "Search and instantiate only when the top card has every known query word and strictly outranks the next. A tie or a partial match returns the cards as needs_choice and creates nothing; unknown_words lists the query words no card knows; the trait filters (shot, use, move, kind, place, travel, subjects, format) narrow the search first.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, ["query"]),
     "world3d.receipt": (False, "Recover a stored Video 3D mutation after a lost response. Reuse the original intent_id.", {"operation": {"enum": sorted(_MUTATIONS)}, "intent_id": {"type": "string"}}, ["operation", "intent_id"]),
+    "scene3d.comic.transition": (True, "Chapter change on a comic page, for pieces told like a story (a tale, a comic-style piece, a narrative music video); not for documentaries, news or explainers. Builds comic-panel-exit and comic-panel-enter (or the portrait pair) as two editable Video 3D scenes that share one wide pose, so they join invisibly. panels is three to six images or {video, at} frames; from_panel and to_panel are indexes of those panels and must be the frames of the cut. seed (default 0) picks the page layout. The cells and one gutter width tile the paper inside the padding. The two cut panels keep the frame's aspect; the other panels are cover-cropped. format is landscape or portrait. Each panel image is cut out with the existing background remover and placed 10.8 cm in front, scaled by (D - d) / D about the fill camera so that frame still matches. The matte is a sticker (cut at half, holes filled, specks dropped, a thin halo of the original background). The picture behind that sticker is filled in, and a subject that meets the panel edge fades over the outer 3 percent. A failed, empty, mostly uncertain or tiny cutout leaves that panel flat and adds a warning. The camera yaws 8 degrees between the fill and the wide pose and holds the wide pose (hold, default 0.4 s) on each half. exit_duration and enter_duration default to 1.8 s. export true renders both clips when the Video 3D exporter is available. paper (default true) prints the page: newsprint with hand-inked borders on a desk, every panel with a printed twin (ink lines, halftone, paper fibre, one lamp), stickers with a white die-cut edge and a shadow. The leaving cut panel fades into print as the camera pulls away and the entering one fades back, so both cuts still match. live_enter (default true): when the entering panel is a {video, at} frame, or with mode replace, it plays its own frames up to the cut, so it is already moving before the camera arrives. paper false keeps the plain generated page. A montage name or a version 1 montage document, plus between, takes those frames from the montage instead: an integer in range is the boundary after that clip, and any other number is seconds (a one-clip song at 60 is a time). The other panels come from neighbouring frames. Both halves are rendered and a new montage revision is saved; the previous bytes stay as stem.rN.montage.json. mode insert adds the clips. mode replace keeps the duration so a song stays in sync. With no soundtrack, the exited clip's audio becomes the soundtrack and every clip is muted.", {
+        "format": {"enum": ["landscape", "portrait"]},
+        "panels": {"type": "array", "minItems": 3, "maxItems": 6, "items": {"anyOf": [
+            {"type": "string"},
+            {"type": "object", "additionalProperties": False, "properties": {
+                "image": {"type": "string"}, "video": {"type": "string"},
+                "at": {"type": "number", "minimum": 0}, "cutout": {"type": "string"},
+            }},
+        ]}},
+        "from_panel": {"type": "integer", "minimum": 0, "maximum": 5},
+        "to_panel": {"type": "integer", "minimum": 0, "maximum": 5},
+        "seed": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "exit_duration": {"type": "number", "minimum": 0.8, "maximum": 8},
+        "enter_duration": {"type": "number", "minimum": 0.8, "maximum": 8},
+        "hold": {"type": "number", "minimum": 0, "maximum": 2},
+        "export": {"type": "boolean"},
+        "paper": {"type": "boolean"},
+        "live_enter": {"type": "boolean"},
+        "montage": {"anyOf": [
+            {"type": "string", "description": "A saved <name>.montage.json in the workspace"},
+            {"type": "object", "description": "A version 1 montage document. It is saved only after the clips render."},
+        ]},
+        "between": {"type": "number", "description": "Clip index (the boundary after that clip) or a time in seconds. 60.0 is a time; 60 is an index only when that index exists."},
+        "mode": {"enum": ["insert", "replace"], "description": "insert adds the clips. replace keeps the montage duration."},
+    }, []),
 }
 
 
 def command_catalog():
     result = []
     for name, (mutation, description, properties, required) in _OPERATIONS.items():
+        fields = {"workspace": _WORKSPACE, **properties}
+        if name == "world3d.scene.patch":
+            fields["motionLab"] = _MOTION_LAB
         envelope = {"version": {"type": "integer", "const": 1}, "input": {"type": "object", "additionalProperties": False,
-                    "properties": {"workspace": _WORKSPACE, **properties}, "required": ["workspace", *required]}}
+                    "properties": fields, "required": ["workspace", *required]}}
         keys = ["version", "input"]
         if mutation:
             envelope["intent_id"] = {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$"}
@@ -81,60 +203,143 @@ def command_handlers(workspace_dir):
 
 
 def _effect(name, data, workspace_dir):
-    if name in {"world3d.templates.list", CATALOG_OPERATION}:
+    if name == "world3d.templates.list":
+        return _list_page(data, workspace_dir)
+    if name == CATALOG_OPERATION:
         return _search(data, workspace_dir)
     if name == "world3d.templates.get":
         return _get(data, workspace_dir)
+    if name == "world3d.templates.suggest":
+        return _suggest(data, workspace_dir)
+    if name == PLAN_OPERATION:
+        return {"status": "completed", **plan_templates(data)}
     if name == "world3d.scene.inspect":
         return {"status": "completed", "scene": inspect_scene(data["workspace"], data["scene_id"], workspace_dir)}
     if name == "world3d.scene.preview":
         return _preview(data, workspace_dir)
+    return _effect_scene(name, data, workspace_dir)
+
+
+def _effect_scene(name, data, workspace_dir):
+    """The scene writes (instantiate, patch, talk, face, beats, publish). Split from ``_effect`` so neither chain is one long branch."""
     if name == "world3d.scene.instantiate":
+        if data["template_id"] == BLANK_ID:
+            from services.world3d_scenes import store_working_scene
+            return {"status": "completed", "scene": store_working_scene(data["workspace"], blank_scene(data), workspace_dir, template_id=BLANK_ID)}
         return {"status": "completed", "scene": instantiate_template(data["workspace"], data["template_id"], workspace_dir)}
     if name == "world3d.scene.patch":
         return {"status": "completed", "scene": patch_scene(data["workspace"], data["scene_id"], workspace_dir, data, data["base_revision"])}
+    if name == "world3d.scene.fix_placement":
+        return _fix_placement(data, workspace_dir)
     if name == "world3d.scene.talk":
         return {"status": "completed", "scene": talk_scene(data["workspace"], data["scene_id"], workspace_dir, data, data["base_revision"])}
+    if name == "world3d.scene.face":
+        from services.world3d_scenes import face_scene
+        return {"status": "completed", "scene": face_scene(data["workspace"], data["scene_id"], workspace_dir, data, data["base_revision"])}
+    if name == "world3d.scene.beats":
+        return {"status": "completed", "scene": beat_scene(data["workspace"], data["scene_id"], workspace_dir, data, data["base_revision"])}
     if name == "world3d.scene.publish":
-        return {"status": "completed", "scene": publish_scene(data["workspace"], data["scene_id"], workspace_dir)}
+        return {"status": "completed", "scene": publish_scene(data["workspace"], data["scene_id"], workspace_dir, data.get("name"))}
     if name == "world3d.scene.apply_query":
         return _apply_query(data, workspace_dir)
+    return _stored_effect(name, data, workspace_dir)
+
+
+def _fix_placement(data, workspace_dir):
+    """The placement check's own fixes written as one patch: the same operation for MCP, the Wizard and the editor's Open dialog."""
+    from services.world3d_scene_placement import placement_fixes
+    scene = inspect_scene(data["workspace"], data["scene_id"], workspace_dir)
+    layout = scene.get("layout") or {}
+    fixes = placement_fixes(layout.get("placement") or [], layout.get("items") or [], data.get("only"))
+    if not fixes:
+        return {"status": "completed", "scene": scene, "fixed": []}
+    bindings = [{"object_id": object_id, "position": position} for object_id, position in fixes.items()]
+    patched = patch_scene(data["workspace"], data["scene_id"], workspace_dir, {"bindings": bindings}, data["base_revision"])
+    return {"status": "completed", "scene": patched, "fixed": [{"object_id": object_id, "position": position} for object_id, position in fixes.items()]}
+
+
+def _stored_effect(name, data, workspace_dir):
     if name == "world3d.templates.user.put":
         stored = put_user_template(data["workspace"], workspace_dir, data)
         return {"status": "completed", "template": stored}
+    if name == "scene3d.comic.transition":
+        return comic_transition(data, workspace_dir)
     raise World3DSceneError("unknown_operation", f"unknown_operation:{name}")
 
 
+def _filters(data):
+    return {name: data.get(name) for name in _FILTER_NAMES if data.get(name) is not None}
+
+
+def _search_report(data, workspace_dir):
+    return search_report(str(data.get("query") or ""), category=data.get("category") or None, language=data.get("language") or None,
+                         limit=data.get("limit"), workspace_dir=workspace_dir, workspace=data["workspace"],
+                         roles=data.get("roles"), setting=data.get("setting"), **_filters(data))
+
+
+def _compact(data, report):
+    """``compact: true`` shortens every card of a reply (see ``world3d_template_compact``)."""
+    flag = data.get("compact")
+    if flag is not None and not isinstance(flag, bool):
+        raise World3DTemplateError("invalid_compact", "compact must be true or false")
+    return compact_report(report, data.get("language")) if flag else report
+
+
 def _search(data, workspace_dir):
-    cards = search_templates(str(data.get("query") or ""), category=data.get("category") or None, language=data.get("language") or None,
-                             limit=data.get("limit"), workspace_dir=workspace_dir, workspace=data["workspace"])
-    return {"status": "completed", "templates": cards}
+    return {"status": "completed", **_compact(data, _search_report(data, workspace_dir))}
+
+
+def _suggest(data, workspace_dir):
+    found = suggest_templates(line=str(data.get("line") or ""), speakers=data.get("speakers"), place=str(data.get("place") or ""),
+                              mood=str(data.get("mood") or ""), beat=data.get("beat"), format=data.get("format"),
+                              kind=data.get("kind"), limit=data.get("limit"), workspace_dir=workspace_dir,
+                              workspace=data["workspace"])
+    return {"status": "completed", **_compact(data, found)}
+
+
+def _list_page(data, workspace_dir):
+    page = page_templates(str(data.get("query") or ""), category=data.get("category") or None, language=data.get("language") or None,
+                          limit=data.get("limit"), offset=data.get("offset", 0), workspace_dir=workspace_dir,
+                          workspace=data["workspace"], roles=data.get("roles"), setting=data.get("setting"), **_filters(data))
+    return {"status": "completed", **page}
 
 
 def _get(data, workspace_dir):
     template_id = data.get("template_id")
     card = require_card(template_id, workspace_dir=workspace_dir, workspace=data["workspace"])
     document = user_template_document(template_id, workspace_dir, data["workspace"]) if card.get("source") == "workspace" else compile_template_document(template_id)
-    return {"status": "completed", "card": card, "document": document, "objects": [
+    from services.cc0_props import bind_document
+    bind_document(document, Path(workspace_dir(data["workspace"])), data["workspace"])
+    preview = thumbnail_url(card)
+    # A copy: require_card returns the cached catalogue card itself.
+    return {"status": "completed", "card": {**card, "preview": preview}, "previewUrl": preview, "document": document, "objects": [
         {"id": slot.get("id"), "role": slot.get("slot"), "media": slot.get("media"), "sourceUrl": slot.get("sourceUrl") or "",
          "marker": not slot.get("sourceUrl")} for slot in document.get("slots") or [] if isinstance(slot, dict)]}
 
 
 def _preview(data, workspace_dir):
+    if data.get("still"):
+        from services.world3d_scene_still import still_view
+        return {"status": "completed", **still_view(data["workspace"], data["scene_id"], workspace_dir, data.get("times"),
+                                                    data.get("expected_revision"))}
     rendered = preview_scene(data["workspace"], data["scene_id"], workspace_dir, times=data.get("times"),
                              expected_revision=data.get("expected_revision"))
     return {"status": "completed", **rendered}
 
 
 def _apply_query(data, workspace_dir):
-    hits = search_templates(str(data.get("query") or ""), category=data.get("category") or None, language=data.get("language") or None,
-                            limit=data.get("limit"), workspace_dir=workspace_dir, workspace=data["workspace"])
+    report = _search_report(data, workspace_dir)
+    hits, unknown = report["templates"], report["unknown_words"]
+    semantic = bool(report.get("semantic"))
     if not hits:
-        return {"status": "not_found", "candidates": [], "chosenId": None, "scene": None}
-    if len(hits) > 1 and hits[0]["score"] == hits[1]["score"]:
-        return {"status": "needs_choice", "candidates": hits, "chosenId": None, "scene": None}
+        return {"status": "not_found", "candidates": [], "chosenId": None, "scene": None,
+                "unknown_words": unknown, "semantic": semantic}
+    if hits[0]["match"] != "full" or (len(hits) > 1 and hits[0]["score"] == hits[1]["score"]):
+        return {"status": "needs_choice", "candidates": hits, "chosenId": None, "scene": None,
+                "unknown_words": unknown, "semantic": semantic}
     scene = instantiate_template(data["workspace"], hits[0]["id"], workspace_dir)
-    return {"status": "completed", "candidates": hits, "chosenId": hits[0]["id"], "scene": scene}
+    return {"status": "completed", "candidates": hits, "chosenId": hits[0]["id"], "scene": scene,
+            "unknown_words": unknown, "semantic": semantic}
 
 
 def _input(arguments):

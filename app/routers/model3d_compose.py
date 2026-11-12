@@ -10,7 +10,18 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from routers.model3d_blob import (
+    command_catalog as blob_command_catalog,
+    command_handlers as blob_command_handlers,
+    create_model3d_blob_router,
+)
+from routers.model3d_real import (
+    command_catalog as real_command_catalog,
+    command_handlers as real_command_handlers,
+    create_model3d_real_router,
+)
 from routers.wangp_mcp import RequestJournal
+from services.agent_activity import trusted_tool as agent_trusted_tool
 from services.asset_manifest import publish_generation_sidecar
 from services.mcp_intent import check_intent_id, intent_digest
 from services.procedural_3d.compose import KINDS, MAX_PIECES, compose_glb
@@ -23,11 +34,25 @@ def command_catalog():
     piece = {"type": "object", "additionalProperties": False, "required": ["type"], "properties": {
         "type": {"enum": list(KINDS)}, "position": transform, "scale": transform, "rotation": transform,
         "color": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"},
+        "segments": {"type": "integer", "minimum": 6, "maximum": 48,
+                     "description": "Radial segments. Omit it for the original 8 (a sphere keeps 6 rings). "
+                                    "A sphere then uses segments//2 rings."},
+        "smooth": {"type": "boolean",
+                   "description": "Radial normals on spheres, cylinders, cones, capsules and frustums. "
+                                  "Flat caps stay axial. Omit it, or false, for the original flat normals."},
+        "taper": {"type": "number", "minimum": 0.2, "maximum": 1,
+                  "description": "Frustum only. Top diameter divided by the bottom diameter, from 0.2 to 1."},
     }}
     return [{"name": OPERATION, "version": 1, "domain": "model3d", "mutation": True,
-             "description": "Build a low-poly GLB from 1..128 box/sphere/cylinder/cone pieces on CPU. "
+             "description": "Build a low-poly GLB from 1..128 box/sphere/cylinder/cone/capsule/frustum pieces on CPU. "
                             "Metres, Y-up, Euler radians, positive scales, #RRGGBB colors. "
-                            "Flat triangle normals and linear vertex colors; no AI or GPU. Returns file and workspace URL.",
+                            "Optional segments (integer 6..48). Omit segments and the mesh is byte-identical "
+                            "to the 8-segment, 6-ring sphere. "
+                            "smooth true (on a piece or on the input) uses radial normals and keeps flat caps axial. "
+                            "Without smooth, normals stay flat and old pieces stay byte-identical. "
+                            "A capsule's scale is diameter, length (caps included), diameter. "
+                            "A frustum adds taper (top/bottom, 0.2 to 1). "
+                            "No AI or GPU. Returns file and workspace URL.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],
                              "properties": {"version": {"const": 1, "type": "integer"},
                                             "intent_id": {"type": "string", "minLength": 1, "maxLength": 160},
@@ -35,7 +60,9 @@ def command_catalog():
                                                       "required": ["workspace", "name", "pieces"], "properties": {
                                                           "workspace": {"type": "string", "minLength": 1, "maxLength": 120},
                                                           "name": {"type": "string", "minLength": 1, "maxLength": 64},
-                                                          "pieces": {"type": "array", "items": piece, "minItems": 1, "maxItems": MAX_PIECES}}}}}}]
+                                                          "smooth": {"type": "boolean"},
+                                                          "pieces": {"type": "array", "items": piece, "minItems": 1, "maxItems": MAX_PIECES}}}}}},
+            *blob_command_catalog(), *real_command_catalog()]
 
 
 def _input(arguments):
@@ -44,8 +71,10 @@ def _input(arguments):
     if set(arguments) - {"version", "intent_id", "input"}:
         raise ValueError("Unknown envelope field")
     payload = arguments.get("input")
-    if not isinstance(payload, dict) or set(payload) != {"workspace", "name", "pieces"}:
+    if not isinstance(payload, dict) or set(payload) - {"workspace", "name", "pieces", "smooth"} or {"workspace", "name", "pieces"} - set(payload):
         raise ValueError("input needs workspace, name and pieces")
+    if "smooth" in payload and type(payload["smooth"]) is not bool:
+        raise ValueError("smooth must be true or false")
     for field, limit in (("workspace", 120), ("name", 64)):
         value = payload[field]
         if not isinstance(value, str) or not value.strip() or len(value) > limit:
@@ -53,12 +82,13 @@ def _input(arguments):
     return payload, check_intent_id(arguments.get("intent_id"))
 
 
-def command_handlers(workspace_dir, journal_path):
+def command_handlers(workspace_dir, journal_path, local_mcp=None):
+    """``local_mcp`` returns the server's LocalMcp: the realistic character job paints its pictures through it."""
     journal = RequestJournal(journal_path)
 
     def compose(arguments):
         payload, intent = _input(arguments)
-        data = compose_glb(payload["pieces"], payload["name"])
+        data = compose_glb(payload["pieces"], payload["name"], smooth=payload.get("smooth", False))
         folder = Path(workspace_dir(payload["workspace"]))
         digest = intent_digest(payload)
         identity = hashlib.sha256(f"{OPERATION}:{payload['workspace']}:{intent}".encode()).hexdigest()
@@ -77,7 +107,7 @@ def command_handlers(workspace_dir, journal_path):
             temporary.unlink(missing_ok=True)
         publish_generation_sidecar(target, {"generation_mode": "model3d", "model_type": "procedural-compose",
                                             "command_id": intent, "params": payload},
-                                   output_folder=payload["workspace"], tool="model3d", actor="user", capability=OPERATION)
+                                   output_folder=payload["workspace"], tool=agent_trusted_tool() or "model3d", actor="user", capability=OPERATION)
         result = {"version": 1, "operation": OPERATION, "status": "completed", "result": {
             "file": filename, "name": payload["name"], "workspace": payload["workspace"],
             "url": f"/api/v1/file/{filename}?{urlencode({'workspace': payload['workspace']})}",
@@ -89,7 +119,7 @@ def command_handlers(workspace_dir, journal_path):
     async def handle(arguments):
         return await run_in_threadpool(compose, arguments)
 
-    return {OPERATION: handle}
+    return {OPERATION: handle, **blob_command_handlers(workspace_dir, journal), **real_command_handlers(workspace_dir, local_mcp)}
 
 
 def create_model3d_compose_router(handlers):
@@ -102,4 +132,6 @@ def create_model3d_compose_router(handlers):
         except ValueError as error:
             raise HTTPException(422, {"code": "invalid_command", "message": str(error), "retryable": False}) from error
 
+    router.include_router(create_model3d_blob_router(handlers))
+    router.include_router(create_model3d_real_router(handlers))
     return router

@@ -438,14 +438,85 @@ test('Studio duration setter keeps TTS auto sentinel at zero', async () => {
 test('composed slices bind without as-never casts at the useStore call site', async () => {
   const fs = await import('node:fs/promises')
   const source = await fs.readFile(new URL('../src/stores/useStore.ts', import.meta.url), 'utf8')
-  const composition = source.split('export const useStore')[1].split('generationMode:')[0]
+  const composition = source.split('export const useStore')[1].split('setDeveloperMode:')[0]
   assert.match(composition, /bindSlice\(set, get, createSettingsSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createThemeSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createGallerySlice\)/)
   assert.match(composition, /bindSlice\(set, get, createLlmSlice\)/)
   assert.match(composition, /bindSlice\(set, get, createStudioConfigurationSlice/)
   assert.match(composition, /bindSlice\(set, get, createStudioMusicSlice/)
+  assert.match(composition, /bindSlice\(set, get, createSystemSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createPresetsSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createActivitySlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createCivitaiSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createToolsSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createRecipesSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createServicesSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createLorasSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createModelOptionsSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createModelsSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createDirectorDashboardSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createShortFilmSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createDirectorPipelineSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createStudioEditSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createDirectorMusicSourceSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createDirectorMusicVideoSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createOutputRestoreSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createStudioFormSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createJobsSlice\)/)
+  assert.match(composition, /bindSlice\(set, get, createGenerationSlice\)/)
   assert.doesNotMatch(composition, /as never/)
+})
+
+test('Music Video Director Generate leaves Studio on video so Edit cannot swallow the request', async () => {
+  const { createDirectorMusicVideoSlice } = await import('../src/features/director/store/directorMusicVideoSlice.ts')
+  const originalSetTimeout = globalThis.setTimeout
+  globalThis.setTimeout = () => 0
+  let state = {
+    generationMode: 'avatar',
+    directorClipPlans: [{ video_prompt: 'a dancer in the chorus', image_prompt: '' }],
+    directorPlannedClips: [{ duration_frames: 80, section_label: 'chorus' }],
+    directorAnalysis: { duration: 12 },
+    directorClipImages: [],
+    directorAudioPath: 'song.wav',
+    directorAudioName: 'song.wav',
+    directorSeamless: false,
+    directorResolution: '720p',
+    directorAspectRatio: '16:9',
+    selectedModelPerMode: { video: 'ltx2_22B_distilled_1_1' },
+    savedParamsPerMode: {},
+    savedLoraPerMode: {},
+    directorMusicVideoTreatment: { generation_mode: 'image_guided' },
+    directorVideoInferenceStepsByModel: {},
+    modelOptions: { fps: 16, model_type: 'retake-model' },
+    shortFilmPath: '',
+    directorVideoSelfRefiner: 0,
+    directorVideoSpatialUpsampling: '',
+    directorVideoFilmGrainIntensity: 0,
+    directorVideoFilmGrainSaturation: 0.5,
+    params: { model_type: 'retake-model', image_mode: 0 },
+    clips: [],
+    startGeneration: () => {},
+  }
+  const set = update => {
+    const partial = typeof update === 'function' ? update(state) : update
+    state = { ...state, ...partial }
+  }
+  try {
+    state = { ...state, ...createDirectorMusicVideoSlice(set, () => state) }
+    state.directorGenerate()
+    assert.equal(state.generationMode, 'video')
+    assert.equal(state.params.image_mode, 2)
+    assert.equal(state.clips.length, 1)
+    assert.equal(state.clips[0].prompt, 'a dancer in the chorus')
+
+    state.generationMode = 'audio'
+    state.directorApplyToClips()
+    assert.equal(state.generationMode, 'video')
+    assert.equal(state.sidebarMode, 'studio')
+  } finally {
+    globalThis.setTimeout = originalSetTimeout
+  }
 })
 
 test('Studio music slice owns song-writer state without owning startGeneration', async () => {
@@ -472,4 +543,56 @@ test('useStore keeps Director actions available through its existing public faca
   assert.equal(useStore.getState().directorSeamless, false)
   useStore.getState().setDirectorVideoInferenceSteps('characterization-model', 7.4)
   assert.equal(useStore.getState().directorVideoInferenceStepsByModel['characterization-model'], 7)
+})
+
+test('Director reconnect binds a live pipeline only when the editor did not Reset', async () => {
+  const { shouldAutoBindDirectorPipeline } = await import('../src/features/director/store/directorPipelineSlice.ts')
+  assert.equal(shouldAutoBindDirectorPipeline(null, false), true)
+  assert.equal(shouldAutoBindDirectorPipeline('old-run', false), false)
+  assert.equal(shouldAutoBindDirectorPipeline(null, true), false)
+  assert.equal(shouldAutoBindDirectorPipeline('old-run', true), false)
+
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.setState({
+    pipelineId: 'old-run',
+    pipelineStatus: { id: 'old-run' },
+    pipelinePolling: true,
+    directorEditorDetached: false,
+    directorStep: 'review',
+    directorClipPlans: [{ video_prompt: 'old shot', image_prompt: 'old still' }],
+  })
+  useStore.getState().directorReset()
+  const afterReset = useStore.getState()
+  assert.equal(afterReset.pipelineId, null)
+  assert.equal(afterReset.pipelinePolling, false)
+  assert.equal(afterReset.directorEditorDetached, true)
+  assert.equal(afterReset.directorClipPlans.length, 0)
+  assert.equal(
+    shouldAutoBindDirectorPipeline(afterReset.pipelineId, afterReset.directorEditorDetached),
+    false,
+    'boot reconnect must not re-attach the leftover run after Start over or a Story Lab handoff',
+  )
+})
+
+test('the boot reconnect timer leaves a Director editor alone after Reset, with a live job running', async () => {
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const realFetch = globalThis.fetch
+  let activeJobs = [{ id: 'live-run', status: 'running', pipeline_type: 'music_video', created_at: 0, updated_at: 0 }]
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ pipelines: activeJobs }) })
+  try {
+    useStore.setState({ pipelineId: 'old-run', pipelinePolling: true, directorEditorDetached: false })
+    useStore.getState().directorReset()
+    await useStore.getState().reconnectDirectorPipelines()
+    const afterReconnect = useStore.getState()
+    assert.deepEqual(afterReconnect.activeDirectorPipelines.map(job => job.id), ['live-run'], 'the footer still lists the live job')
+    assert.equal(afterReconnect.pipelineId, null, 'the cleared editor must not be bound to it')
+    assert.equal(afterReconnect.pipelinePolling, false)
+  } finally {
+    // Stop any poller a failed run started, then let an empty answer clear the
+    // 2 s re-arm timer, so the test process can exit.
+    useStore.setState({ pipelinePolling: false, pipelineId: null })
+    activeJobs = []
+    await useStore.getState().reconnectDirectorPipelines()
+    globalThis.fetch = realFetch
+  }
 })

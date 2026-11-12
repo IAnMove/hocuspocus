@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ParseKeys } from 'i18next'
 import { Box, Camera, Loader2, PersonStanding } from 'lucide-react'
@@ -9,6 +10,8 @@ import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import { useStore } from '../../stores/useStore'
 import { queueFaceRigHandoff } from '../../lib/characterKitHandoff'
 import { safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
+import { isGenerationJobInterrupted } from '../../lib/generationJobState'
+import { isHttpStatus } from '../../api/http'
 import {
   attachCharacterCreatorMeshForWorkspace,
   characterCreatorHistoryKey,
@@ -18,11 +21,14 @@ import {
 } from './characterCreatorHistory'
 import { useUiTranslation } from '../../i18n'
 import { CharacterSpeechWorkshopEntry } from './CharacterSpeechWorkshopEntry'
+import { CharacterAnimationsEntry } from './CharacterAnimationsEntry'
 import { CharacterFacePackMaker } from './CharacterFacePackMaker'
 import { CharacterImageCreator } from './CharacterImageCreator'
 import { Character3DLibraryEntry } from './Character3DLibraryEntry'
 import { useCharacterEditorHandoff } from './characterEditorHandoff'
 import { CharacterEditorSession } from './CharacterEditorSession'
+import { FaceRigOpenButton } from './FaceRigOpenButton'
+import { faceRigHasSubject } from './faceRigSubject'
 import {
   buildCharacterOrbitPrompt,
   CHARACTER_ORBIT_VIEWS,
@@ -82,13 +88,14 @@ export function CharacterCreatorPanel() {
   const workspace = useStore(state => state.activeWorkspace)
   const request = useCharacterEditorHandoff(state => state.request)
   if (request?.workspace === workspace) return <div className="h-full overflow-y-auto rounded-xl border border-border bg-bg-primary">
-    <CharacterEditorSession key={`${workspace}/${request.kit.id}`} request={request} />
+    <CharacterEditorSession key={`${workspace}/${request.kit.id}/${request.poseId ?? ''}`} request={request} />
   </div>
   return <CharacterCreatorWorkshop />
 }
 
 function CharacterCreatorWorkshop() {
   const { t } = useUiTranslation('characters')
+  const { t: tCommon } = useUiTranslation('common')
   const models = useStore(s => s.models)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const llmProvider = useStore(s => s.productionProfile.text.provider)
@@ -102,6 +109,8 @@ function CharacterCreatorWorkshop() {
   const [busy, setBusy] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const [jobMessage, setJobMessage] = useState('')
+  // An orbit job a server restart left in the recovery queue; resume or discard restores control.
+  const [interruptedJobId, setInterruptedJobId] = useState<string | null>(null)
   const [videoName, setVideoName] = useState<string | null>(null)
   const [views, setViews] = useState<CapturedView[]>([])
   const [videoDuration, setVideoDuration] = useState(CHARACTER_SHEET_FRAMES / 24)
@@ -271,7 +280,7 @@ function CharacterCreatorWorkshop() {
           hunyuan: view.hunyuan,
           label: kind === 'object' ? view.objectLabel : view.label,
           filename: shot.filename,
-          url: shot.url || getFileUrl(shot.filename, workspace),
+          url: getFileUrl(shot.filename, workspace),
           time,
         })
       }
@@ -305,6 +314,10 @@ function CharacterCreatorWorkshop() {
   const openFaceRigFromCreator = async () => {
     if (kind !== 'character') {
       setError(t('creator.errors.faceRigKitsOnly'))
+      return
+    }
+    if (!faceRigHasSubject(views, refs, selectedViewId)) {
+      setError(t('creator.errors.needViewOrUpload'))
       return
     }
     setBusy(true)
@@ -344,7 +357,7 @@ function CharacterCreatorWorkshop() {
         workspace: activeWorkspace,
       })
       setViews(current => current.map(view => view.id === selected.id
-        ? { ...view, filename: shot.filename, url: shot.url || getFileUrl(shot.filename, activeWorkspace), time }
+        ? { ...view, filename: shot.filename, url: getFileUrl(shot.filename, activeWorkspace), time }
         : view,
       ))
       void loadOutputs()
@@ -418,11 +431,18 @@ function CharacterCreatorWorkshop() {
         if (stillOnOrigin) setError(status.error || t(status.status === 'cancelled' ? 'creator.errors.orbitCancelled' : 'creator.errors.orbitFailed'))
         setBusy(false)
         setJobId(null)
+        return
+      }
+      if (isGenerationJobInterrupted(status.status)) {
+        if (stillOnOrigin) setJobMessage(t('creator.status.orbitInterrupted'))
+        setInterruptedJobId(jobId)
+        setBusy(false)
+        setJobId(null)
       }
     },
     onError: reason => {
       orbitFailuresRef.current += 1
-      const lost = (reason as Error & { status?: number }).status === 404
+      const lost = isHttpStatus(reason, 404)
       if (!lost && orbitFailuresRef.current < 4) return
       setError(reason instanceof Error ? reason.message : String(reason))
       setBusy(false)
@@ -456,6 +476,29 @@ function CharacterCreatorWorkshop() {
       })
       setHunyuanJobId(job.job_id)
       setHunyuanMessage(job.message || t('creator.status.hunyuanQueued'))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+      setBusy(false)
+    }
+  }
+
+  const recoverOrbit = async (action: 'resume' | 'discard') => {
+    const recovered = interruptedJobId
+    if (!recovered) return
+    setBusy(true)
+    setError(null)
+    try {
+      if (action === 'resume') {
+        await api.resumeGenerationQueue()
+        setInterruptedJobId(null)
+        setJobMessage(t('creator.status.orbitQueued'))
+        setJobId(recovered)
+        return
+      }
+      await api.discardGenerationQueue()
+      setInterruptedJobId(null)
+      setJobMessage('')
+      setBusy(false)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
       setBusy(false)
@@ -496,7 +539,7 @@ function CharacterCreatorWorkshop() {
     },
     onError: reason => {
       hunyuanFailuresRef.current += 1
-      const lost = (reason as Error & { status?: number }).status === 404
+      const lost = isHttpStatus(reason, 404)
       if (!lost && hunyuanFailuresRef.current < 4) return
       setError(reason instanceof Error ? reason.message : String(reason))
       setHunyuanJobId(null)
@@ -514,14 +557,11 @@ function CharacterCreatorWorkshop() {
           {t('creator.subtitle')}
         </p>
         {kind === 'character' && (
-          <button
-            type="button"
-            className={`${button} mt-2`}
-            disabled={busy}
+          <FaceRigOpenButton
+            hasSubject={faceRigHasSubject(views, refs, selectedViewId)}
+            busy={busy}
             onClick={() => void openFaceRigFromCreator()}
-          >
-            {t('creator.openFaceRig')}
-          </button>
+          />
         )}
         {history.length > 0 && (
           <div className="mt-2 space-y-1">
@@ -531,7 +571,7 @@ function CharacterCreatorWorkshop() {
                 <button
                   key={entry.id}
                   type="button"
-                  disabled={busy}
+                  disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
                   onClick={() => {
                     setKind(entry.kind)
                     setVideoName(entry.videoName)
@@ -554,7 +594,7 @@ function CharacterCreatorWorkshop() {
         )}
       </header>
       <div className="flex-1 overflow-y-auto p-3 md:p-4">
-        <CharacterImageCreator key={activeWorkspace} workspace={activeWorkspace} disabled={busy} onUseReference={async (asset, description, signal) => {
+        <CharacterImageCreator key={activeWorkspace} workspace={activeWorkspace} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onUseReference={async (asset, description, signal) => {
           const workspace = activeWorkspace
           const response = await fetch(asset.source, { signal })
           if (!response.ok) throw new Error(t('creator.errors.needViewOrUpload'))
@@ -565,6 +605,7 @@ function CharacterCreatorWorkshop() {
           setKind('character'); setAPrompt(description); setShowAPrompt(true)
           setRefs(current => [{ id: newId(), role: 'subject', preview: asset.source, path: uploaded.path, filename: uploaded.filename, url: uploaded.url }, ...current.filter(ref => ref.role !== 'subject').slice(0, MAX_REFS - 1)])
         }} />
+        <CharacterAnimationsEntry workspace={activeWorkspace} />
         <CharacterFacePackMaker />
         <CharacterSpeechWorkshopEntry workspace={activeWorkspace} />
         <Character3DLibraryEntry workspace={activeWorkspace} />
@@ -614,7 +655,7 @@ function CharacterCreatorWorkshop() {
                 {showAPrompt ? t('creator.hideAPrompt') : t('creator.optionalAPrompt')}
               </button>
               {showAPrompt && (
-                <textarea
+                <textarea aria-label={t('creator.aPromptPlaceholder')}
                   value={aPrompt}
                   onChange={event => setAPrompt(event.target.value)}
                   rows={5}
@@ -644,6 +685,10 @@ function CharacterCreatorWorkshop() {
               {t('creator.hunyuanGenerate')}
             </button>
             {jobMessage && <p className="text-[11px] text-text-secondary">{jobMessage}</p>}
+            {interruptedJobId && <div className="flex gap-2">
+              <button type="button" className={button + ' flex-1'} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void recoverOrbit('resume')}>{tCommon('actions.resume')}</button>
+              <button type="button" className={button + ' flex-1'} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void recoverOrbit('discard')}>{tCommon('actions.discard')}</button>
+            </div>}
             {hunyuanMessage && <p className="text-[11px] text-text-secondary">{hunyuanMessage}</p>}
             {error && <p className="text-[11px] text-red-300">{error}</p>}
           </div>
@@ -682,7 +727,7 @@ function CharacterCreatorWorkshop() {
                   className="mt-3 w-full accent-violet-400"
                   aria-label={t('creator.captureTimeAria')}
                 />
-                <button type="button" className={button + ' mt-2 w-full'} disabled={busy} onClick={() => void replaceSelectedView()}>
+                <button type="button" className={button + ' mt-2 w-full'} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void replaceSelectedView()}>
                   <Camera size={13} /> {t('creator.replaceView')}
                 </button>
               </div>
@@ -761,6 +806,7 @@ function RefPicker({
       <p className="mb-2 text-[10px] text-text-muted">{hint}</p>
       {!roleLocked && value && onRole && (
         <select
+          aria-label={t('creator.referenceRole')}
           value={value.role}
           onChange={event => onRole(event.target.value as OrbitRefRole)}
           className="mb-2 w-full rounded-md border border-border bg-bg-primary px-2 py-1 text-[11px] text-text-primary"

@@ -45,6 +45,25 @@ def test_public_image_commands_preserve_each_qwen_native_edit_method(handler, mo
     assert method in [item[1] for item in caps["image_edit_modes"]["choices"]]
 
 
+@pytest.mark.parametrize("conditioning", ["mask", "outpaint"])
+def test_an_edit_that_leaves_model_mode_out_runs_the_models_default_method(handler, conditioning):
+    """Sol 2026-10-15: omitting ``model_mode`` was refused with "choose an inpainting method" although the schema advertises default 0."""
+    definition = handler.query_model_def("qwen_image_21", {})
+    original = base_params(model_type="qwen_image_21", image_mode=1, image_guide="/api/v1/uploads/source.png",
+                           image_mask="/api/v1/uploads/mask.png" if conditioning == "mask" else None,
+                           video_guide_outpainting="0 10 0 0" if conditioning == "outpaint" else "",
+                           video_prompt_type="VAG" if conditioning == "mask" else "V")
+    assert "model_mode" not in original
+    resources = FakeResources(media_result=(deepcopy(original), []))
+    (native, _), _ = invoke(original, definition=definition, resources=resources)
+    assert native["model_mode"] == definition["model_modes"]["default"] == 0
+    # A method the model does not offer is still refused, and so is an explicit null for a model with no default.
+    with pytest.raises(Exception, match="inpainting method"):
+        invoke({**original, "model_mode": 7}, definition=definition, resources=FakeResources(media_result=(deepcopy({**original, "model_mode": 7}), [])))
+    with pytest.raises(ValueError, match="inpainting method"):
+        validate_image_edit(original, {**definition, "model_modes": {**definition["model_modes"], "default": None}})
+
+
 @pytest.mark.parametrize("model", ["qwen_image_21", "qwen_image_edit_plus_20B", "qwen_image_edit_plus2_20B"])
 def test_edit_and_reference_conditioning_survive_together(handler, model):
     definition = handler.query_model_def(model, {})

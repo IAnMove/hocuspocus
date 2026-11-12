@@ -20,6 +20,7 @@ import requests
 from . import resource_scheduler
 from .asset_manifest import publish_generation_sidecar
 from .generation_output_name import chosen_image_filename
+from .output_names import reserve
 
 
 MODEL_ID = "minimax:image-01"
@@ -158,11 +159,13 @@ def generate_image(
         raise MiniMaxImageError("MiniMax image is too large", 413)
 
     os.makedirs(output_dir, exist_ok=True)
-    name = chosen_image_filename(output_name, filename_prefix=filename_prefix)
+    chosen = chosen_image_filename(output_name, filename_prefix=filename_prefix)
+    name, taken = reserve(output_dir, chosen)
     path = os.path.join(output_dir, name)
-    with open(path + ".tmp", "wb") as handle:
+    temporary = f"{path}.{os.getpid()}.tmp"
+    with open(temporary, "wb") as handle:
         handle.write(image_bytes)
-    os.replace(path + ".tmp", path)
+    os.replace(temporary, path)
 
     publish_generation_sidecar(
         path,
@@ -186,4 +189,6 @@ def generate_image(
         "prompt": clean_prompt,
         "aspect_ratio": aspect_ratio,
         "subject_reference": bool(subject_reference),
+        "requested_name": chosen,
+        "output_name_taken": taken,
     }

@@ -1,3 +1,4 @@
+import math
 import subprocess
 import tempfile, os
 import ffmpeg
@@ -358,6 +359,24 @@ def get_audio_file_channels(audio_path):
 
 
 
+def _picture_bound_seconds(video_path):
+    """Seconds just after the last picture frame of ``video_path`` ends, or None when it cannot be read.
+
+    HocusPocus patch (final-edit, wgp's final mux). It bounds an audio track that was padded so it never ends before
+    the copied picture. Rounded UP to the next millisecond: audio that ends even a fraction of one before the last
+    frame ends makes ``-shortest`` drop that frame (81 frames at 16 fps last 5.0625 s, and "5.062" cost the last one).
+    """
+    try:
+        probe = ffmpeg.probe(os.fspath(video_path))
+        stream = next(item for item in probe.get("streams", []) if item.get("codec_type") == "video")
+        seconds = float(stream.get("duration") or probe["format"]["duration"])
+    except Exception:
+        return None
+    if not seconds > 0:
+        return None
+    return (math.floor(round(seconds * 1000, 6)) + 1) / 1000
+
+
 def combine_and_concatenate_video_with_audio_tracks(
     save_path_tmp, video_path,
     source_audio_tracks, new_audio_tracks,
@@ -430,7 +449,7 @@ def combine_and_concatenate_video_with_audio_tracks(
                 filters.append(
                     f'[{idx}:a]aresample={audio_sampling_rate},aformat=channel_layouts={channel_layout},'
                     f'atrim=start={start},asetpts=PTS-STARTPTS[n{i}]')
-                filters.append(f'[s{i}][n{i}]concat=n=2:v=0:a=1[aout{i}]')
+                filters.append(f'[s{i}][n{i}]concat=n=2:v=0:a=1,apad=pad_dur=100[aout{i}]')
                 idx += 1
             else:
                 filters.append(f'[s{i}]apad=pad_dur=100[aout{i}]')
@@ -447,6 +466,10 @@ def combine_and_concatenate_video_with_audio_tracks(
            '-shortest', save_path_tmp]
     if audio_bitrate:
         cmd[-6:-6] = ['-b:a', audio_bitrate]
+    # Every audio track is padded above, so ``-shortest`` only bounds a longer track to the picture; ``-t`` fixes that
+    # bound at the end of the picture (ffmpeg 7+ lets an endless pad run on for up to 10 s of ``-shortest`` buffer).
+    if (picture_end := _picture_bound_seconds(video_path)) is not None:
+        cmd[-1:-1] = ['-t', f'{picture_end:.3f}']
 
     if verbose:
         print(f"ffmpeg command: {cmd}")

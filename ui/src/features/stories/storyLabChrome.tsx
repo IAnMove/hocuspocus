@@ -47,8 +47,8 @@ export function Field({
     <label className={`block text-[10px] ${required ? 'text-violet-200' : 'text-text-muted'}`}>
       {label}{required && <span className="ml-1 text-violet-300" title={t('chrome.required')}>●</span>}
       {rows > 1
-        ? <textarea className={`${input} ${requiredClass} mt-1`} rows={rows} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} required={required} aria-required={required} />
-        : <input className={`${input} ${requiredClass} mt-1`} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} required={required} aria-required={required} />}
+        ? <textarea aria-label={label} className={`${input} ${requiredClass} mt-1`} rows={rows} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} required={required} aria-required={required} />
+        : <input aria-label={label} className={`${input} ${requiredClass} mt-1`} value={value} onChange={event => onChange(event.target.value)} placeholder={placeholder} required={required} aria-required={required} />}
     </label>
   )
 }
@@ -75,7 +75,7 @@ export function SectionHeader({
       </div>
       <div className="lg:max-w-[680px]">
         <div className="flex flex-col sm:flex-row gap-2">
-          <input className={`${input} sm:w-72`} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder={t('chrome.regeneratePlaceholder')} />
+          <input aria-label={t('chrome.regeneratePlaceholder')} className={`${input} sm:w-72`} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder={t('chrome.regeneratePlaceholder')} />
           <button className={button} disabled={Boolean(busy)} onClick={() => onGenerate(scope)}
             title={t('chrome.generateTextTitle')}>
             {busy === scope ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {t('chrome.generateText')}

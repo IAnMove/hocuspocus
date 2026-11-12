@@ -38,6 +38,7 @@
     },
     {
       "id": "title-card",
+      "covers": true,
       "labelKey": "templates.title-card",
       "formats": [
         "16:9",
@@ -123,6 +124,7 @@
     },
     {
       "id": "trailer-slam",
+      "covers": true,
       "labelKey": "templates.trailer-slam",
       "formats": [
         "16:9",

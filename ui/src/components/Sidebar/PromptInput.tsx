@@ -1,3 +1,4 @@
+import { controlChoice } from '../../i18n/controlLabel'
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { Sparkles, Loader2, ChevronDown, ChevronUp, Brain, PenLine, RefreshCw, History, Save, Trash2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -15,12 +16,14 @@ function H3WindowPromptTextarea({
   onChange,
   readOnly,
   title,
+  label,
   active,
 }: {
   value: string
   onChange: (value: string) => void
   readOnly: boolean
   title: string
+  label: string
   active: boolean
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -43,6 +46,7 @@ function H3WindowPromptTextarea({
   return (
     <textarea
       ref={textareaRef}
+      aria-label={label}
       rows={1}
       value={value}
       onChange={event => onChange(event.target.value)}
@@ -400,7 +404,7 @@ export function PromptInput() {
               type="button"
               onClick={() => enhancePrompt()}
               disabled={isEnhancing}
-              title={t('prompt.rebuildWindows')}
+              title={t('prompt.rebuildWindows')} aria-label={t('prompt.rebuildWindows')}
               className="p-1 text-text-muted hover:text-accent-blue disabled:opacity-50"
             >
               <RefreshCw size={11} className={isEnhancing ? 'animate-spin' : ''} />
@@ -423,6 +427,7 @@ export function PromptInput() {
                     <span>{window.start_seconds.toFixed(1)}–{window.end_seconds.toFixed(1)}s</span>
                   </div>
                   <H3WindowPromptTextarea
+                    label={t('prompt.windowTitle', { index: window.index, title: window.title || t('prompt.beat', { index: window.index }) })}
                     value={window.prompt}
                     onChange={value => updateH3WindowPrompt(index, value)}
                     readOnly={!!matchingActiveH3Phase}
@@ -443,7 +448,7 @@ export function PromptInput() {
             ? 'border-accent-blue/40 bg-accent-blue/10'
             : 'border-border bg-bg-tertiary/60 hover:border-border-light'
         }`}>
-          <input
+          <input aria-label={t('prompt.scheduler')}
             type="checkbox"
             checked={promptSchedulerEnabled}
             onChange={event => setPromptSchedulerEnabled(event.target.checked)}
@@ -461,6 +466,7 @@ export function PromptInput() {
         </label>
       )}
       <textarea
+        aria-label={t('prompt.field')}
         value={prompt}
         onChange={e => setParam('prompt', e.target.value)}
         placeholder={schedulerApplies
@@ -490,6 +496,8 @@ export function PromptInput() {
                 disabled={isEnhancing}
                 title={isMultiVoice
                   ? t('prompt.writeSpeechTitleMulti', { count: voiceCount })
+                  : t('prompt.writeSpeechTitleSingle')} aria-label={isMultiVoice
+                  ? t('prompt.writeSpeechTitleMulti', { count: voiceCount })
                   : t('prompt.writeSpeechTitleSingle')}
                 className="p-1.5 rounded-l-md text-text-muted hover:text-accent-blue hover:bg-bg-hover transition-colors disabled:opacity-50"
               >
@@ -499,7 +507,7 @@ export function PromptInput() {
                 onClick={() => setTtsMenuOpen(!ttsMenuOpen)}
                 disabled={isEnhancing}
                 className="p-1.5 rounded-r-md text-text-muted hover:text-accent-blue hover:bg-bg-hover transition-colors disabled:opacity-50 border-l border-border"
-              >
+               title={controlChoice(isEnhancing, 'disabled.waitForVoice', 'a11y.voiceOptions')} aria-label={controlChoice(isEnhancing, 'disabled.waitForVoice', 'a11y.voiceOptions')}>
                 <ChevronUp size={10} />
               </button>
             </div>
@@ -544,7 +552,7 @@ export function PromptInput() {
           <button
             onClick={() => enhancePrompt()}
             disabled={isEnhancing}
-            title={t('prompt.enhance')}
+            title={t('prompt.enhance')} aria-label={t('prompt.enhance')}
             className="absolute right-2 bottom-2 p-1.5 rounded-md text-text-muted hover:text-accent-blue hover:bg-bg-hover transition-colors disabled:opacity-50"
           >
             {isEnhancing ? (

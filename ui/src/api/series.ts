@@ -1,14 +1,31 @@
 import type { SeriesAssemblyActionRequest, SeriesAssemblyDiscardResponse, SeriesAssemblyJob, SeriesAssemblyRecoveryResponse, SeriesAssemblyStartRequest } from '../features/series/assemblyContract'
 import { BASE } from './http'
 
+/** A refused Series request: the route's message, plus its HTTP status, code and detail (blockers, waiting shots...). */
+export class SeriesRequestError extends Error {
+  readonly status: number
+  readonly code?: string
+  readonly detail?: unknown
+
+  constructor(message: string, status: number, code?: string, detail?: unknown) {
+    super(message)
+    this.name = 'SeriesRequestError'
+    this.status = status
+    this.code = code
+    this.detail = detail
+  }
+}
+
 async function seriesResponse<T>(responsePromise: Response | Promise<Response>, fallback: string): Promise<T> {
   const response = await responsePromise
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: fallback }))
-    const detailMessage = typeof error.detail === 'object' && error.detail
-      ? error.detail.message
-      : error.detail
-    throw new Error(detailMessage || error.error || fallback)
+    const detail = error.detail
+    const detailMessage = typeof detail === 'object' && detail
+      ? detail.message
+      : detail
+    const code = typeof detail === 'object' && detail && typeof detail.code === 'string' ? detail.code : undefined
+    throw new SeriesRequestError(detailMessage || error.error || fallback, response.status, code, detail)
   }
   return response.json() as Promise<T>
 }
@@ -43,10 +60,11 @@ export async function fetchSeriesProject(
 export async function createSeriesProject(
   workspace: string,
   title = 'Untitled series',
+  language?: string,
 ): Promise<import('../features/series/types').SeriesProject> {
   return seriesResponse(fetch(`${BASE}/api/v1/series`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace, title }),
+    body: JSON.stringify({ workspace, title, ...(language ? { language } : {}) }),
   }), 'Could not create Series Lab project')
 }
 
@@ -382,23 +400,29 @@ export async function approveSeriesAttempt(
   ), 'Could not approve Series shot attempt')
 }
 
+/** Headers of a take decision: the Wizard declares itself, so the take records ``approvedBy: wizard``. */
+function reviewHeaders(by?: 'wizard'): Record<string, string> {
+  return { 'Content-Type': 'application/json', ...(by === 'wizard' ? { 'X-Hocus-UI-Surface': 'wizard' } : {}) }
+}
+
 export async function approveSeriesAttemptsBulk(
   workspace: string,
   seriesId: string,
   episodeId: string,
   selections: Array<{ shotId: string; attemptId: string }>,
+  by?: 'wizard',
 ): Promise<{ seriesId: string; episodeId: string; revision: number; episode: import('../features/series/types').SeriesEpisode }> {
   return seriesResponse(fetch(
     `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/attempts/approve-bulk`,
     {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: reviewHeaders(by),
       body: JSON.stringify({ workspace, selections }),
     },
   ), 'Could not approve Series shot attempts')
 }
 
 export async function startSeriesEpisodeAssembly(
-  workspace: string, seriesId: string, episodeId: string, options: { language?: string; burnSubtitles?: boolean } = {},
+  workspace: string, seriesId: string, episodeId: string, options: { language?: string; burnSubtitles?: boolean; force?: boolean } = {},
 ): Promise<SeriesAssemblyJob> {
   const payload: SeriesAssemblyStartRequest = { workspace, ...options }
   return seriesResponse(fetch(
@@ -455,12 +479,12 @@ export async function fetchSeriesAssemblyRecovery(workspace: string): Promise<Se
 }
 
 export async function rejectSeriesAttempt(
-  workspace: string, seriesId: string, episodeId: string, shotId: string, attemptId: string,
+  workspace: string, seriesId: string, episodeId: string, shotId: string, attemptId: string, by?: 'wizard',
 ): Promise<import('../features/series/types').SeriesShot> {
   return seriesResponse(fetch(
     `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/shots/${encodeURIComponent(shotId)}/attempts/${encodeURIComponent(attemptId)}/reject`,
     {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace }),
+      method: 'POST', headers: reviewHeaders(by), body: JSON.stringify({ workspace }),
     },
   ), 'Could not reject Series shot attempt')
 }
@@ -482,21 +506,51 @@ export async function commitSeriesCanon(
 }
 
 export type SeriesServerRenderItem = {
-  shotId: string; stage: 'voices' | 'scene' | 'export' | 'import' | 'done'; status: 'queued' | 'running' | 'done' | 'failed'
+  shotId: string; stage: 'voices' | 'scene' | 'export' | 'foley' | 'import' | 'done'; status: 'queued' | 'running' | 'done' | 'failed'
   error?: string | null; attemptId?: string; approved?: boolean
+  /** In a staged production: a preview to review, the final take, or an approved preview promoted to the final. */
+  pass?: 'preview' | 'final' | 'promote'
+  /** Why the shot's foley was left out of its take (the take was still made). */
+  warning?: string | null
+  foley?: { prompt: string; volume: number; file: string; source: string; gain?: number; reused?: boolean }
 }
 export type SeriesServerRenderJob = {
   jobId: string; seriesId: string; episodeId: string; current: number; total: number; message?: string; activeShotId?: string | null
-  status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled'; items: SeriesServerRenderItem[]; createdAt?: number
+  status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'interrupted'; items: SeriesServerRenderItem[]; createdAt?: number
   language?: string
+  /** False for a language version's render. */
+  original?: boolean
+  mode?: import('../features/series/types').SeriesProductionMode
+  /** Shots the staged production left for an approval (not failed). */
+  waiting?: Array<{ shotId: string; reason: 'plan' | 'preview' }>
 }
 
 /** Voices, scene, headless export and take for every 2D shot of an episode, on the server. */
+/** `changed` renders only the shots that need it: out of date, and let through by the episode's staged review. */
 export async function startSeriesServerRender(workspace: string, seriesId: string, episodeId: string, approve: boolean,
-  language?: string): Promise<SeriesServerRenderJob> {
+  language?: string, shotIds?: string[], changed = false): Promise<SeriesServerRenderJob> {
   return seriesResponse(fetch(`${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/native-render`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, approve, ...(language ? { language } : {}) }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, approve, ...(language ? { language } : {}), ...(shotIds?.length ? { shotIds } : {}),
+      ...(changed ? { changed } : {}) }),
   }), 'Could not start the server render')
+}
+
+function reviewPath(seriesId: string, episodeId: string) {
+  return `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/episodes/${encodeURIComponent(episodeId)}/review`
+}
+
+/** The episode's staged review: mode, counts, steps and every shot's statuses and notes. */
+export async function fetchSeriesEpisodeReview(workspace: string, seriesId: string, episodeId: string): Promise<Record<string, unknown>> {
+  return seriesResponse(fetch(`${reviewPath(seriesId, episodeId)}?workspace=${encodeURIComponent(workspace)}`), 'Could not read the episode review')
+}
+
+/** Set the production mode and/or shot approvals and notes; the server validates and owns the stored review. */
+export async function saveSeriesEpisodeReview(workspace: string, seriesId: string, episodeId: string,
+  change: import('../features/series/types').SeriesReviewChange): Promise<import('../features/series/types').SeriesReviewReply> {
+  return seriesResponse(fetch(reviewPath(seriesId, episodeId), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace, ...change }),
+  }), 'Could not save the review')
 }
 
 export async function fetchSeriesServerRender(workspace: string, jobId: string): Promise<SeriesServerRenderJob> {
@@ -565,6 +619,40 @@ export async function startSeriesLocationPlate(workspace: string, seriesId: stri
 /** Follow the export; once ready the server imports it and makes it the location plate. */
 export async function fetchSeriesLocationPlate(workspace: string, seriesId: string, locationId: string): Promise<SeriesLocationPlate> {
   return seriesResponse(fetch(`${platePath(seriesId, locationId)}?workspace=${encodeURIComponent(workspace)}`), 'Could not read the 3D background')
+}
+
+/** A location plate's perspective (``location.layout2d.stage``, services/series_stage.py): fractions of the plate height from the top. */
+export type SeriesStage = { horizon: number; ref: { baseY: number; heightPct: number; heightM: number }; floorTop?: number }
+/** `eyeHeightM`: the camera height the numbers imply (about 1.6 is right); `warning` says to re-read them when it is outside 1 to 2.4 m. */
+export type SeriesStageSetReply = { locationId: string; stage: SeriesStage | null; affectedShots: string[]; revision?: number; eyeHeightM?: number; warning?: string }
+export type SeriesStageCheckReply = {
+  locationId: string; plate: { file: string; width: number; height: number }
+  grid: { file: string; url: string; step: number; width: number; height: number }
+  stage: SeriesStage | null; proposal?: SeriesStage; eyeHeightM?: number; warning?: string
+  suggestion: { suggestion: { horizon: number; kind: string; confidence: 'low' | 'medium' | 'high' } | null; note: string }
+  how: string
+}
+
+function stagePath(seriesId: string, locationId: string, tail = '') {
+  return `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/locations/${encodeURIComponent(locationId)}/stage${tail}`
+}
+
+/** Save (or `clear`) a location's stage: 2D wide and two-shots there are then sized by it. The same route as `series.location.stage.set`. */
+export async function setSeriesLocationStage(workspace: string, seriesId: string, locationId: string,
+  stage: SeriesStage | null): Promise<SeriesStageSetReply> {
+  const body = stage ? { workspace, horizon: stage.horizon, ref: stage.ref, ...(stage.floorTop !== undefined ? { floorTop: stage.floorTop } : {}) } : { workspace, clear: true }
+  return seriesResponse(fetch(stagePath(seriesId, locationId), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }), 'Could not save the stage')
+}
+
+/** Draw the grid over the plate (a workspace file) with an optional proposal; writes nothing to the series. `series.location.stage.check`. */
+export async function checkSeriesLocationStage(workspace: string, seriesId: string, locationId: string,
+  proposal?: SeriesStage): Promise<SeriesStageCheckReply> {
+  const body = { workspace, ...(proposal ? { horizon: proposal.horizon, ref: proposal.ref, ...(proposal.floorTop !== undefined ? { floorTop: proposal.floorTop } : {}) } : {}) }
+  return seriesResponse(fetch(stagePath(seriesId, locationId, '/check'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }), 'Could not draw the grid')
 }
 
 export type SeriesTemplateCard = { id: string; title: string; description: string; characters: string[]; locations: string[]; pilotShots: number }

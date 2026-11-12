@@ -1,4 +1,5 @@
 import { EndlessRoad } from './endlessRoad'
+import { GroundStyleRuntime, isGroundStyle } from './groundStyles'
 import { Color, CylinderGeometry, DepthTexture, Group, HalfFloatType, Mesh, MeshStandardMaterial, PlaneGeometry, PointLight, ShaderMaterial, TorusGeometry, UniformsUtils, Vector2, WebGLRenderTarget, type IUniform, type Texture } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
@@ -12,12 +13,15 @@ import type { GpuWorld } from './gpu'
 import type { Scene3DDocument } from './types'
 import { cinematicReflectorVisible } from './cinematicSettings'
 import { BackdropFloor } from './backdropFloor'
+import { ScreenBackdropPainter } from './screenBackdropPainter'
 import { createPixelPass, syncPixelPass } from './pixel/pixelPass'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
 import type { Pass } from 'three/addons/postprocessing/Pass.js'
 import { bindAtmosPasses, ensureComposerDepth, publishAtmosStats } from './atmos/composerBind.ts'
 import { atmosHandle, isAtmosDressing } from './atmos/index.ts'
 import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality.ts'
+import { isMotionLab } from './motionlab/types'
+import { motionLabSky } from './motionlab/runtime'
 
 /** A resolved multisample can turn a very bright sample into NaN or Inf; the bloom blur
  * would then spread it over the whole frame. Exports above draft clear those values first. */
@@ -32,6 +36,7 @@ const FINITE_SHADER = {
 /** Shared preview/export pipeline. No frame delta, random state or private assets. */
 export class CinematicRuntime {
   private road?: EndlessRoad
+  private ground?: GroundStyleRuntime
   private mirror?: Reflector
   private platform?: Group
   private composer?: EffectComposer
@@ -49,6 +54,7 @@ export class CinematicRuntime {
   private document?: Scene3DDocument
   private world: GpuWorld
   private backdropFloor: BackdropFloor
+  private screenBackdrop = new ScreenBackdropPainter()
   private quality: ExportRenderQuality = DRAFT_RENDER
   constructor(world: GpuWorld) {
     this.world = world; this.backdropFloor = new BackdropFloor(world)
@@ -105,7 +111,7 @@ export class CinematicRuntime {
     }
     this.world.scene.add(root); this.platform = root
   }
-  private syncBackground(doc: Scene3DDocument) {
+  private syncBackground(doc: Scene3DDocument, seconds: number) {
     const { world } = this
     const slot = doc.slots.find(s => s.surface === 'environment' && s.media === 'image')
     const texture = slot ? world.slots.get(slot.id)?.loopTexture ?? undefined : undefined
@@ -113,11 +119,21 @@ export class CinematicRuntime {
       this.background?.dispose(); this.source = texture; this.background = texture?.clone()
       if (this.background) this.background.needsUpdate = true
     }
-    world.scene.background = this.background ?? new Color(world.pixelPalette?.sky[0] ?? 0x10141c)
+    world.scene.background = this.backgroundFor(doc, seconds)
     this.fitBackground()
     for (const s of doc.slots) if (s.surface === 'environment') {
       const gpu = world.slots.get(s.id); if (gpu) gpu.root.visible = false
     }
+  }
+  /** The painted screen backdrop (over the environment plate), else the plate, else the set colour. */
+  private backgroundFor(doc: Scene3DDocument, seconds: number): Texture | Color {
+    if (doc.screenBackdrop) {
+      const frame = this.world.renderer.getDrawingBufferSize(new Vector2())
+      const painted = this.screenBackdrop.paint(doc.screenBackdrop, seconds, frame.x, frame.y, this.source)
+      if (painted) return painted
+    }
+    const fallback = isMotionLab(doc.dressing) ? motionLabSky(doc.dressing) : 0x10141c
+    return this.background ?? new Color(this.world.pixelPalette?.sky[0] ?? fallback)
   }
   private fitBackground() {
     const { world } = this
@@ -154,6 +170,16 @@ export class CinematicRuntime {
     // Fixed pool: many overlapping cues cannot create unbounded shader/light work.
     if (!this.lights.length) for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
   }
+  /** A ground style replaces the stage floor: the painted tile and its tufts, flowers or pebbles. */
+  private syncGround(doc: Scene3DDocument, seconds: number) {
+    const environment = doc.environment
+    const style = isGroundStyle(environment?.floorStyle) ? environment.floorStyle : undefined
+    if (style && !this.ground) this.ground = new GroundStyleRuntime(this.world.scene)
+    // Clearings where the cast stands: the models and cutouts that are not the set's own pieces.
+    const clearings = style ? doc.slots.filter(slot => slot.slot !== 'background' && !slot.id.startsWith('set-') && slot.grounded !== false)
+      .map(slot => [slot.position[0], slot.position[2]] as [number, number]) : []
+    if (this.ground?.sync(style, seconds, environment?.groundScroll, environment?.groundSeed, clearings)) this.world.floor.visible = false
+  }
   private syncRoad(doc: Scene3DDocument, seconds: number) {
     const road = doc.environment?.floorStyle === 'road'
     if (road && !this.road) this.road = new EndlessRoad(this.world.scene)
@@ -162,15 +188,16 @@ export class CinematicRuntime {
   }
   sync(doc: Scene3DDocument, seconds: number) {
     this.document = doc
-    this.syncBackground(doc); this.syncStage(doc)
+    this.syncBackground(doc, seconds); this.syncStage(doc)
     const active = Boolean(doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld || isAtmosDressing(doc?.dressing))
     // Tone mapping lives in applyLook so a previous scene's look cannot stick on this renderer.
-    if (!active) { this.road?.sync(false, undefined, seconds); return }
+    if (!active) { this.road?.sync(false, undefined, seconds); this.ground?.sync(undefined, seconds); return }
     this.ensureComposer()
     this.bloom!.strength = doc.environment?.bloom ?? .48
     const frame = this.world.renderer.getDrawingBufferSize(new Vector2())
     syncPixelPass(this.pixel!, doc.pixelWorld, frame.x, frame.y)
     this.syncRoad(doc, seconds)
+    this.syncGround(doc, seconds)
     this.syncLights(doc, seconds)
     this.syncAtmos(doc, seconds)
   }
@@ -246,7 +273,9 @@ export class CinematicRuntime {
   }
   dispose() {
     this.road?.dispose()
+    this.ground?.dispose()
     this.backdropFloor.dispose()
+    this.screenBackdrop.dispose()
     this.background?.dispose()
     this.composer?.passes.forEach(pass => pass.dispose()); this.composer?.dispose()
     this.mirror?.removeFromParent(); this.mirror?.geometry.dispose(); this.mirror?.dispose()

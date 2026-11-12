@@ -159,13 +159,14 @@ def _resume_root(workspace: str, root: Path, production_type: Any, mcp: Callable
 
 def resume_running(list_workspaces: Callable[[], Any], workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str],
                    app_url: Callable[[], str], token: Callable[[], str], *, threads: dict[str, threading.Thread],
-                   lock: threading.Lock, now: float | None = None) -> list[str]:
-    if not mcp_active(app_url, token):
+                   lock: threading.Lock, now: float | None = None,
+                   mcp: Callable[[str, dict], dict] | None = None) -> list[str]:
+    if mcp is None and not mcp_active(app_url, token):
         return []
     from services.music_production import Production, loopback_mcp
 
     moment = time.time() if now is None else now
-    mcp = loopback_mcp(app_url, token)
+    mcp = mcp or loopback_mcp(app_url, token)
     started: list[str] = []
     for workspace, root in workspace_roots(list_workspaces, workspace_dir):
         started.extend(_resume_root(workspace, root, Production, mcp, workspace_dir, uploads_dir, threads, lock, moment))
@@ -173,11 +174,12 @@ def resume_running(list_workspaces: Callable[[], Any], workspace_dir: Callable[[
 
 
 def resume_on_startup(list_workspaces: Callable[[], Any], workspace_dir: Callable[[str], str], uploads_dir: Callable[[], str],
-                      app_url: Callable[[], str], token: Callable[[], str]) -> list[str]:
+                      app_url: Callable[[], str], token: Callable[[], str], *,
+                      mcp: Callable[[str, dict], dict] | None = None) -> list[str]:
     """Startup entry: continue recent running productions whose worker is gone."""
     from services import music_production
 
     return resume_running(
         list_workspaces, workspace_dir, uploads_dir, app_url, token,
-        threads=music_production._threads, lock=music_production._lock,
+        threads=music_production._threads, lock=music_production._lock, mcp=mcp,
     )

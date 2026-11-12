@@ -29,6 +29,8 @@ CACHE_DIR = APP_ROOT / "cache" / "library"
 SCHEMA_NAME = "hocuspocus.asset-library"
 # Collection archives are GitHub release files; GitHub redirects them to its storage hosts.
 ARCHIVE_HOSTS = ("github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com")
+# A collection may also list one https URL per file. Those URLs stay on raw.githubusercontent.com.
+FILE_HOSTS = ARCHIVE_HOSTS + ("raw.githubusercontent.com",)
 # Only public-domain files for now. Accepting CC-BY (credit required) is the user's decision.
 LICENSES = frozenset({"CC0-1.0"})
 LICENSE_KEYS = ("license", "source", "source_url", "author", "retrieved_at")
@@ -113,6 +115,13 @@ def _check_members(collection_id: str, names: Any, files: dict) -> None:
             _fail(collection_id, f"{name} is not a file of this collection")
 
 
+def _check_download_url(where: str, url: Any) -> None:
+    try:
+        check_url(url, FILE_HOSTS)
+    except DownloadRefused:
+        _fail(where, f"file url must be https on {', '.join(FILE_HOSTS)}")
+
+
 def _check_collection(collection_id: str, pack: Any, files: dict, collections: dict) -> None:
     if not _COLLECTION_ID.fullmatch(str(collection_id)) or not isinstance(pack, dict):
         _fail(str(collection_id), "collection ids are lowercase words joined by hyphens")
@@ -123,7 +132,13 @@ def _check_collection(collection_id: str, pack: Any, files: dict, collections: d
         _fail(collection_id, "dependencies must name other collections")
     if pack.get("size") != sum(files[name]["size"] for name in names):
         _fail(collection_id, "size must be the sum of its file sizes")
-    _check_archive(collection_id, pack.get("archive"))
+    if "archive" in pack:
+        _check_archive(collection_id, pack.get("archive"))
+        return
+    if not _SHA256.fullmatch(str(pack.get("digest") or "")):
+        _fail(collection_id, "archive or digest is required")
+    for name in names:
+        _check_download_url(name, files[name].get("url"))
 
 
 def validate_library_manifest(manifest: Any) -> dict:
@@ -180,8 +195,19 @@ class AssetLibrary(ExampleAssets):
                 "sources": sorted({entry["source"] for entry in entries}), "files": len(entries)}
 
 
+def _merge_cc0(manifest: dict, manifest_path: Path) -> dict:
+    """The shipped catalog stays empty. The CC0 pack is merged only when that file is loaded."""
+    if manifest_path.resolve() != MANIFEST_PATH.resolve():
+        return manifest
+    from services.cc0_props import collection_fragment
+    files, collections = collection_fragment()
+    return {**manifest, "files": {**manifest.get("files", {}), **files},
+            "collections": {**manifest.get("collections", {}), **collections}}
+
+
 def load_asset_library(manifest_path: Path = MANIFEST_PATH, cache: Path = CACHE_DIR) -> AssetLibrary:
-    return AssetLibrary(cache, json.loads(manifest_path.read_text(encoding="utf-8")))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return AssetLibrary(cache, _merge_cc0(manifest, manifest_path))
 
 
 # Construction reads only the small pinned manifest, never the network.
@@ -189,6 +215,6 @@ asset_library = load_asset_library()
 
 
 __all__ = [
-    "ARCHIVE_HOSTS", "AssetLibrary", "LICENSES", "LibraryManifestError", "SCHEMA_NAME", "asset_library",
-    "load_asset_library", "validate_library_manifest",
+    "ARCHIVE_HOSTS", "AssetLibrary", "FILE_HOSTS", "LICENSES", "LibraryManifestError", "SCHEMA_NAME",
+    "asset_library", "load_asset_library", "validate_library_manifest",
 ]

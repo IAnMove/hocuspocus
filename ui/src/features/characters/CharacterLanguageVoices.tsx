@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import type { CharacterKit } from '../../lib/characterKit'
-import type { CharacterVoice, CharacterVoicesByLanguage } from '../../lib/characterVoice'
+import { DEFAULT_REFERENCE_VOICE_MODEL, type CharacterVoice, type CharacterVoicesByLanguage } from '../../lib/characterVoice'
 import { SPOKEN_LANGUAGES, type SpokenLanguage } from '../../lib/speechLanguage'
 import { CharacterVoiceFields } from './CharacterVoiceFields'
 import { CharacterVoiceDesigner } from './CharacterVoiceDesigner'
 
 const newReference = (language: SpokenLanguage): CharacterVoice =>
-  ({ provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: '', referenceAudio: '', transcript: '', language })
+  ({ provider: 'local', model: DEFAULT_REFERENCE_VOICE_MODEL, voiceId: 'reference', name: '', referenceAudio: '', transcript: '', language })
 
 /** Optional dedicated voices per spoken language. The default voice keeps speaking every other language. */
 export function CharacterLanguageVoices({ workspace, value, onChange, savedKits, disabled, onBusyChange, characterName = '' }: {
@@ -45,7 +45,7 @@ export function CharacterLanguageVoices({ workspace, value, onChange, savedKits,
     </div>)}
     {available.length > 0 && <div className="flex flex-wrap items-end gap-2">
       <label className="block">{t('speech.languageVoices.add')}
-        <select data-testid="add-language-voice" className="mt-1 min-h-10 rounded border border-border bg-bg-primary px-2"
+        <select aria-label={t('speech.languageVoices.add')} data-testid="add-language-voice" className="mt-1 min-h-10 rounded border border-border bg-bg-primary px-2"
           value={adding} onChange={event => setAdding(event.target.value as SpokenLanguage | '')}>
           <option value="">{t('speech.languageVoices.choose')}</option>
           {available.map(language => <option key={language} value={language}>{t(`speech.customVoice.languages.${language}`)}</option>)}

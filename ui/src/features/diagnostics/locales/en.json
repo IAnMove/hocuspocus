@@ -13,5 +13,10 @@
   "build": "Build",
   "platform": "Platform",
   "repair": "Repair",
-  "tab": "Diagnostics"
+  "tab": "Diagnostics",
+  "stateAvailable": "available",
+  "stateUnavailable": "unavailable",
+  "na": "n/a",
+  "memory": "RAM {{ram}} GB / VRAM {{vram}} GB",
+  "task": "task"
 }

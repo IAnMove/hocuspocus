@@ -62,7 +62,7 @@ export class BackdropFloor {
   private referenceEye(doc: Scene3DDocument) {
     const frame = doc.camera.framing, target = doc.slots.find(s => s.id === frame?.targetSlot)
     const actor = target && this.world.slots.get(target.id)?.root
-    return frame && target && actor ? framingPose(frame, framingAnchor(actor, frame.anchor), target, doc.duration / 2, doc.duration).eye
+    return frame && target && actor ? framingPose(frame, framingAnchor(actor, frame.anchor, frame.track), target, doc.duration / 2, doc.duration).eye
       : cameraEyeAtTime(doc.camera, doc.duration / 2, doc.duration, doc.slots)
   }
 

@@ -11,7 +11,8 @@
     "cameraContract": "Multiview no disponible en esta integración: Pixal3D requiere cámaras calibradas y pesos específicos, no las cuatro vistas de Hunyuan.",
     "singleImage": "La selección no admite multiview. Sólo se envía la imagen frontal; las demás vistas se conservan deshabilitadas.",
     "imageOnly": "Se requiere una imagen. Este motor no utiliza prompts de texto.",
-    "hunyuanOnly": "Presets y parámetros avanzados de Hunyuan deshabilitados; utiliza los controles del motor."
+    "hunyuanOnly": "Presets y parámetros avanzados de Hunyuan deshabilitados; utiliza los controles del motor.",
+    "remoteNoRetexture": "Meshy y Hi3D generan un modelo nuevo. Retexturiza un GLB con Hunyuan3D local."
   },
   "views": {
     "front": "Frontal",
@@ -197,6 +198,24 @@
     "chooseOrImport": "Elige un GLB de la galería o importa uno.",
     "retextureHelp": "Los GLB animados o con rig se rechazan a propósito porque Hunyuan Paint reconstruye los UV. Retexturiza primero la base estática y luego aplica el rig a la copia nueva.",
     "performance": "Perfil de rendimiento",
+    "presets": {
+      "eco": {
+        "label": "Poca VRAM",
+        "description": "Mini Turbo, descarga a CPU, octree 128, sin textura."
+      },
+      "balanced": {
+        "label": "Equilibrado",
+        "description": "Geometría Turbo a tamaño completo, con textura estándar."
+      },
+      "quality": {
+        "label": "Calidad / PBR",
+        "description": "Hunyuan3D 2.1, octree 384 y materiales PBR."
+      },
+      "multiview": {
+        "label": "Multivista rápida",
+        "description": "Turbo multivista con hasta cuatro vistas de referencia."
+      }
+    },
     "hunyuanModel": "Modelo Hunyuan",
     "recommendedVram": "Recomendado: {{gb}} GB+ de VRAM.",
     "promptRetexture": "Describe la textura nueva o usa una imagen",
@@ -229,6 +248,7 @@
     "octree": "Resolución de octree",
     "chunks": "Fragmentos de proceso",
     "seed": "Semilla",
+    "seedRandom": "-1 elige una semilla nueva cada vez",
     "surface": "Algoritmo de superficie",
     "dmc": "DMC",
     "marchingCubes": "Marching Cubes",
@@ -279,6 +299,7 @@
     "proceduralHelp": "Aplica un ajuste de cadena a medida y muestra solo clips de movimiento compatibles. Puedes afinar el ajuste abajo.",
     "humanoidHelp": "Detecta la pose T o A, coloca un esqueleto con nombres tipo Mixamo y hornea los clips para este cuerpo: pies en el suelo y brazos sin atravesar una barriga o una cabeza grandes. Esos nombres de clip son los que reproduce Video 3D.",
     "unirigHelp": "Filtra la biblioteca de movimiento para este tipo de cuerpo. UniRig sigue prediciendo su propio esqueleto y pesos de piel.",
+    "miaHelp": "Predice un esqueleto para un humanoide en cualquier pose, también las que el rig humanoide estándar rechaza, y hornea la misma biblioteca de movimiento.",
     "engine": "Motor",
     "animations": "Animaciones de {{name}}",
     "animationsDefault": "Animaciones de rig",
@@ -301,6 +322,7 @@
     "cancelRigging": "Cancelar rigging",
     "run": "Rig y animar",
     "unirigFooter": "El rig con IA usa la GPU; la primera ejecución descarga los pesos de UniRig (~2 GB).",
+    "miaFooter": "Solo Linux. Usa la GPU. La instalación descarga los pesos de Make-It-Animatable (unos 2,33 GB).",
     "humanoidFooter": "Se ejecuta en CPU en segundos. El GLB original se conserva; los dedos y la cara se quedan como se modelaron.",
     "proceduralFooter": "Se ejecuta en CPU en segundos. El GLB animado reproduce sus clips en el visor de la galería.",
     "capabilitiesFailed": "No se pudieron cargar las capacidades de rig",
@@ -327,6 +349,8 @@
     "clipsInGlb": "Clips en el GLB",
     "refusalTitle": "Este modelo no puede llevar un rig humanoide",
     "refusalFix": "No se guardó nada. Vuelve a generar el modelo en pose T o A, o usa el motor Procedural para objetos y criaturas.",
+    "suggestMia": "Make-It-Animatable está instalado y puede hacer el rig de esta pose. Selecciónalo y vuelve a ejecutar. Nada cambia de motor solo.",
+    "suggestMiaAction": "Seleccionar Make-It-Animatable",
     "animateTitle": "Añadir animaciones a un personaje con rig",
     "animateHelp": "Elige un personaje rigueado con el motor Humanoide y añade clips o trae una animación BVH o GLB (Mixamo, VRM, Unreal, Blender…). Se guarda un GLB nuevo y el original no cambia.",
     "animateCharacter": "Personaje",
@@ -348,14 +372,17 @@
       "short_arms": "Brazos cortos: los gestos se ajustan a ellos.",
       "neck_not_found": "No hay un cuello claro: la cabeza gira desde donde se une al cuerpo.",
       "facing_back": "El modelo miraba hacia atrás; el esqueleto se giró para coincidir.",
-      "on_a_base": "El modelo está sobre una peana: los pies se apoyan en su parte de arriba y la peana sigue a la cadera."
+      "on_a_base": "El modelo está sobre una peana: los pies se apoyan en su parte de arriba y la peana sigue a la cadera.",
+      "covered_arms": "Una capa o tela suelta cubre los hombros: los brazos se buscaron en el cuerpo de debajo y la tela sigue a los hombros con suavidad.",
+      "covered_legs": "Una capa, un abrigo o una túnica abierta cae sobre las piernas: las piernas se buscaron detrás y la tela cuelga de la cadera.",
+      "legs_hidden": "Una túnica o falda larga tapa las piernas: se colocaron a partir de los pies bajo el bajo de la prenda, y la túnica cuelga de la cadera y los muslos."
     },
     "refusal": {
       "hands_stuck": "Los brazos tocan el cuerpo o caen rectos. Hace falta un hueco bajo cada brazo (pose T o A).",
       "arms_raised": "Los brazos están levantados muy por encima de los hombros. Usa una pose T o A.",
       "turned": "El modelo está girado en ángulo. Usa un modelo mirando de frente a la cámara.",
-      "single_leg": "No hay hueco entre las piernas (piernas juntas, un vestido o una túnica).",
-      "legs_too_short": "Las piernas son demasiado cortas para riguear, o no se ven.",
+      "single_leg": "No hay hueco entre las piernas (piernas juntas, o un vestido o una túnica hasta el suelo que tapa los pies).",
+      "legs_too_short": "Las piernas son demasiado cortas para riguear, o no se ven (ni siquiera los pies bajo una túnica).",
       "asymmetry": "El lado izquierdo y el derecho son demasiado distintos. Usa una pose simétrica.",
       "not_upright": "El modelo no está de pie (Y hacia arriba).",
       "degenerate": "La malla está vacía o rota."
@@ -387,7 +414,14 @@
       "look_around": "Mirar alrededor",
       "bow": "Reverencia",
       "point": "Señalar",
-      "shrug": "Encogerse"
+      "shrug": "Encogerse",
+      "aim": "Apuntar",
+      "shoot": "Disparar",
+      "claw": "Zarpazo",
+      "hit": "Recibir golpe",
+      "hover": "Flotar en el aire",
+      "kneel_pray": "Rezar de rodillas",
+      "crouch": "Agacharse"
     },
     "humanoidClipHelp": {
       "idle": "De pie y relajado: respira, cambia el peso despacio y mira alrededor.",
@@ -409,7 +443,14 @@
       "look_around": "Gira la cabeza y el pecho a la izquierda y luego a la derecha.",
       "bow": "Una reverencia desde la cadera y vuelve arriba.",
       "point": "Señala al frente con el brazo derecho y lo mantiene.",
-      "shrug": "Hombros arriba y palmas abiertas: no lo sé."
+      "shrug": "Hombros arriba y palmas abiertas: no lo sé.",
+      "aim": "Apunta con un fusil a dos manos a la altura del hombro, pies firmes y un leve vaivén al respirar.",
+      "shoot": "Apunta con el fusil y retrocede con el disparo en cada tiempo.",
+      "claw": "Zarpazos de criatura: carga, barre de lado a lado y alterna los brazos.",
+      "hit": "Recibe un golpe, retrocede un paso tambaleándose y se recupera.",
+      "hover": "Flota en el aire: el cuerpo sube y baja en cada tiempo, las piernas cuelgan detrás y los brazos se abren.",
+      "kneel_pray": "Se arrodilla, junta las manos para rezar, inclina la cabeza y se queda así. Reprodúcelo una vez.",
+      "crouch": "Se agacha tras una cobertura, asoma la cabeza y vuelve a quedarse agachado. Reprodúcelo una vez."
     },
     "animateSaved_one": "Guardado {{file}} con 1 clip nuevo",
     "animateSaved_other": "Guardado {{file}} con {{count}} clips nuevos"
@@ -456,8 +497,8 @@
     "camera-pull-out": "Alejamiento de revelado",
     "camera-crane-up": "Grúa hacia arriba",
     "camera-dutch-drift": "Deriva holandesa",
-    "camera-handheld": "Cámara en mano · shake",
-    "camera-whip-pan": "Whip pan · shake",
+    "camera-handheld": "Cámara en mano · temblor",
+    "camera-whip-pan": "Paneo rápido · temblor",
     "camera-dolly": "Dolly de revelado"
   },
   "photoPresets": {
@@ -531,7 +572,7 @@
     "boss-entrance": "Entrada de jefe",
     "dodge-dash": "Esquiva rápida",
     "hit-knockback": "Retroceso por golpe",
-    "power-up-rise": "Ascenso de power-up",
+    "power-up-rise": "Ascenso de potenciador",
     "cinematic-push": "Acercamiento cinematográfico",
     "hero-flyover": "Sobrevolado heroico",
     "fade-reveal": "Revelado en fundido",
@@ -931,6 +972,9 @@
     "jsonExportedLocal_one": "JSON de escena exportado. {{count}} recurso local requerirá reasignación al importar.",
     "jsonExportedLocal_other": "JSON de escena exportado. {{count}} recursos locales requerirán reasignación al importar.",
     "jsonExportFailed": "No se pudo exportar el JSON de escena.",
+    "importedScene": "Escena importada",
+    "defaultEvent": "Evento",
+    "motionJsonHelp": "Devuelve solo JSON de movimiento válido del animador de escenas de HocusPocus.\nUsa x e y de inicio y de fin entre 0 y 100, y la escala de inicio y de fin,\nla duración en segundos y la curva linear, ease, dramatic o bounce,\ny, si hace falta, spin y rotationSpeed. Para un movimiento en varios pasos, añade keyframes con id, time, x, y, scale, opacity, rotation y curve. Los eventos opcionales usan id, tiempo local, name y un texto plano.\nNo incluyas Markdown ni explicaciones.\n\n{\"version\":1,\"motion\":{\"start\":{\"x\":10,\"y\":70,\"scale\":0.2},\"end\":{\"x\":90,\"y\":30,\"scale\":0.8},\"duration\":3,\"curve\":\"dramatic\",\"spin\":true,\"rotationSpeed\":240}}",
     "imported": "Escena importada: {{count}} capa.",
     "imported_one": "Escena importada: {{count}} capa.",
     "imported_other": "Escena importada: {{count}} capas.",
@@ -1201,8 +1245,9 @@
   "composer": {
     "title": "Crear escena desde Library",
     "heading": "Plantillas procedurales · Library",
+    "fromAnimation": "Hoja de la animación «{{animation}}» de {{character}}: los controles de la ficha se han rellenado con sus poses y su ritmo.",
     "close": "Cerrar",
-    "intro": "{{count}} acciones: referencias originales y nuevo pack musical pendiente de revisión. Tus assets crean una composición nueva, todavía por revisar. No se generan imágenes, vídeo ni audio automáticamente.",
+    "intro": "{{count}} acciones: fichas musicales, coreografías de recortes, planos espaciales y las postales de documental y ciudad, todas pendientes de revisión. Los planos de cine (establecimiento, primer plano, doble plano…) están en la rejilla narrativa. Tus assets crean una composición nueva, todavía por revisar. No se generan imágenes, vídeo ni audio automáticamente.",
     "action": "Acción / plantilla",
     "reject": "El editor rechazó la escena. Tu selección se conserva; revisa el aviso del editor.",
     "createFailed": "No se pudo crear la escena.",
@@ -1211,7 +1256,7 @@
     "required": "(obligatorio)",
     "optional": "(opcional)",
     "unassigned": "Sin asignar",
-    "assignHelp": "Asignar: {{slot}}. Selecciona imágenes generadas previamente en Studio y guardadas en Library. No se extrae el fondo ni se genera una pose de forma oculta.",
+    "assignHelp": "Asignar: {{slot}}. Selecciona imágenes (o un vídeo en bucle sin costuras para el fondo) generadas previamente en Studio y guardadas en Library. No se extrae el fondo ni se genera una pose de forma oculta.",
     "duration": "Duración (s)",
     "visualBpm": "BPM visual",
     "pulseIntensity": "Intensidad del pulso",
@@ -1257,19 +1302,57 @@
     "metaUnreadable": "Metadatos ilegibles",
     "metaLegacy": "Metadatos heredados",
     "slot": {
-      "hero": "Protagonista",
-      "plate": "Fondo",
-      "prop": "Objeto / segundo sujeto",
-      "foreground": "Primer término",
       "subject_1": "Sujeto 1",
       "subject_2": "Sujeto 2",
       "background": "Fondo",
-      "prop_1": "Accesorio 1"
+      "prop_1": "Accesorio 1",
+      "prop_2": "Accesorio 2",
+      "foreground": "Primer término"
+    },
+    "control": {
+      "drift": "Deriva de cámara (0 la deja quieta)",
+      "camera": "Cámara",
+      "atmosphere": "Atmósfera",
+      "bounce": "Rebote de la figura",
+      "bouncer": "Qué rebota",
+      "outcome": "Desenlace",
+      "mood": "Ánimo",
+      "entrance": "Entrada",
+      "caption": "Pie",
+      "yearFrom": "Desde el año",
+      "yearTo": "Hasta el año",
+      "yearLabel": "Etiqueta del contador",
+      "banner": "Texto de la pancarta"
+    },
+    "option": {
+      "push": "Empuje",
+      "sweep": "Barrido lateral",
+      "open": "Apertura con giro",
+      "beat": "Late al ritmo",
+      "fireflies": "Luciérnagas",
+      "confetti": "Confeti",
+      "bokeh": "Bokeh",
+      "on": "Sí",
+      "off": "No (la figura se queda)",
+      "subject": "La figura",
+      "prop": "Un objeto pequeño",
+      "miss": "Los rayos fallan",
+      "shield": "Un escudo para el impacto",
+      "explode": "La nave rival explota",
+      "calm": "Tranquilo",
+      "lonely": "Soledad (picado, lluvia)",
+      "leaves": "Hojas",
+      "streaks": "Rayas de velocidad",
+      "rise": "Sube al cuadro",
+      "left": "Desde la izquierda",
+      "right": "Desde la derecha"
     }
   },
   "history": {
     "undo": "Deshacer",
+    "undoHint": "Deshacer (Ctrl+Z)",
     "redo": "Rehacer",
+    "redoHint": "Rehacer (Ctrl+Mayús+Z)",
     "checkpoint": "Marcar como guardado",
     "saved": "Guardado",
     "unsaved": "Cambios sin guardar",
@@ -1307,5 +1390,422 @@
     "platform": "Plataforma",
     "bloom": "Bloom",
     "light": "Color de luz"
+  },
+  "templateErrors": {
+    "invalidMetadata": "La referencia no contiene metadata válida.",
+    "identityMismatch": "La identidad o versión de la referencia no coincide con la plantilla.",
+    "savedSceneMismatch": "La escena guardada no coincide con la referencia o su política.",
+    "snapshotUnavailable": "No está disponible el snapshot de este vídeo. No se ha reconstruido ni abierto otra escena en su lugar.",
+    "snapshotTooLarge": "El snapshot de referencia supera el límite de 4 MB.",
+    "needsCanonical": "Necesita identidad y metadatos canónicos de Library; los archivos heredados no se migran automáticamente.",
+    "slotRejectsKind": "El slot {{slot}} no admite {{kind}}.",
+    "needsGlb": "El compositor necesita un GLB, no otro formato 3D.",
+    "missingRequiredSlot": "Falta el slot obligatorio {{slot}}.",
+    "identityChanged": "La identidad o el tipo del asset cambió. Vuelve a seleccionarlo.",
+    "locationChanged": "La ubicación del asset cambió. Vuelve a seleccionarlo para revisar su contenido.",
+    "assetUnavailable": "Asset no disponible.",
+    "sizeMismatch": "El tamaño no coincide con el JSON original publicado de esta plantilla.",
+    "shaNeedsContext": "La verificación SHA-256 necesita localhost o HTTPS. No se abre una referencia sin verificar.",
+    "jsonChanged": "El JSON cambió o no es la referencia publicada. No se abre otra escena en su lugar.",
+    "ambiguousLocation": "El asset necesita una ubicación inequívoca en el workspace activo.",
+    "invalidFilename": "Nombre de archivo de Library no válido.",
+    "invalidLibraryReference": "Referencia de Library no válida para este workspace; no se aceptan URLs externas ni temporales.",
+    "missingSlotResource": "Falta el recurso del slot {{slot}}.",
+    "pulseNeedsBase": "El pulso necesita una pose base; no reemplaza keyframes existentes.",
+    "openFailed": "No se pudo abrir la escena guardada.",
+    "shaNeedsLoopback": "La verificación SHA-256 necesita HTTPS o localhost. Abre HocusPocus mediante loopback para usar esta referencia.",
+    "sceneJsonTooLarge": "El JSON de escena no puede superar 4 MiB.",
+    "invalidContentLength": "El Content-Length de la escena no es válido.",
+    "downloadFailed": "No se pudo descargar la escena guardada: HTTP {{status}}.",
+    "responseChanged": "La respuesta de la escena cambió de origen o de archivo.",
+    "byteMismatch": "La escena guardada tiene {{actual}} bytes; se esperaban {{expected}}.",
+    "hashMismatch": "El SHA-256 de la escena guardada no coincide; no se ha abierto otra escena en su lugar.",
+    "semanticMismatch": "La identidad semántica de la escena no coincide: se esperaba «{{expected}}» y se recibió «{{actual}}».",
+    "missingPolicy": "La escena guardada no tiene generationPolicy provided_only.",
+    "openFailedWithLabel": "No se pudo abrir {{label}}: {{message}}",
+    "previewNotRendered": "Vista previa no renderizada en esta instalación.",
+    "noPoster": "No se ha proporcionado póster.",
+    "posterAlt": "Póster de {{title}}",
+    "fullVideoAria": "Vídeo completo de {{title}}",
+    "watchFullVideoAria": "Ver vídeo completo de {{title}}",
+    "watchFullVideo": "▶ Ver vídeo completo",
+    "videoNotRendered": "Vídeo no renderizado en esta instalación.",
+    "openSavedScene": "Abrir escena guardada en editor",
+    "openScene": "Abrir escena en editor",
+    "cardMeta": "{{id}} · MiniMax {{model}} · Pendiente de aprobación",
+    "pending": "Pendiente",
+    "effectsHeading": "Efectos y composición",
+    "mediaNote": "Imágenes: MiniMax Image-01 · Vídeo: composición local; no se genera vídeo IA.",
+    "sourceAudio": "Audio fuente: {{filename}} · {{duration}} s",
+    "checkingScene": "Comprobando escena…",
+    "hideExactShots": "Ocultar planos exactos",
+    "showExactShots": "Mostrar planos exactos ({{count}})",
+    "shotsSavedNote": "Los planos se guardan individualmente; esto no significa que exista un montaje final editable.",
+    "shotLabel": "plano {{n}}",
+    "checking": "Comprobando…",
+    "openShot": "Abrir plano {{n}}",
+    "showcaseGallery": "Galería de showcase",
+    "showcaseCannotShow": "No se puede mostrar el showcase: {{error}}",
+    "sceneShowcaseGallery": "Galería de showcase de escenas",
+    "localShowcase": "Showcase local",
+    "localOutputsNote": "Outputs locales de MiniMax Image-01 · aprobación pendiente · no se inventan vistas previas ni montajes.",
+    "lanPreviewNote": "En una URL LAN HTTP puedes reproducir vistas previas; para abrir una escena editable usa localhost o HTTPS para poder comprobar el SHA-256.",
+    "playbackNoHashNote": "La reproducción de vídeo y póster no verifica SHA-256 en el navegador; el JSON editable sí se comprueba antes de abrirlo.",
+    "fullVideoclips": "Videoclips completos",
+    "savedScenes": "Escenas guardadas",
+    "showcaseLoadFailed": "No se pudo cargar el showcase local.",
+    "manifestTooLarge": "El manifiesto del showcase supera el límite de 1 MB.",
+    "transferFailed": "No se ha podido transferir la escena al editor: almacenamiento de sesión no disponible. No se ha abierto otra escena.",
+    "labTitle": "HocusPocus · Laboratorio de escenas candidatas",
+    "labDisclaimer": "Sin vídeo IA · no son plantillas aprobadas · guarda tus ajustes antes de salir",
+    "backHome": "Volver a HocusPocus",
+    "openingEditor": "Abriendo el editor de la escena…",
+    "galleryVariant": "Variante de la galería",
+    "minimaxVariant": "MiniMax · personajes y videoclips reales",
+    "originalVariant": "Referencias originales · coral",
+    "originalsStillAvailable": "{{message}} Las referencias originales siguen disponibles."
+  },
+  "candidateGallery": {
+    "families": {
+      "cinema": "Cine",
+      "music": "Música",
+      "space": "Espacio"
+    },
+    "decisions": {
+      "pending": "Pendiente",
+      "keep": "Conservar",
+      "discard": "Descartar"
+    },
+    "storageOpenPending": "No se pudo abrir el almacenamiento; las decisiones quedan pendientes en esta sesión.",
+    "openSceneFailed": "No se pudo abrir la escena candidata.",
+    "saveSessionOnly": "No se pudo guardar el estado; las decisiones sólo viven en esta sesión.",
+    "storageSessionOnly": "No se pudo abrir el almacenamiento; las decisiones sólo viven en esta sesión.",
+    "copyPromptFailed": "No se pudo copiar el prompt en este navegador.",
+    "exportFailed": "No se pudo exportar el JSON de revisión en este navegador.",
+    "ariaLabel": "Galería de plantillas candidatas de Video3D",
+    "eyebrow": "Video3D · catálogo candidato",
+    "title": "Escenas programáticas reutilizables",
+    "intro": "Explora {{count}} gramáticas editables con el compositor real. Son candidatas: una vista previa o un PR no las aprueba automáticamente.",
+    "exportJson": "Exportar JSON de revisión",
+    "catalogVersion": "Catálogo {{version}}",
+    "pendingCount_one": "{{count}} pendiente",
+    "pendingCount_other": "{{count}} pendientes",
+    "keepCount": "{{count}} para conservar",
+    "discardCount_one": "{{count}} descartada",
+    "discardCount_other": "{{count}} descartadas",
+    "filterFamilies": "Filtrar familia de plantillas",
+    "allCount": "Todas ({{count}})",
+    "candidateCount_one": "{{count}} candidata",
+    "candidateCount_other": "{{count}} candidatas",
+    "cardMeta": "{{id}} · candidata v{{version}} · {{duration}}s",
+    "noCoralReference": "Sin referencia coral publicada. Los ensayos MiniMax se consultan en la pestaña de videoclips.",
+    "coralPreviewAria": "Vista previa coral de {{title}}",
+    "reviewFrameAlt": "Fotograma de revisión: {{title}}",
+    "watchScene": "▶ Ver escena · {{duration}} s",
+    "previewNotRendered": "Vista previa no renderizada en esta instalación",
+    "slots": "Slots",
+    "slotRequired": "obligatorio",
+    "slotOptional": "opcional",
+    "limits": "Límites",
+    "examplePrompt": "Prompt de ejemplo",
+    "copied": "Copiado",
+    "copy": "Copiar",
+    "coralSample": "Muestra coral · render del compositor real, sin audio · no implica aprobación",
+    "candidateOnly": "Plantilla candidata · sin referencia coral publicada ni aprobación artística",
+    "loadingReference": "Cargando referencia…",
+    "openReference": "Abrir referencia en editor",
+    "variantAria": "Variante de {{title}} para probar",
+    "coralVariant": "Coral · variante de referencia",
+    "tealVariant": "Teal · objeto alternativo",
+    "createWithTemplate": "Crear con plantilla actual",
+    "openVersusCreate": "Abrir referencia recupera el JSON guardado del vídeo; crear con plantilla usa el compilador actual y puede diferir de ese render.",
+    "tealNote": "Teal cambia los objetos de la escena; no se afirma que exista un MP4 para esta variante.",
+    "reviewNotes": "Notas de revisión",
+    "notesPlaceholder": "Qué conservar, qué corregir o qué falta…"
+  },
+  "templateReference": {
+    "pendingReview": "Coreografía nueva: referencia visual pendiente de revisión. Puedes crearla con tus assets y editarla; no hay un original aprobado publicado.",
+    "hide": "Ocultar referencia",
+    "show": "Ver vídeo de referencia (GitHub)",
+    "videoAria": "Vídeo original de referencia",
+    "unavailable": "Referencia no disponible. Puedes seguir con tus assets; no sustituimos el vídeo por una vista previa ficticia.",
+    "coralOriginal": "Original coral v1: composición con SVG/GLB, 4 segundos, sin audio. No representa el aspecto de tus imágenes ni los cambios posteriores del compilador.",
+    "download": "Descargar configuración original ↗",
+    "openInstructions": "Para abrir el original, descarga su JSON y selecciónalo aquí tras confirmar el reemplazo al final. Verificamos SHA-256; requiere localhost o HTTPS. El botón inferior crea una escena nueva con tus assets.",
+    "openVerified": "Abrir JSON original verificado"
+  },
+  "templateComponent": {
+    "copied": "Contrato copiado. No ejecuta acciones ni genera assets.",
+    "copyFailed": "No se pudo copiar. Abre el contrato y selecciónalo manualmente.",
+    "motionStrong": "fuerte",
+    "motionModerate": "moderado",
+    "motionNotice": "Movimiento {{motion}} dentro del plano, no transición de montaje. Revisa los giros y evita encadenarlos densamente si provocan mareo. El alpha y la pose de las imágenes requieren revisión visual.",
+    "copyContract": "Copiar contrato para el Wizard",
+    "viewComponents": "Ver componentes y requisitos"
+  },
+  "templateControls": {
+    "labels": {
+      "duration": "Duración",
+      "bpm": "BPM",
+      "intensity": "Intensidad"
+    },
+    "range": "{{label}}: debe estar entre {{min}} y {{max}}.",
+    "choice": "{{label}}: debe ser {{options}}.",
+    "text": "{{label}}: texto de hasta {{max}} caracteres.",
+    "unknown": "{{key}}: control desconocido en {{id}}."
+  },
+  "showcaseValidation": {
+    "mustBeObject": "debe ser un objeto.",
+    "mustBeText": "debe ser texto de 1-{{max}} caracteres.",
+    "safeId": "sólo admite caracteres seguros de identificador.",
+    "relativeUrl": "debe ser una URL relativa dentro de /scene-showcase/.",
+    "or": " o ",
+    "badExtension": "extensión no permitida; se esperaba {{expected}}.",
+    "sha256": "debe ser SHA-256 hexadecimal en minúsculas.",
+    "positiveInt": "debe ser un entero positivo seguro.",
+    "sceneJsonLimit": "el JSON de escena no puede superar 4 MiB.",
+    "filenameControls": "no puede contener separadores ni caracteres de control.",
+    "durationRange": "debe estar entre 0 y 86400 segundos.",
+    "kind": "debe ser scene o music_video.",
+    "maxEffects": "debe contener como máximo {{max}} efectos.",
+    "maxShots": "debe contener como máximo {{max}} planos.",
+    "sceneNeedsJson": "las escenas necesitan una referencia JSON editable.",
+    "musicVideoNeedsShot": "un videoclip necesita una escena editable o al menos un plano guardado.",
+    "provider": "debe ser minimax.",
+    "model": "debe ser image-01.",
+    "approval": "debe permanecer pending hasta una aprobación explícita.",
+    "schema": "debe ser {{schema}}.",
+    "version": "versión no soportada.",
+    "maxItems": "debe contener como máximo {{max}} elementos.",
+    "duplicateId": "id duplicado: {{id}}."
+  },
+  "catalogReview": {
+    "migration": "Se preservaron las decisiones válidas de las {{legacy}} plantillas previas; las {{added}} plantillas nuevas quedan pendientes y no se autoaprueban.",
+    "storageReadFailed": "No se pudo leer el almacenamiento; las decisiones quedan pendientes en esta sesión."
+  },
+  "reviewDecisions": {
+    "invalidJson": "Las decisiones guardadas no son JSON válido; se mantienen como pendientes.",
+    "unknownFormat": "Las decisiones guardadas tienen un formato desconocido; se mantienen como pendientes.",
+    "otherCatalogVersion": "Las decisiones pertenecen a otra versión del catálogo; no se importan aprobaciones antiguas.",
+    "invalidTable": "Las decisiones no contienen una tabla válida; se mantienen como pendientes.",
+    "ignoredMismatch": "Se ignoraron decisiones con IDs o versiones que ya no coinciden con el catálogo."
+  },
+  "slotLabels": {
+    "subject_1": "Sujeto 1",
+    "subject_2": "Sujeto 2",
+    "background": "Fondo",
+    "prop_1": "Accesorio 1",
+    "prop_2": "Accesorio 2",
+    "foreground": "Primer término"
+  },
+  "templateCompile": {
+    "durableResource": "Cada slot necesita un recurso existente y durable (máximo 2 MB de referencia).",
+    "libraryOrDurable": "Usa un asset de Library o una referencia de imagen/vídeo/GLB durable; no blob:, scripts ni rutas del disco.",
+    "mimeMismatch": "El MIME del asset inline no coincide con su tipo declarado.",
+    "missingSlot": "Falta el slot obligatorio {{slot}}.",
+    "slotRejects": "El slot {{slot}} no admite {{type}}.",
+    "repeatedGlb": "Los slots GLB no admiten fuentes repetidas en este compositor.",
+    "musicSourceReuse": "Los slots musicales {{left}} y {{right}} no pueden reutilizar el mismo recurso: source coincide.",
+    "musicAssetReuse": "Los slots musicales {{left}} y {{right}} no pueden reutilizar el mismo recurso: assetId canónico coincide ({{assetId}}).",
+    "noCompiler": "La plantilla {{id}} todavía no tiene compilador.",
+    "overBudget": "La escena excede el presupuesto de 24 capas / 2 GLB.",
+    "retired": "La plantilla {{id}} se retiró. {{note}}",
+    "unknownSlot": "El binding contiene un slot desconocido: {{name}}.",
+    "sameSlot": "{{left}} y {{right}} nombran el mismo slot {{slot}}.",
+    "candidateSuffix": "candidata"
+  },
+  "templateCards": {
+    "cinema-establishing": {
+      "title": "Plano de establecimiento",
+      "description": "Figura pequeña en su entorno; la cámara se abre y se desliza con polvo en el aire. Con mood lonely la cámara mira desde arriba, sube y llueve."
+    },
+    "cinema-reveal": {
+      "title": "Revelado cinematográfico",
+      "description": "Descubre progresivamente al sujeto desde una placa con movimiento contenido."
+    },
+    "cinema-closeup": {
+      "title": "Primer plano cinematográfico",
+      "description": "Concentra la mirada en un sujeto con escala cercana y movimiento mínimo."
+    },
+    "cinema-two-shot": {
+      "title": "Doble plano cinematográfico",
+      "description": "Dos figuras con un leve vaivén propio; la cámara traza un arco lento y empuja, con paralaje entre fondo, figuras y primer término."
+    },
+    "cinema-detail": {
+      "title": "Detalle cinematográfico",
+      "description": "Aísla una pista visual pequeña para convertirla en un beat narrativo claro."
+    },
+    "cinema-hero": {
+      "title": "Entrada de héroe",
+      "description": "La figura entra en el plano (sube desde abajo o llega por un lado) mientras la cámara sube y se abre para darle presencia."
+    },
+    "cinema-tracking": {
+      "title": "Seguimiento cinematográfico",
+      "description": "La figura cruza el cuadro y la cámara la sigue en lateral sobre la placa. Con atmosphere streaks pasan rayas de velocidad en vez de hojas."
+    },
+    "music-pulse": {
+      "title": "Pulso musical",
+      "description": "La figura rebota al ritmo. La cámara empuja (push), barre de lado (sweep), se abre con giro (open) o late al ritmo (beat); flotan luciérnagas, confeti o bokeh."
+    },
+    "music-duet": {
+      "title": "Dúo musical",
+      "description": "Dos figuras se alternan al ritmo: en cada tiempo salta una mientras la otra descansa, y la cámara se balancea."
+    },
+    "music-orbit": {
+      "title": "Órbita musical",
+      "description": "Copias de un objeto orbitan a la figura, que rebota al ritmo. Con bounce off la figura se queda en su sitio y solo orbitan las copias."
+    },
+    "music-product": {
+      "title": "Producto musical",
+      "description": "Presenta un producto u objeto con energía de videoclip y un giro visual controlado."
+    },
+    "space-cruise": {
+      "title": "Crucero espacial",
+      "description": "Acompaña una nave por un campo estelar con sensación de viaje continuo."
+    },
+    "space-orbit": {
+      "title": "Órbita espacial",
+      "description": "Hace orbitar la nave hero alrededor de un planeta o estación prop mediante keyframes de capa."
+    },
+    "space-docking": {
+      "title": "Acoplamiento espacial",
+      "description": "Simula un acercamiento de nave a estación mediante capas y movimiento controlado."
+    },
+    "space-chase": {
+      "title": "Persecución espacial",
+      "description": "Compone una persecución de naves con desplazamiento paralelo, sin física de colisión."
+    },
+    "space-broadside": {
+      "title": "Enfrentamiento lateral espacial",
+      "description": "Dos naves de perfil se enfrentan y la primera dispara rayos. outcome: miss (fallan), shield (un escudo para el impacto) o explode (explosión: la nave rival estalla con restos y temblor)."
+    },
+    "space-warp": {
+      "title": "Salto espacial",
+      "description": "Acelera una nave hacia un salto visual con rayas y capas de profundidad controladas."
+    },
+    "documentary-history": {
+      "title": "Documental histórico",
+      "description": "Foto de archivo con movimiento lento: la placa empuja y se desliza con paralaje contra la foto y el primer término. Un rótulo de fecha y un contador de años con tus textos, acabado de archivo y polvo."
+    },
+    "city-postcard": {
+      "title": "Postal de ciudad",
+      "description": "La placa de ciudad se desliza de lado; el sujeto y el primer término la cruzan con paralaje, pasan hojas y una pancarta de papel lleva tu texto. No hay gaviotas: no existe un preset de partículas de pájaros."
+    },
+    "music-spiral-exit": {
+      "title": "Salida en espiral",
+      "description": "El foco se encoge y se desvanece en el centro mientras gira dos vueltas, produciendo una salida gráfica compacta."
+    },
+    "music-speed-flight": {
+      "title": "Vuelo de velocidad",
+      "description": "El protagonista cruza el encuadre de izquierda a derecha en una pasada rápida con una salida clara."
+    },
+    "music-infinite-fall": {
+      "title": "Caída infinita",
+      "description": "El protagonista entra desde arriba, desciende por una ruta finita y se hace pequeño hasta salir por abajo."
+    },
+    "music-pinball": {
+      "title": "Rebote de pinball",
+      "description": "El foco rebota en zigzag como una bola de pinball. Con bouncer prop rebota un objeto pequeño y la figura lo sigue con la mirada."
+    },
+    "music-boomerang": {
+      "title": "Bumerán",
+      "description": "El sujeto se aleja por una curva abierta y vuelve al punto de partida con una respuesta visual reconocible."
+    },
+    "music-cannon-launch": {
+      "title": "Lanzamiento de cañón",
+      "description": "El foco sale disparado y abandona el cuadro por la zona superior derecha siguiendo un arco rápido."
+    },
+    "music-orbit-duel": {
+      "title": "Duelo orbital",
+      "description": "Dos focos se cruzan en arcos opuestos alrededor de un eje central para crear tensión de videoclip."
+    },
+    "music-high-five": {
+      "title": "Choca esos cinco",
+      "description": "Dos personajes se aproximan a un punto común, marcan el encuentro y se separan con un rebote breve."
+    },
+    "music-magnet-pull": {
+      "title": "Tirón magnético",
+      "description": "El primer foco permanece casi estable mientras atrae al segundo, que rebota y se estabiliza."
+    },
+    "music-portal-swap": {
+      "title": "Intercambio de portales",
+      "description": "Dos focos desaparecen y reaparecen en posiciones intercambiadas mediante cortes gráficos controlados."
+    },
+    "music-trampoline": {
+      "title": "Salto de trampolín",
+      "description": "El protagonista baja, rebota y vuelve a caer con un pulso vertical exagerado y legible."
+    },
+    "music-pendulum": {
+      "title": "Péndulo musical",
+      "description": "El foco oscila de lado a lado alrededor de una posición fija con una cadencia hipnótica."
+    },
+    "music-rubber-band": {
+      "title": "Goma elástica",
+      "description": "El foco se separa del centro, acumula tensión visual y regresa con una liberación musical."
+    },
+    "music-card-toss": {
+      "title": "Lanzamiento de carta",
+      "description": "El foco entra, mantiene una lectura breve y sale disparado del encuadre con un giro marcado."
+    },
+    "music-staircase-pop": {
+      "title": "Ascenso por escalones",
+      "description": "El protagonista sube escalón a escalón con un rebote en cada aterrizaje y la cámara lo sigue; en planos largos sube y vuelve a bajar."
+    },
+    "music-accordion-clones": {
+      "title": "Clones acordeón",
+      "description": "El mismo foco aparece en una expansión y contracción de posiciones, como un acordeón visual."
+    },
+    "music-domino-wave": {
+      "title": "Ola de dominó",
+      "description": "Copias limitadas del foco se inclinan en secuencia y recuperan su posición formando una ola visual."
+    },
+    "music-conveyor": {
+      "title": "Cinta transportadora",
+      "description": "El foco se desplaza en una dirección constante mientras el entorno conserva una sensación de cadena."
+    },
+    "music-spotlight-relay": {
+      "title": "Relevo de focos",
+      "description": "Dos presencias se pasan el foco una y otra vez durante todo el plano con cambios de luz y escala; la cámara deriva."
+    },
+    "music-corkscrew-rise": {
+      "title": "Ascenso sacacorchos",
+      "description": "El protagonista asciende con una rotación de capa y una deriva lateral que dibujan un sacacorchos."
+    },
+    "music-shockwave": {
+      "title": "Onda expansiva",
+      "description": "El foco central permanece legible mientras un zoom de movimiento marca el golpe visual."
+    },
+    "music-crowd-surf": {
+      "title": "Surf entre multitudes",
+      "description": "El protagonista se desplaza sobre copias de una franja de público que actúan como apoyo visual."
+    },
+    "walk-follow-back": {
+      "title": "Seguimiento por la espalda",
+      "description": "Plano de cintura para arriba visto desde detrás: la figura camina hacia dentro de la sala y conserva su tamaño mientras la sala viene hacia ella con paralaje. Solo se ven el rebote de cada paso y la inclinación de los hombros; las piernas quedan fuera del cuadro."
+    },
+    "walk-toward-camera": {
+      "title": "Camina hacia cámara",
+      "description": "Travelling inverso: la figura camina de frente hacia nosotros en plano de cintura para arriba, la cámara retrocede a su paso y la sala se aleja detrás con paralaje. Las piernas quedan fuera del cuadro y el movimiento lo pone el mundo, no la figura."
+    },
+    "walk-behind-foreground": {
+      "title": "Entrada tras el primer plano",
+      "description": "Una figura entera de perfil cruza el cuadro por detrás de un primer plano (mostrador, muro bajo, verja) que le tapa las piernas: se ve el cuerpo, el rebote y la inclinación de cada paso, pero no los pies. Camina hacia donde mira."
+    },
+    "walk-shadow-first": {
+      "title": "Sombra primero",
+      "description": "Corte en la acción: una sombra enorme y suave cruza la pared antes de que aparezca nadie y, al desvanecerse, la figura ya está de pie en su marca con un pequeño pisotón. No se ve caminar."
+    },
+    "walk-two-pose": {
+      "title": "Paso de dos poses con sombra",
+      "description": "Plano general: una figura de perfil cruza andando con una hoja de dos poses (la zancada y las piernas juntas) que cambia de dibujo en cada medio paso, sobre una sombra de contacto que late. Al llegar a su marca se detiene en la última pose de la hoja (las piernas juntas). La velocidad sigue al paso para que las botas no patinen."
+    },
+    "walk-cycle-sheet": {
+      "title": "Ciclo de paso en hoja de sprites",
+      "description": "Una figura de perfil cruza el plano entera mientras se reproduce una hoja de sprites con su ciclo de paso (contacto, paso, contacto, paso): las piernas se mueven de verdad. El ritmo de la hoja sigue a la velocidad de la figura para que las botas no resbalen."
+    },
+    "character-reaction": {
+      "title": "Reacción de personaje",
+      "description": "Una figura se queda en su marca y reacciona: entra con un pequeño salto, reproduce una hoja de poses de un gesto (saludar, asentir, negar, señalar) o de una expresión de anime (enfado, sorpresa, tristeza, alegría, vergüenza, miedo…) y se queda respirando. La hoja se hace en Personajes › Animaciones."
+    }
   }
 }

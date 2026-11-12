@@ -1,12 +1,9 @@
-import ast
 import asyncio
-import os
-from pathlib import Path
-from urllib.parse import quote
+from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 
+from services.kernel.paths import PathPolicy
 from app.services.character_kit_library import patch_character_kit, read_character_kit_library
 from app.services.character_speech_definition import normalize_character_voice
 from app.services.media_paths import MediaPathNotAllowed, resolve_permitted_media_path
@@ -28,6 +25,36 @@ def test_reference_voice_survives_library_reload_and_links_from_another_workspac
     assert normalize_character_voice({**custom, "name": "  Narradora  ", "transcript": "  Esta es mi voz.  "}) == custom
     preset = {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "ryan", "instructions": "Warm"}
     assert normalize_character_voice(preset) == preset
+
+
+def test_a_voice_band_is_kept_and_a_bad_type_is_refused():
+    banded = {**voice(), "voiceType": "woman", "pitchBandHz": [108, 249], "maxBrightness": 0.03}
+    saved = normalize_character_voice(banded)
+    assert saved["voiceType"] == "woman" and saved["pitchBandHz"] == [108.0, 249.0] and saved["maxBrightness"] == 0.03
+    assert "maxCentroidHz" not in saved
+    preset = {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "ryan", "voiceType": "man"}
+    assert normalize_character_voice(preset) == preset
+    design = {"provider": "local", "model": "drama3_voicedesign", "voiceId": "design", "name": "Sol", "language": "spanish", "voiceType": "robot"}
+    assert normalize_character_voice(design)["voiceType"] == "robot" and "pitchBandHz" not in normalize_character_voice(design)
+    with pytest.raises(ValueError, match="voiceType"):
+        normalize_character_voice({**voice(), "voiceType": "ghost"})
+
+
+def test_a_drama3_voice_survives_a_kit_save_and_reload(tmp_path):
+    clone = {**voice(), "model": "drama3_base", "name": "Sol"}
+    english = {**clone, "language": "english", "name": "Sol EN"}
+    design = {"provider": "local", "model": "drama3_voicedesign", "voiceId": "design",
+              "name": "Sol design", "language": "spanish", "instructions": "warm and clear"}
+    kit = {"version": 1, "id": "sol", "name": "Sol", "style": "cutout", "poses": {},
+           "mouth": {}, "eyes": {}, "anchors": {}, "provenance": [],
+           "voice": clone, "voicesByLanguage": {"english": english, "spanish": design}}
+    patch_character_kit(str(tmp_path), "sol", kit, base_revision=0)
+    saved = read_character_kit_library(str(tmp_path))["kits"]["sol"]
+    assert saved["voice"] == clone
+    assert saved["voicesByLanguage"]["english"] == english
+    assert saved["voicesByLanguage"]["spanish"] == design
+    again = patch_character_kit(str(tmp_path), "sol", {**kit, "voice": saved["voice"]}, base_revision=1)
+    assert again["kits"]["sol"]["voice"]["model"] == "drama3_base"
 
 
 @pytest.mark.parametrize("patch", [
@@ -127,33 +154,29 @@ def test_legacy_adoption_remains_available_for_existing_audio_studio_callers(med
 
 def test_audio_adopt_endpoint_uses_source_workspace_and_new_canonical_resolver(media_roots, monkeypatch):
     """Execute the actual lightweight route functions without importing GPU runtimes."""
+    import routers.audio as audio_routes
+
     uploads, workspace = media_roots
     monkeypatch.chdir(uploads.parent)
     for root in media_roots:
         (root / "same.wav").write_bytes(b"reference")
-    launch = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
-    parsed = ast.parse(launch.read_text(encoding="utf-8"))
-    selected = [node for node in parsed.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and node.name in {"_resolve_request_media_path", "adopt_audio"}]
-    for node in selected:
-        node.decorator_list = []
     seen_workspaces = []
 
     def workspace_dir(name):
         seen_workspaces.append(name)
         return str(workspace)
 
-    namespace = {"os": os, "quote": quote, "Request": object, "HTTPException": HTTPException,
-                 "resolve_permitted_media_path": resolve_permitted_media_path, "MediaPathNotAllowed": MediaPathNotAllowed,
-                 "_workspace_dir": workspace_dir, "_get_active_workspace": lambda: "destination",
-                 "_probe_audio_duration": lambda _: 5}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), str(launch), "exec"), namespace)
+    paths = PathPolicy(SimpleNamespace(workspace_dir=workspace_dir, active=lambda: "destination"))
+    monkeypatch.setattr(audio_routes, "_resolve_request_media_path", paths.resolve_request_media_path)
+    monkeypatch.setattr(audio_routes, "_workspace_dir", workspace_dir)
+    monkeypatch.setattr(audio_routes, "_get_active_workspace", lambda: "destination")
+    monkeypatch.setattr(audio_routes, "_probe_audio_duration", lambda _: 5)
 
     class Request:
         async def json(self):
             return {"audio_path": "/api/v1/file/same.wav?workspace=original", "workspace": "original"}
 
-    result = asyncio.run(namespace["adopt_audio"](Request()))
+    result = asyncio.run(audio_routes.adopt_audio(Request()))
     assert seen_workspaces == ["original"]
     assert result["path"] == str(workspace / "same.wav")
     assert result["duration_seconds"] == 5

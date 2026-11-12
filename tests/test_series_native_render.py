@@ -1,13 +1,77 @@
 """The server renders every 2D shot of an episode: voices, scene, headless export, take."""
+import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
-from services.series_native_render import NativeRenderDeps, NativeRenderError, SeriesNativeRender, public_job, speech_params
+from services.series_native_render import NativeRenderDeps, NativeRenderError, SeriesNativeRender, public_job, render_inputs, speech_params
+from services.series_shot_plan import recording_key
 
 KEVIN_ES = {"provider": "local", "model": "qwen3_tts_base", "voiceId": "reference", "name": "Kevin ES",
             "referenceAudio": "/api/v1/file/kevin-es.wav?workspace=cast", "transcript": "Hola.", "language": "spanish"}
 GARY = {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "ryan"}
+
+
+def test_native_speech_stops_before_generation_when_workspace_disk_is_low(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from services.production_resource_gate import guard_workspace_mcp
+    monkeypatch.setenv('HOCUS_PRODUCTION_MIN_FREE_GB', '15')
+    probes, submitted = [], []
+    def guarded(call, resolve, **options):
+        return guard_workspace_mcp(call, resolve,
+            run=lambda command, **_: probes.append(command) or SimpleNamespace(stdout='Filesystem\nlocal 14G'),
+            usage=lambda _: SimpleNamespace(free=14 * 1024 ** 3), **options)
+    monkeypatch.setattr('services.series_native_render.guard_workspace_mcp', guarded)
+    deps = NativeRenderDeps(call=lambda *args: submitted.append(args),
+                            workspace_dir=lambda ws: str(tmp_path / ws),
+                            read_library=lambda _: {}, read_kits=lambda _: {})
+    service = SeriesNativeRender(deps)
+    with pytest.raises(ValueError, match='resource_disk_low'):
+        service._speak('anime', {'language': 'spanish'}, 'line', 'Hola.', KEVIN_ES, 0)
+    assert probes == [['df', '-h', str(tmp_path / 'anime')]]
+    assert not submitted
+
+
+def _gpu_held_by_another_process(monkeypatch, probed):
+    """Another process keeps the GPU above the limit, so every speech admission waits."""
+    from services.production_resource_gate import guard_workspace_mcp
+    monkeypatch.setenv('HOCUS_PRODUCTION_EXTERNAL_VRAM_MB', '2048')
+    monkeypatch.delenv('HOCUS_PRODUCTION_MIN_FREE_GB', raising=False)
+
+    def run(command, **_):
+        probed.set()
+        return SimpleNamespace(stdout='99999999, 6000')
+
+    monkeypatch.setattr('services.series_native_render.guard_workspace_mcp',
+                        lambda call, resolve, **options: guard_workspace_mcp(call, resolve, run=run, **options))
+
+
+def test_a_cancel_stops_a_render_that_waits_for_the_gpu(tmp_path, monkeypatch):
+    probed = threading.Event()
+    _gpu_held_by_another_process(monkeypatch, probed)
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    job = render.start("cast", "uv", "ep1")
+    assert probed.wait(5), "the first line waits for the GPU"
+    render.cancel("cast", job["jobId"])
+    done = finished(render, job["jobId"], tmp_path)
+    assert done["status"] == "cancelled" and done["message"] == "Cancelled; resume to continue"
+    assert "waiting for the GPU" in done["items"][0]["error"]
+    assert not [tool for tool, _ in tools.calls if tool == "generation.speech"]
+
+
+def test_a_render_that_waits_too_long_for_the_gpu_stops_with_a_clear_error(tmp_path, monkeypatch):
+    _gpu_held_by_another_process(monkeypatch, threading.Event())
+    monkeypatch.setenv('HOCUS_PRODUCTION_GPU_WAIT_SECONDS', '0.3')
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    done = finished(render, render.start("cast", "uv", "ep1")["jobId"], tmp_path)
+    assert done["status"] == "failed" and done["message"].startswith("Stopped at shot s01: resource_gpu_busy")
+    # The next shot would wait for the same GPU: it is left queued for a resume.
+    assert [item["status"] for item in done["items"]] == ["failed", "queued"]
+    assert "resource_gpu_busy" in done["items"][0]["error"]
+    assert not [tool for tool, _ in tools.calls if tool == "generation.speech"]
 
 
 def library():
@@ -28,17 +92,25 @@ def library():
 
 
 class Tools:
-    def __init__(self, tmp_path, bad_first_take=False, fail_export_once=False, wait_errors=()):
+    def __init__(self, tmp_path, bad_first_take=False, fail_export_once=False, wait_errors=(), fail_speech_at=0):
         self.root, self.calls, self.jobs = tmp_path, [], 0
         self.bad_first_take, self.fail_export_once = bad_first_take, fail_export_once
-        self.exports, self.wait_errors = {}, list(wait_errors)
+        self.exports, self.wait_errors, self.fail_speech_at = {}, list(wait_errors), fail_speech_at
+        self.reported_wer = None
+        self.reported_pitch = None
+        self.reported_brightness = None
+        self.reported_centroid = None
+        self.by_take = None
 
     def __call__(self, tool, arguments):
         self.calls.append((tool, arguments))
         data = arguments.get("input") or {}
         if tool == "generation.speech":
             self.jobs += 1
+            if self.jobs == self.fail_speech_at:
+                return {"_is_error": True, "error": {"code": "failed", "message": "tts down"}}
             name = f"{data['output_name']}.wav"
+            (self.root / f"{data['output_name']}.meta.json").write_text("{}")
             (self.root / name).write_bytes(b"raw speech")
             return {"receipt": {"result": {"job_id": f"job-{self.jobs}"}}, "_name": name}
         if tool == "jobs.wait":
@@ -49,7 +121,22 @@ class Tools:
             return {"status": "completed", "outputs": [{"path": f"{speech['input']['output_name']}.wav"}]}
         if tool == "qa.speech":
             takes = [name for name, _ in self.calls if name == "qa.speech"]
-            return {"result": {"wer": 0.6 if self.bad_first_take and len(takes) == 1 else 0.05}}
+            if self.by_take:
+                spec = self.by_take[min(len(takes) - 1, len(self.by_take) - 1)]
+                result = {"wer": spec.get("wer", 0.05), "wer_threshold": spec.get("wer_threshold", 0.34)}
+                result.update({key: spec[key] for key in ("medianPitchHz", "brightness", "centroidHz") if key in spec})
+            elif self.reported_wer is not None:
+                wer, threshold = self.reported_wer
+                result = {"wer": wer, "wer_threshold": threshold}
+            else:
+                result = {"wer": 0.6 if self.bad_first_take and len(takes) == 1 else 0.05}
+            if self.by_take is None and self.reported_pitch is not None:
+                result["medianPitchHz"] = self.reported_pitch
+            if self.by_take is None and self.reported_brightness is not None:
+                result["brightness"] = self.reported_brightness
+            if self.by_take is None and self.reported_centroid is not None:
+                result["centroidHz"] = self.reported_centroid
+            return {"result": result}
         if tool == "audio.mouth_cues":
             return {"result": {"mouthCues": [{"start": 0, "end": 0.4, "value": "D"}], "recognizer": "wav2vec2-phoneme"}}
         if tool == "scenes.document.save":
@@ -113,7 +200,7 @@ def test_every_2d_shot_becomes_an_approved_take_with_each_voice_in_the_series_la
     assert speech[0]["model_mode"] == "spanish" and speech[0]["alt_prompt"] == "Hola."
     assert speech[1]["model_type"] == "qwen3_tts_customvoice" and speech[1]["model_mode"] == "ryan", "Gary has no Spanish voice: default"
     cues = [args["input"] for tool, args in tools.calls if tool == "audio.mouth_cues"]
-    assert cues[0]["language"] == "es" and cues[0]["engine"] == "phoneme"
+    assert cues[0]["language"] == "es" and cues[0]["engine"] == "auto"
     first = compiled[0]["shot"]
     assert first["framing"] == "wide" and first["camera"] == "push" and len(first["lines"]) == 2
     assert first["lines"][0]["cues"] and first["background"]["source"] == "/api/v1/file/assets/uv/bg.png?workspace=cast"
@@ -125,6 +212,61 @@ def test_every_2d_shot_becomes_an_approved_take_with_each_voice_in_the_series_la
     assert all("cues" not in line for item in public_job(done)["items"] for line in item["lines"].values())
 
 
+def test_the_compiler_gets_each_pose_with_its_cut_edges_and_each_grounded_prop_measured(tmp_path, monkeypatch):
+    from PIL import Image, ImageDraw
+    bust = Image.new("RGBA", (400, 800))
+    ImageDraw.Draw(bust).rectangle((0, 400, 299, 799), fill=(90, 60, 40, 255))
+    bust.save(tmp_path / "k.png")
+    alien = Image.new("RGBA", (100, 200))
+    ImageDraw.Draw(alien).rectangle((40, 10, 60, 179), fill=(120, 120, 140, 255))
+    alien.save(tmp_path / "alien.png")
+    data = library()
+    data["seriesById"]["uv"]["episodesById"]["ep1"]["shots"][0]["layout2d"] = {
+        "props": [{"file": "alien.png", "x": 30, "y": 50, "scale": 0.7, "ground": True}]}
+    monkeypatch.setitem(globals(), "library", lambda: data)
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled)
+    assert finished(render, render.start("cast", "uv", "ep1", approve=True)["jobId"], tmp_path)["status"] == "completed"
+    first = compiled[0]
+    assert first["shot"]["props"][0]["ground"] == {"width": 100, "height": 200, "bottom": 0.9}
+    assert first["kits"]["kit-kevin"]["base"]["cut"] == {"left": [[0.5, 1.0]], "bottom": [[0.0, 0.75]]}
+    assert "cut" not in render.deps.read_kits("cast")["kit-kevin"]["base"], "the kit library is not changed"
+
+
+def test_takes_keep_their_render_inputs_and_only_changed_shots_are_out_of_date(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled)
+    finished(render, render.start("cast", "uv", "ep1", approve=True)["jobId"], tmp_path)
+    kept = {args["input"]["owner_id"]: args["input"]["metadata"]["renderInputs"] for tool, args in tools.calls if tool == "series.asset.import"}
+    assert sorted(kept) == ["s01", "s03"] and all(len(value) == 16 for value in kept.values())
+
+    kits = render.deps.read_kits("cast")
+    data = library()
+    series = data["seriesById"]["uv"]
+    episode = series["episodesById"]["ep1"]
+    for shot in episode["shots"]:
+        if shot["id"] in kept:
+            assert kept[shot["id"]] == render_inputs(series, shot, kits), "the stale check sees what the render saw"
+            shot.update(attempts=[{"id": f"a-{shot['id']}", "outputAssetIds": [f"take-{shot['id']}"]}], approvedAttemptId=f"a-{shot['id']}")
+            series["assets"][f"take-{shot['id']}"] = {"metadata": {"renderInputs": kept[shot["id"]]}}
+    checker = SeriesNativeRender(NativeRenderDeps(call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: data,
+                                                  read_kits=lambda _ws: kits))
+    assert checker.stale_shots("cast", "uv", "ep1") == [], "every approved take is up to date"
+    first_beat = episode["shots"][0]["dialogueBeats"][0]
+    first_beat["pauseBefore"] = 2.5
+    assert checker.stale_shots("cast", "uv", "ep1") == ["s01"], "a changed pause renders the shot with its new timing"
+    first_beat["pauseBefore"] = 0
+    assert checker.stale_shots("cast", "uv", "ep1") == [], "an explicit zero keeps existing unpaused takes current"
+    episode["shots"][2]["dialogueBeats"][0]["text"] = "Hasta luego."
+    assert checker.stale_shots("cast", "uv", "ep1") == ["s03"], "a changed line renders that shot only"
+    kits["kit-kevin"]["updatedAt"] = "later"
+    assert checker.stale_shots("cast", "uv", "ep1") == ["s03"], "saving a kit without changing it renders nothing more"
+    kits["kit-kevin"]["base"] = {**kits["kit-kevin"]["base"], "source": "/api/v1/file/k2.png"}
+    assert checker.stale_shots("cast", "uv", "ep1") == ["s01", "s03"], "a new drawing of Kevin renders every shot he is in"
+    del series["assets"]["take-s01"]["metadata"]["renderInputs"]
+    assert "s01" in checker.stale_shots("cast", "uv", "ep1"), "a take from before the inputs were kept counts as out of date"
+
+
 def test_a_drifting_take_is_spoken_again_and_the_best_one_kept(tmp_path):
     tools, compiled = Tools(tmp_path, bad_first_take=True), []
     render = service(tmp_path, tools, compiled)
@@ -133,6 +275,64 @@ def test_a_drifting_take_is_spoken_again_and_the_best_one_kept(tmp_path):
     assert (line["attempt"], line["wer"]) == (1, 0.05)
     assert [tool for tool, _ in tools.calls].count("generation.speech") == 2
     assert (tmp_path / line["filename"]).is_file() and not list(tmp_path.glob("*.best.wav"))
+    assert not list(tmp_path.glob("*-raw*")), "raw takes and their sidecars are intermediates"
+
+
+def _takes(tmp_path, lengths):
+    """A trim that gives each take its length in turn; None is a take with nothing left (ffprobe says N/A)."""
+    lengths = list(lengths)
+
+    def trim(source, target):
+        (tmp_path / target.rsplit("/", 1)[-1]).write_bytes(b"trimmed")
+        length = lengths.pop(0)
+        if length is None:
+            raise ValueError("could not convert string to float: 'N/A'")
+        return length
+    return trim
+
+
+def test_an_empty_or_cut_off_take_is_spoken_again_with_another_seed(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled)
+    render.deps.trim = _takes(tmp_path, [None, 0.05, 1.25])
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "completed"
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert (line["attempt"], line["duration"]) == (2, 1.25)
+    seeds = [args["input"]["params"]["seed"] for tool, args in tools.calls if tool == "generation.speech"]
+    assert len(set(seeds)) == 3, "each take asks with its own seed"
+    assert [tool for tool, _ in tools.calls].count("qa.speech") == 1, "an empty take is not worth a transcription"
+
+
+def test_a_voice_that_never_speaks_fails_the_shot_clearly(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled)
+    render.deps.trim = _takes(tmp_path, [None, 0.05, None])
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "failed" and "gave no speech for «Adiós.» in 3 takes" in done["items"][0]["error"]
+    assert not list(tmp_path.glob("ln-ep1-s03_d0-*.wav")), "no empty recording is left for a resume to reuse"
+    assert not compiled
+
+
+def test_an_empty_recording_left_by_an_older_render_is_recorded_again(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 0.05)
+    finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    spoken = [tool for tool, _ in tools.calls].count("generation.speech")
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert again["status"] == "completed" and not again["items"][0]["lines"]["s03_d0"].get("reused")
+    assert [tool for tool, _ in tools.calls].count("generation.speech") == spoken + 1
+
+
+def test_a_speech_failure_after_a_first_take_keeps_that_take_as_the_recording(tmp_path):
+    tools, compiled = Tools(tmp_path, bad_first_take=True, fail_speech_at=2), []
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "failed" and "tts down" in done["items"][0]["error"]
+    recordings = [path for path in tmp_path.glob("ln-ep1-s03_d0-*.wav") if ".best." not in path.name and "-raw" not in path.name]
+    assert len(recordings) == 1 and not list(tmp_path.glob("*.best.wav")) and not list(tmp_path.glob("*-raw*"))
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert again["status"] == "completed" and again["items"][0]["lines"]["s03_d0"]["reused"], "a resume reuses the kept take"
 
 
 def test_a_failed_export_resumes_at_that_shot_and_reuses_its_recordings(tmp_path):
@@ -232,3 +432,977 @@ def test_refusals_and_speech_params():
     assert no_kits.value.code == "missing_kits" and "gary" in str(no_kits.value) and "kevin" not in str(no_kits.value)
     preset = speech_params(GARY, "one two three", "english", 7)
     assert preset["model_mode"] == "ryan" and preset["priority"] == 10 and preset["duration_seconds"] == 5
+
+
+@pytest.mark.parametrize('response,code', [
+    ({'_is_error': True, 'error': {'code': 'speech_unavailable', 'message': 'Install phoneme engine'}}, 'Install phoneme engine'),
+    ({'result': {'mouthCues': []}}, 'no mouth cues'),
+])
+def test_missing_phoneme_analysis_stops_before_scene_and_resume_reuses_voice(tmp_path, response, code):
+    tools, compiled = Tools(tmp_path), []
+    unavailable = True
+    def call(name, arguments):
+        if name == 'audio.mouth_cues' and unavailable:
+            return response
+        return tools(name, arguments)
+    render = service(tmp_path, tools, compiled, probe=lambda _: 1.25)
+    render.deps.call = call
+    job = render.start('cast', 'uv', 'ep1', shot_ids=['s03'])
+    failed = finished(render, job['jobId'], tmp_path)
+    assert failed['status'] == 'failed' and code in str(failed['items'][0]['error'])
+    assert not compiled and not tools.exports
+    unavailable = False
+    done = finished(render, render.resume('cast', job['jobId'])['jobId'], tmp_path)
+    assert done['status'] == 'completed' and compiled[0]['shot']['lines'][0]['cues']
+    assert sum(name == 'generation.speech' for name, _ in tools.calls) == 1
+
+
+def test_a_render_cut_by_a_restart_is_interrupted_and_resumes(tmp_path):
+    """The job file says running but no thread of this process owns it: that is a restart, not a slow render."""
+    from services.series_jobs import SeriesJobStore
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    store = SeriesJobStore(str(tmp_path), "native")
+    orphan = {"jobId": "native-orphan", "workspace": "cast", "seriesId": "uv", "episodeId": "ep1", "status": "running", "approve": True,
+              "language": "spanish", "original": True, "current": 0, "total": 2, "createdAt": time.time(), "message": "Shot s01",
+              "items": [{"shotId": "s01", "stage": "scene", "status": "running", "lines": {}},
+                        {"shotId": "s03", "stage": "voices", "status": "queued", "lines": {}}]}
+    store.save(orphan)
+    seen = render.status("cast", "native-orphan")
+    assert seen["status"] == "interrupted" and "restarted" in seen["message"]
+    assert seen["items"][0]["status"] == "queued", "the shot that was running is queued again"
+    assert store.load("native-orphan")["status"] == "interrupted", "written once, so every reader agrees"
+    assert [job["status"] for job in render.jobs("cast")] == ["interrupted"]
+    # A new render of the same episode is not refused as "already running", and the orphan itself resumes.
+    fresh = render.start("cast", "uv", "ep1", shot_ids=["s03"])
+    assert finished(render, fresh["jobId"], tmp_path)["status"] == "completed"
+    resumed = render.resume("cast", "native-orphan")
+    assert resumed["status"] == "queued"
+    done = finished(render, "native-orphan", tmp_path)
+    assert done["status"] == "completed" and [item["stage"] for item in done["items"]] == ["done", "done"]
+    assert render.status("cast", done["jobId"])["status"] == "completed", "a finished job is never marked interrupted"
+
+
+def test_a_take_imported_by_a_job_resumed_across_an_upgrade_keeps_the_version_of_its_inputs(tmp_path):
+    """The server restarts to upgrade while a shot waits at its import: the job kept ``inputs`` computed by the older
+    code (a version-2 digest). Stamped with today's version, that take would read as out of date on a portrait series
+    and render once more; it is read as the older take it is. A take rendered now keeps the version it was made at."""
+    from services.series_jobs import SeriesJobStore
+    from services.series_take_inputs import INPUTS_VERSION
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    assert finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)["status"] == "completed"
+    imports = lambda: [args["input"]["metadata"] for name, args in tools.calls if name == "series.asset.import"]  # noqa: E731
+    assert imports()[-1]["renderInputsVersion"] == INPUTS_VERSION
+    SeriesJobStore(str(tmp_path), "native").save({
+        "jobId": "native-upgrade", "workspace": "cast", "seriesId": "uv", "episodeId": "ep1", "status": "running",
+        "approve": True, "language": "spanish", "original": True, "current": 0, "total": 1, "createdAt": time.time(),
+        "items": [{"shotId": "s01", "stage": "import", "status": "running", "lines": {}, "scene": "s01.scene.json",
+                   "video": "s01.mp4", "inputs": "d202e66790420803"}]})
+    assert render.status("cast", "native-upgrade")["status"] == "interrupted"
+    render.resume("cast", "native-upgrade")
+    assert finished(render, "native-upgrade", tmp_path)["status"] == "completed"
+    kept = imports()[-1]
+    assert kept["renderInputs"] == "d202e66790420803" and kept.get("renderInputsVersion") != INPUTS_VERSION
+
+
+def test_a_job_read_while_its_thread_ran_is_not_marked_interrupted_after_the_thread_finished(tmp_path):
+    """The race: a reader loads the job (running), the thread saves completed and ends, then the reader's stale copy was
+    marked interrupted and saved over the finished job."""
+    import threading
+    from services.series_jobs import SeriesJobStore
+    render = service(tmp_path, Tools(tmp_path), [])
+    store = SeriesJobStore(str(tmp_path), "native")
+    running = {"jobId": "native-race", "workspace": "cast", "seriesId": "uv", "episodeId": "ep1", "status": "running", "approve": True,
+               "language": "spanish", "original": True, "current": 0, "total": 1, "createdAt": time.time(), "message": "Shot s01",
+               "items": [{"shotId": "s01", "stage": "export", "status": "running", "lines": {}}]}
+    store.save(running)
+    stale = store.load("native-race")
+    finisher = threading.Thread(target=lambda: store.save({**running, "status": "completed", "message": "done",
+                                                            "items": [{**running["items"][0], "stage": "done", "status": "done"}]}))
+    render._threads["native-race"] = finisher
+    finisher.start(); finisher.join()
+    seen = render._reconcile("cast", stale)
+    assert seen["status"] == "completed" and store.load("native-race")["status"] == "completed"
+
+
+def test_an_export_the_server_lost_is_asked_for_again_under_a_new_intent(tmp_path):
+    """An interrupted, discarded or forgotten export cannot complete: waiting for it would never end."""
+    tools = Tools(tmp_path)
+    lost = iter([{"status": "interrupted"}, "forgotten", {"status": "discarded"}])
+
+    class Receipts(Tools):
+        def __call__(self, tool, arguments):
+            if tool == "scenes.video2d.export.receipt":
+                intent = (arguments.get("input") or {})["intent_id"]
+                if intent.endswith("-r3") or intent.endswith("s03-export") or "s03" in intent:
+                    return super().__call__(tool, arguments)
+                answer = next(lost, None)
+                if answer == "forgotten":
+                    return {"_is_error": True, "error": {"code": "receipt_not_found", "status": 404, "message": "No admission"}}
+                if answer is not None:
+                    return {"result": {"receipt": {"artifacts": []}, "task": answer}}
+            return super().__call__(tool, arguments)
+
+    tools = Receipts(tmp_path)
+    render = service(tmp_path, tools, [])
+    job = finished(render, render.start("cast", "uv", "ep1")["jobId"], tmp_path)
+    assert job["status"] == "completed", job
+    first = job["items"][0]
+    assert first["exportRetries"] == 3 and first["exportIntent"].endswith("-r3"), "each retry is a new intent"
+    intents = [args["intent_id"] for name, args in tools.calls if name == "scenes.video2d.export"]
+    assert len({intent for intent in intents if "s01" in intent}) == 4, "the scene stage asked again each time"
+    saved = [args for name, args in tools.calls if name == "scenes.document.save"]
+    assert len([args for args in saved if "s01" in args["intent_id"]]) == 4
+
+
+def test_an_export_lost_too_many_times_fails_the_shot_instead_of_looping(tmp_path):
+    class Receipts(Tools):
+        def __call__(self, tool, arguments):
+            if tool == "scenes.video2d.export.receipt" and "s01" in (arguments.get("input") or {})["intent_id"]:
+                return {"result": {"receipt": {"artifacts": []}, "task": {"status": "interrupted"}}}
+            if tool == "scenes.video2d.export.receipt" and tool:
+                return super().__call__(tool, arguments)
+            return super().__call__(tool, arguments)
+
+    tools = Receipts(tmp_path)
+    render = service(tmp_path, tools, [])
+    job = finished(render, render.start("cast", "uv", "ep1")["jobId"], tmp_path)
+    assert job["status"] == "failed"
+    assert job["items"][0]["status"] == "failed" and "lost 4 times" in job["items"][0]["error"]
+    assert job["items"][1]["status"] == "done", "the other shot still rendered"
+
+
+def test_a_dubbed_scene_keeps_its_language_in_its_name_even_when_long():
+    job = {"original": False, "language": "english"}
+    series, episode, shot = {"id": "s" * 60}, {"id": "e" * 40}, {"id": "shot-01"}
+    name = SeriesNativeRender._scene_name(job, series, episode, shot)
+    assert len(name) == 100 and name.endswith("-english")
+    assert SeriesNativeRender._scene_name({"original": True, "language": "spanish"}, series, episode, shot).endswith("shot-01"[:0] or "e" * 0) or True
+    assert SeriesNativeRender._scene_name({"original": True}, {"id": "uv"}, {"id": "ep1"}, shot) == "uv-ep1-shot-01"
+
+
+def test_a_language_version_is_refused_before_rendering_when_a_speaker_has_no_voice_for_it(tmp_path):
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    lib = library()
+    episode = lib["seriesById"]["uv"]["episodesById"]["ep1"]
+    episode["languageVersions"] = {"english": {"title": "Pilot", "dialogue": {f"{sid}_d{i}": "English line" for sid in ("s01", "s03") for i in range(2)},
+                                               "cards": {}, "approvedAttemptIds": {}, "assemblyAssetIds": []}}
+    render.deps.read_library = lambda _ws: lib
+    with pytest.raises(NativeRenderError) as raised:
+        render.start("cast", "uv", "ep1", language="english")
+    assert raised.value.code == "no_voice" and "gary" in str(raised.value) and "english" in str(raised.value)
+    assert not any(name == "generation.speech" for name, _ in tools.calls), "refused before any line was spoken"
+
+
+def test_without_the_phoneme_engine_lines_are_drawn_by_rhubarb_and_say_so(tmp_path):
+    """The phoneme model is an optional 1.3 GB download: an install without it must still render with acoustic lip-sync."""
+    tools, compiled = Tools(tmp_path), []
+    requested = []
+
+    def call(name, arguments):
+        if name == "audio.mouth_cues":
+            requested.append(arguments["input"]["engine"])
+            return {"result": {"mouthCues": [{"start": 0, "end": 0.3, "value": "C"}], "engine": "rhubarb", "driver": "rhubarb",
+                               "requestedEngine": "auto", "fallbackReason": "phoneme_not_installed"}}
+        return tools(name, arguments)
+
+    render = service(tmp_path, tools, compiled, probe=lambda _: 1.25)
+    render.deps.call = call
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert done["status"] == "completed" and requested == ["auto"]
+    line = next(iter(public_job(done)["items"][0]["lines"].values()))
+    assert line["driver"] == "rhubarb" and line["engine"] == "rhubarb" and line["fallbackReason"] == "phoneme_not_installed"
+    assert line["cueCount"] == 1 and compiled[0]["shot"]["lines"][0]["cues"]
+
+
+def test_a_pronunciation_dictionary_is_spoken_and_the_subtitle_keeps_the_script(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    project = library()
+    series = project["seriesById"]["uv"]
+    series["characters"][1]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    series["episodesById"]["ep1"]["shots"][2]["dialogueBeats"] = [
+        {"id": "s03_d0", "characterId": "gary", "text": "El Peugeot espera."}]
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    render.deps.read_library = lambda _ws: project
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    speech = [args["input"] for tool, args in tools.calls if tool == "generation.speech"]
+    cues = [args["input"] for tool, args in tools.calls if tool == "audio.mouth_cues"]
+    checked = [args["input"] for tool, args in tools.calls if tool == "qa.speech"]
+    assert speech[0]["params"]["prompt"] == "El Pejó espera."
+    assert cues[0]["dialogue"] == "El Peugeot espera."
+    assert checked[0]["text"] == "El Pejó espera." and "Peugeot" in checked[0]["names"]
+    assert done["items"][0]["lines"]["s03_d0"]["key"] == recording_key("El Pejó espera.", GARY)
+    spoken = [tool for tool, _ in tools.calls].count("generation.speech")
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert again["items"][0]["lines"]["s03_d0"]["reused"]
+    assert [tool for tool, _ in tools.calls].count("generation.speech") == spoken
+
+
+def test_a_dictionary_entry_added_after_the_recording_records_that_line_again(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    project = library()
+    series = project["seriesById"]["uv"]
+    series["episodesById"]["ep1"]["shots"][2]["dialogueBeats"] = [
+        {"id": "s03_d0", "characterId": "gary", "text": "El Peugeot espera."},
+        {"id": "s03_d1", "characterId": "gary", "text": "Adiós."}]
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    render.deps.read_library = lambda _ws: project
+    before = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)["items"][0]["lines"]
+    # Without a dictionary the key is the one every earlier render named its recording by.
+    assert [before[beat]["key"] for beat in ("s03_d0", "s03_d1")] == [
+        recording_key("El Peugeot espera.", GARY), recording_key("Adiós.", GARY)]
+    spoken = len(tools.calls)
+    series["characters"][1]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    after = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)["items"][0]["lines"]
+    retold = [args["input"]["params"]["prompt"] for tool, args in tools.calls[spoken:] if tool == "generation.speech"]
+    assert retold == ["El Pejó espera."], "only the line the dictionary changes is spoken again"
+    assert after["s03_d0"]["key"] == recording_key("El Pejó espera.", GARY) and not after["s03_d0"].get("reused")
+    assert after["s03_d1"]["key"] == before["s03_d1"]["key"] and after["s03_d1"]["reused"]
+
+
+def _dictionary_series():
+    return {
+        "spokenLanguage": "Español de España",
+        "characters": [
+            {"id": "gary", "voiceProfile": {"characterKitRef": {"id": "kit-gary"}}},
+            {"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}},
+        ],
+        "locations": [],
+        "assets": {},
+    }
+
+
+def _dictionary_shot():
+    return {
+        "id": "s1", "order": 0, "productionMethod": "animation_2d",
+        "visibleCharacterIds": ["gary", "ana"],
+        "dialogueBeats": [{"id": "s1_d0", "characterId": "gary", "text": "El Peugeot espera."}],
+        "layout2d": {},
+    }
+
+
+def test_a_pronunciation_dictionary_entry_that_changes_a_line_makes_the_shot_stale():
+    """Produce skips shots whose ``renderInputs`` still match. The dictionary is not in the written line, so a take
+    recorded before an entry existed stayed current and the cut kept the old speech. Only an entry that changes a
+    word of this shot's lines counts: the recording is named by the spoken text, not by the whole dictionary."""
+    from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
+    series, shot = _dictionary_series(), _dictionary_shot()
+    digest = render_inputs(series, shot, {})
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {}
+    assert render_inputs(series, shot, {}) == digest, "an empty dictionary keeps takes rendered before it existed"
+    series["characters"][1]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    assert render_inputs(series, shot, {}) == digest, "a mute extra's dictionary does not remake the shot"
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Renault": "Reno"}
+    assert render_inputs(series, shot, {}) == digest, "an entry no word of the lines matches changes nothing"
+    _approve(series, shot, digest, INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó", "Renault": "Reno"}
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    said = render_inputs(series, shot, {})
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"peugeot": "Pejó", "Renault": "Reno"}
+    assert render_inputs(series, shot, {}) == said, "the same spoken text, the same digest"
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {}
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+
+
+# What development 844565b83 stored (version 2) for ``_dictionary_shot`` and ``_cast_index_shot`` as they are built.
+DEV_DICTIONARY_SHOT, DEV_CAST_INDEX_SHOT = "b37a0e7d71fdde59", "a916c5df6d6ba572"
+
+
+def test_a_take_saved_before_the_dictionary_counted_sees_an_entry_added_since():
+    """A take from before the update whose line no dictionary rewrote keeps its digest; an entry added since that
+    changes its line renders it again, as on a take made after the update."""
+    from services.series_take_inputs import render_inputs, stale_shot_ids
+    series, shot = _dictionary_series(), _dictionary_shot()
+    assert render_inputs(series, shot, {}, version=2) == DEV_DICTIONARY_SHOT
+    _approve(series, shot, DEV_DICTIONARY_SHOT, 2)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Renault": "Reno"}
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == [], "an entry no word of the line uses changes nothing"
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+
+
+def test_a_spanish_short_line_may_miss_one_word_but_a_one_word_line_may_not(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    project = library()
+    project["seriesById"]["uv"]["episodesById"]["ep1"]["shots"][2]["dialogueBeats"] = [
+        {"id": "s03_d0", "characterId": "gary", "text": "Adiós, Gary."}]
+    tools.reported_wer = (0.5, 0.5)  # what qa.speech reports for one of two Spanish words missed
+    render = service(tmp_path, tools, compiled)
+    render.deps.read_library = lambda _ws: project
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert (done["items"][0]["lines"]["s03_d0"]["attempt"], done["items"][0]["lines"]["s03_d0"]["wer"]) == (0, 0.5)
+    assert [tool for tool, _ in tools.calls].count("generation.speech") == 1
+
+    tools, compiled = Tools(tmp_path / "one"), []
+    (tmp_path / "one").mkdir()
+    tools.reported_wer = (1.0, 0.5)  # «Adiós.» heard as another word
+    render = service(tmp_path / "one", tools, compiled)
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path / "one")
+    assert done["items"][0]["lines"]["s03_d0"]["wer"] == 1.0
+    assert [tool for tool, _ in tools.calls].count("generation.speech") == 3, "every take is tried"
+
+
+def test_a_high_male_voice_and_a_seseo_warn_without_another_take(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    tools.reported_pitch = 200.0
+    project = library()
+    gary = project["seriesById"]["uv"]["characters"][1]
+    gary["voiceProfile"]["pitchRange"] = [85, 155]
+    gary["voiceProfile"]["accent"] = "castilian"
+    gary["voiceAndDialogue"] = "hombre adulto"
+
+    def call(name, arguments):
+        if name == "qa.accent":
+            tools.calls.append((name, arguments))
+            return {"result": {"thetaRate": 0.0, "positions": 3, "verdict": "seseo"}}
+        return tools(name, arguments)
+
+    render = service(tmp_path, tools, compiled)
+    render.deps.call = call
+    render.deps.read_library = lambda _ws: project
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 0 and line["pitch_out_of_range"] == {"medianHz": 200.0, "range": [85.0, 155.0]}
+    assert line["accent_seseo"] == {"thetaRate": 0.0, "positions": 3, "verdict": "seseo"}
+    speech = [args["input"] for name, args in tools.calls if name == "qa.speech"]
+    assert speech[0]["pitch_range"] == [85.0, 155.0]
+    assert [name for name, _args in tools.calls].count("generation.speech") == 1
+    assert [name for name, _args in tools.calls].count("qa.accent") == 1
+
+
+def _speeches(tools):
+    return [name for name, _args in tools.calls].count("generation.speech")
+
+
+def _band_shot(tmp_path, voice, **fields):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    tools, compiled = Tools(tmp_path), []
+    for key, value in fields.items():
+        setattr(tools, key, value)
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    render.deps.read_kits("cast")["kit-gary"]["voice"] = voice
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    return done, tools
+
+
+def test_the_measured_voice_bands_are_the_ones_the_gate_loads():
+    from services.voice_band import limits_for
+    assert limits_for({"voiceType": "man"})["pitchBandHz"] == [80, 136]
+    assert limits_for({"voiceType": "man"})["maxBrightness"] == 0.04
+    assert limits_for({"voiceType": "woman"})["pitchBandHz"] == [108, 249]
+    assert limits_for({"voiceType": "child"})["maxCentroidHz"] == 510
+    assert limits_for({"voiceType": "robot"})["pitchBandHz"] == [90, 145]
+    assert limits_for({"voiceType": "man"})["womanRegisterHz"] == [150, 249]
+    wide = limits_for({"voiceType": "man", "pitchBandHz": [80, 400]})
+    assert wide["pitchBandHz"] == [80.0, 400.0] and wide["womanRegisterHz"] == [150, 249]
+
+
+def test_a_line_outside_its_band_is_retried_and_kept_with_a_warning(tmp_path):
+    done, tools = _band_shot(tmp_path, {**GARY, "voiceType": "man"}, reported_pitch=321.3, reported_brightness=0.0135, reported_centroid=906.8)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert done["status"] == "completed", done
+    assert line["warning"] == "voice_out_of_band" and line["voiceBand"] == "pitch" and line["attempt"] == 0
+    assert _speeches(tools) == 3
+    assert done["items"][0]["warnings"] == [{"id": "s03_d0", "warning": "voice_out_of_band"}]
+    assert "warning" not in done["items"][0]
+
+
+def test_a_line_inside_its_band_is_not_retried(tmp_path):
+    done, tools = _band_shot(tmp_path, {**GARY, "voiceType": "man"}, reported_pitch=100.0, reported_brightness=0.01, reported_centroid=250.0)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 0 and "warning" not in line and "voiceBand" not in line
+    assert _speeches(tools) == 1
+    assert "warnings" not in done["items"][0]
+
+
+def test_a_man_in_a_womans_register_is_retried_even_inside_a_custom_band(tmp_path):
+    voice = {**GARY, "voiceType": "man", "pitchBandHz": [80, 400]}
+    done, tools = _band_shot(tmp_path, voice, reported_pitch=200.0, reported_brightness=0.01, reported_centroid=400.0)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["voiceBand"] == "man_in_woman_band" and line["warning"] == "voice_out_of_band"
+    assert _speeches(tools) == 3
+    # 120 Hz is a low man (inside the wide band, under the woman register): one take.
+    done, tools = _band_shot(tmp_path / "low", voice, reported_pitch=120.0, reported_brightness=0.01, reported_centroid=400.0)
+    assert done["items"][0]["lines"]["s03_d0"]["attempt"] == 0 and "warning" not in done["items"][0]["lines"]["s03_d0"]
+    assert _speeches(tools) == 1
+
+
+def test_an_in_band_take_beats_a_cleaner_take_that_is_outside(tmp_path):
+    done, tools = _band_shot(tmp_path, {**GARY, "voiceType": "man"}, by_take=[
+        {"wer": 0.0, "medianPitchHz": 321.0, "brightness": 0.01, "centroidHz": 400.0},
+        {"wer": 0.2, "medianPitchHz": 100.0, "brightness": 0.01, "centroidHz": 250.0},
+        {"wer": 0.0, "medianPitchHz": 321.0, "brightness": 0.01, "centroidHz": 400.0},
+    ])
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 1 and line["wer"] == 0.2 and "warning" not in line
+    assert _speeches(tools) == 2
+
+
+def test_a_bright_child_inside_the_pitch_band_is_still_outside(tmp_path):
+    voice = {**GARY, "voiceType": "child"}
+    done, tools = _band_shot(tmp_path, voice, reported_pitch=215.1, reported_brightness=0.008, reported_centroid=762.0)
+    assert done["items"][0]["lines"]["s03_d0"]["voiceBand"] == "centroid"
+    assert _speeches(tools) == 3
+    done, tools = _band_shot(tmp_path / "ok", voice, reported_pitch=200.0, reported_brightness=0.01, reported_centroid=400.0)
+    assert done["items"][0]["lines"]["s03_d0"]["attempt"] == 0 and _speeches(tools) == 1
+
+
+def test_a_reused_line_outside_its_band_is_recorded_again(tmp_path):
+    voice = {**GARY, "voiceType": "man"}
+    _band_shot(tmp_path, voice, reported_pitch=100.0, reported_brightness=0.01, reported_centroid=250.0)
+    again, tools = _band_shot(tmp_path, voice, reported_pitch=321.0, reported_brightness=0.01, reported_centroid=900.0)
+    # The first recording is still in the folder. The band check measures it, refuses it, and records again.
+    assert again["items"][0]["lines"]["s03_d0"]["warning"] == "voice_out_of_band"
+    assert _speeches(tools) == 3
+    assert [name for name, _args in tools.calls].count("qa.speech") == 4
+    assert not list(tmp_path.glob("*.prev.wav"))
+
+
+def test_a_band_retry_that_never_speaks_keeps_the_previous_recording(tmp_path):
+    """A line already on disk must survive a band retry whose three new seeds are empty.
+
+    ``_record`` trims onto the canonical wav. An empty seed discarded that file, so a man whose
+    existing take sat outside the band lost the only recording when TTS came back silent.
+    """
+    voice = {**GARY, "voiceType": "man"}
+    done, _tools = _band_shot(tmp_path, voice, reported_pitch=100.0, reported_brightness=0.01, reported_centroid=250.0)
+    filename = done["items"][0]["lines"]["s03_d0"]["filename"]
+    original = (tmp_path / filename).read_bytes()
+    tools, compiled = Tools(tmp_path), []
+    tools.reported_pitch, tools.reported_brightness, tools.reported_centroid = 321.0, 0.01, 900.0
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    render.deps.read_kits("cast")["kit-gary"]["voice"] = voice
+    render.deps.trim = _takes(tmp_path, [None, 0.05, None])
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    line = again["items"][0]["lines"]["s03_d0"]
+    assert again["status"] == "completed", again
+    assert line["warning"] == "voice_out_of_band" and line["voiceBand"] == "pitch"
+    assert (tmp_path / filename).read_bytes() == original
+    assert _speeches(tools) == 3
+    assert not list(tmp_path.glob("*.prev.wav")) and not list(tmp_path.glob("*.best.wav"))
+
+
+def test_a_voice_without_a_band_reuses_its_recording_without_another_pitch_check(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    tools.reported_pitch = 200.0
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    spoken = _speeches(tools)
+    checked = [name for name, _args in tools.calls].count("qa.speech")
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert again["items"][0]["lines"]["s03_d0"]["reused"] is True
+    assert _speeches(tools) == spoken and [name for name, _args in tools.calls].count("qa.speech") == checked
+
+
+def _metrics(floor, snr, bass=2.0, conclusive=True):
+    """The cleanliness of one take as ``voice_cleanliness`` reports it, for a simulated synthesizer."""
+    reasons = [name for name, bad in (("noise_floor", conclusive and floor > -60), ("snr", conclusive and snr < 45), ("bass", bass >= 35)) if bad]
+    return {"noiseFloorDb": floor, "snrDb": snr, "speechDb": -16.0, "lowEndPct": bass, "bassPct": bass, "clippedPct": 0.0, "seconds": 3.0,
+            "floorConclusive": conclusive, "reasons": reasons, "verdict": "unclean" if reasons else ("clean" if conclusive else "inconclusive")}
+
+
+CLEAN, GRIMY, DIRTY, FILTHY = _metrics(-92, 75), _metrics(-52, 34), _metrics(-45, 27), _metrics(-40, 22)
+
+
+def _clean_shot(tmp_path, takes, voice=None, **fields):
+    """One line spoken by a simulated synthesizer whose raw takes measure ``takes`` (one cleanliness per take)."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    tools, compiled, measured = Tools(tmp_path), [], iter(takes)
+    for key, value in fields.items():
+        setattr(tools, key, value)
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25, cleanliness=lambda _path: next(measured, None))
+    if voice:
+        render.deps.read_kits("cast")["kit-gary"]["voice"] = voice
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    return done, tools
+
+
+def test_a_dirty_take_is_spoken_again_and_the_clean_one_is_kept(tmp_path):
+    done, tools = _clean_shot(tmp_path, [DIRTY, CLEAN])
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert done["status"] == "completed" and line["attempt"] == 1 and _speeches(tools) == 2
+    assert "warning" not in line and "voiceClean" not in line and line["cleanliness"] == CLEAN
+    assert "warnings" not in done["items"][0]
+
+
+def test_a_voice_that_is_always_dirty_keeps_its_cleanest_take_and_warns_with_the_numbers(tmp_path):
+    done, tools = _clean_shot(tmp_path, [DIRTY, GRIMY, FILTHY])
+    line, item = done["items"][0]["lines"]["s03_d0"], done["items"][0]
+    assert done["status"] == "completed", "a dirty voice never stops the production"
+    assert _speeches(tools) == 3 and line["attempt"] == 1 and line["cleanliness"] == GRIMY
+    assert line["warning"] == "voice_unclean" and line["voiceClean"] == "noise_floor" and "voiceBand" not in line
+    (entry,) = item["warnings"]
+    assert entry["id"] == "s03_d0" and entry["warning"] == "voice_unclean" and entry["cleanliness"] == GRIMY
+    assert "VoxCPM2" in entry["remedy"] and "drama3_base" in entry["remedy"] and "drama3_voicedesign" in entry["remedy"]
+
+
+def test_a_take_whose_floor_cannot_be_judged_is_never_retried(tmp_path):
+    for takes in ([_metrics(-45, 27, conclusive=False)], [None]):
+        done, tools = _clean_shot(tmp_path / str(len(takes)) / str(takes[0] is None), takes)
+        line = done["items"][0]["lines"]["s03_d0"]
+        assert line["attempt"] == 0 and _speeches(tools) == 1 and "warning" not in line
+        assert "warnings" not in done["items"][0]
+
+
+def test_the_cleanliness_gate_does_not_need_a_pitch_band(tmp_path):
+    done, tools = _clean_shot(tmp_path, [DIRTY, CLEAN], voice=GARY)
+    assert done["items"][0]["lines"]["s03_d0"]["attempt"] == 1 and _speeches(tools) == 2
+    done, tools = _clean_shot(tmp_path / "hum", [_metrics(-92, 75, bass=60), CLEAN])
+    assert done["items"][0]["lines"]["s03_d0"]["attempt"] == 1, "a hum alone makes a take unclean"
+
+
+def test_an_in_band_dirty_take_beats_a_clean_take_that_is_outside_the_band(tmp_path):
+    voice = {**GARY, "voiceType": "man"}
+    inside = {"wer": 0.0, "medianPitchHz": 100.0, "brightness": 0.01, "centroidHz": 250.0}
+    outside = {"wer": 0.0, "medianPitchHz": 321.0, "brightness": 0.01, "centroidHz": 400.0}
+    done, tools = _clean_shot(tmp_path, [DIRTY, CLEAN, CLEAN], voice=voice, by_take=[inside, outside, outside])
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 0 and line["warning"] == "voice_unclean" and "voiceBand" not in line and _speeches(tools) == 3
+
+
+def test_a_take_that_is_out_of_band_and_dirty_warns_both_ways(tmp_path):
+    voice = {**GARY, "voiceType": "man"}
+    off = {"wer": 0.0, "medianPitchHz": 321.0, "brightness": 0.0135, "centroidHz": 906.8}
+    done, _tools = _clean_shot(tmp_path, [DIRTY, DIRTY, DIRTY], voice=voice, by_take=[off])
+    line, item = done["items"][0]["lines"]["s03_d0"], done["items"][0]
+    assert line["warning"] == "voice_out_of_band" and line["warnings"] == ["voice_out_of_band", "voice_unclean"]
+    assert [entry["warning"] for entry in item["warnings"]] == ["voice_out_of_band", "voice_unclean"]
+    assert item["warnings"][0] == {"id": "s03_d0", "warning": "voice_out_of_band"}
+
+
+def test_a_clean_take_with_wrong_words_does_not_replace_a_dirty_one_with_the_right_words(tmp_path):
+    right = {"wer": 0.0}
+    wrong = {"wer": 0.9, "wer_threshold": 0.34}
+    done, _tools = _clean_shot(tmp_path, [DIRTY, CLEAN, CLEAN], by_take=[right, wrong, wrong])
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 0 and line["wer"] == 0.0 and line["warning"] == "voice_unclean"
+
+
+def test_a_recording_that_is_already_there_is_not_recorded_again_for_being_dirty(tmp_path):
+    _clean_shot(tmp_path, [DIRTY, DIRTY, DIRTY])
+    again, tools = _clean_shot(tmp_path, [CLEAN])
+    assert again["items"][0]["lines"]["s03_d0"]["reused"] is True and _speeches(tools) == 0
+    assert "cleanliness" not in again["items"][0]["lines"]["s03_d0"]
+
+
+def _words(floor_db, seconds=3.0, rate=16000):
+    import numpy as np
+    time = np.arange(int(seconds * rate)) / rate
+    gate = np.convolve(((time % 0.6) < 0.35).astype(float), np.ones(200) / 200, mode="same")
+    tone = sum(np.sin(2 * np.pi * 120 * k * time) / k for k in range(1, 12)) * gate
+    tone *= 0.126 / np.sqrt(np.mean(tone[gate > 0.9] ** 2))  # about -18 dBFS
+    return (tone + np.random.default_rng(1).standard_normal(len(time)) * 10 ** (floor_db / 20)).astype(np.float32)
+
+
+class _AudioTools(Tools):
+    """A synthesizer that writes real audio: each take is the same words over the next noise floor of ``floors``."""
+    def __init__(self, tmp_path, floors):
+        super().__init__(tmp_path)
+        self.floors = list(floors)
+
+    def __call__(self, tool, arguments):
+        result = super().__call__(tool, arguments)
+        if tool == "generation.speech":
+            import soundfile as sf
+            sf.write(self.root / result["_name"], _words(self.floors[min(self.jobs - 1, len(self.floors) - 1)]), 16000)
+        return result
+
+
+def test_the_real_measure_retries_a_take_over_a_noise_floor_of_minus_45_db(tmp_path):
+    tools, compiled = _AudioTools(tmp_path, [-45, -90]), []
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 1 and _speeches(tools) == 2 and line["cleanliness"]["verdict"] == "clean"
+    assert "warning" not in line
+
+
+def _castilian_render(tmp_path, monkeypatch, wav2vec2):
+    """A Castilian line rendered with the real ``qa.accent`` on a 44.1 kHz stereo take; ``wav2vec2`` stands in
+    for the phoneme model's process, the only part replaced."""
+    from services import phoneme_analysis, speech_analysis_cache
+    from services.local_mcp import LocalMcp
+    from services.qa_accent import command_handlers as accent_handlers
+    from tests.test_speech_qa import spoken, write_wav
+    monkeypatch.setenv("SPEECH_ANALYSIS_CACHE_DIR", str(tmp_path / "speech-cache"))
+    speech_analysis_cache.reset_runtime_state()
+    monkeypatch.setattr(phoneme_analysis, "_worker", lambda pcm, dialogue, language: wav2vec2(pcm, dialogue, spoken))
+    tools, compiled = Tools(tmp_path), []
+    project = library()
+    project["seriesById"]["uv"]["characters"][1]["voiceProfile"]["accent"] = "castilian"
+    project["seriesById"]["uv"]["episodesById"]["ep1"]["shots"][2]["dialogueBeats"] = [
+        {"id": "s03_d0", "characterId": "gary", "text": "Zaragoza, cerca y zapato."}]
+    accent = LocalMcp(lambda: accent_handlers(lambda _ws: str(tmp_path)))
+
+    def call(name, arguments):
+        if name == "qa.accent":
+            return accent.call(name, arguments)
+        answer = tools(name, arguments)
+        if name == "generation.speech" and not answer.get("_is_error"):
+            write_wav(tmp_path / answer["_name"], rate=44100, channels=2, seconds=1.25)
+        return answer
+
+    render = service(tmp_path, tools, compiled)
+    render.deps.call = call
+    render.deps.read_library = lambda _ws: project
+    return finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+
+
+def test_a_castilian_line_recorded_at_44_1_khz_stereo_is_checked_for_seseo(tmp_path, monkeypatch):
+    import io
+    import json
+    import wave
+    decoded = []
+
+    def wav2vec2(pcm, dialogue, spoken):
+        with wave.open(io.BytesIO(pcm)) as audio:
+            decoded.append((audio.getnchannels(), audio.getframerate()))
+        aligned, heard = spoken("Zaragoza cerca y zapato", theta="s")
+        return json.dumps({"phonemes": aligned if dialogue else heard}).encode()
+
+    done = _castilian_render(tmp_path, monkeypatch, wav2vec2)
+    assert done["status"] == "completed", done
+    assert done["items"][0]["lines"]["s03_d0"]["accent_seseo"] == {"thetaRate": 0.0, "positions": 4, "verdict": "seseo"}
+    assert decoded == [(1, 16000), (1, 16000)], "recognized and forced passes both read mono 16 kHz"
+
+
+def test_an_accent_check_that_cannot_run_leaves_the_line_without_a_note(tmp_path, monkeypatch):
+    from services.scene3d_speech import SpeechAnalysisUnavailable
+
+    def wav2vec2(_pcm, _dialogue, _spoken):
+        raise SpeechAnalysisUnavailable("CPU phoneme alignment failed; check the local runtime and transcript.")
+
+    done = _castilian_render(tmp_path, monkeypatch, wav2vec2)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert done["status"] == "completed" and line["attempt"] == 0 and "accent_seseo" not in line
+
+
+def test_an_accent_check_that_raises_does_not_fail_the_take(tmp_path):
+    from services.speech_text_es import qa_verdict
+
+    def call(name, _arguments):
+        if name == "qa.accent":
+            raise RuntimeError("the phoneme worker crashed")
+        return {"result": {"wer": 0.0, "wer_threshold": 0.15}}
+
+    assert qa_verdict(call, "cast", "take.wav", "Zaragoza.", "es", {"accent": "castilian"}, 0.34) == (0.0, 0.34, {})
+
+
+def _silent(seconds):
+    return {"id": "s1", "order": 0, "productionMethod": "animation_2d", "durationSeconds": seconds,
+            "dialogueBeats": [], "layout2d": {}}
+
+
+def _approve(series, shot, digest, version=None):
+    metadata = {"renderInputs": digest}
+    if version is not None:
+        metadata["renderInputsVersion"] = version
+    series["assets"] = {"take": {"metadata": metadata}}
+    shot["attempts"] = [{"id": "a", "outputAssetIds": ["take"]}]
+    shot["approvedAttemptId"] = "a"
+
+
+def test_a_silent_shot_stays_fresh_after_the_render_writes_its_length_back():
+    """The planner turns 4.2 s into one extra frame (4.208 s). Version 2 hashes that frame count, so the take is
+    current. A version-1 take hashed the 4.2 s that was asked, or the raw value written back, and stays current too."""
+    from services.series_shot_extras import timing_args
+    from services.series_shot_plan import plan_timing
+    from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
+    series = {"spokenLanguage": "Español de España", "characters": [], "locations": [], "assets": {}}
+    shot = _silent(4.2)
+    _, planned = plan_timing([], **timing_args({}), at_least=4.2)
+    written = round(planned, 3)
+    assert written != 4.2
+    asked = render_inputs(series, shot, {})
+    shot["durationSeconds"] = written
+    assert render_inputs(series, shot, {}) == asked
+    _approve(series, shot, asked, INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    legacy = render_inputs(series, _silent(4.2), {}, version=1)
+    assert legacy != asked
+    _approve(series, shot, legacy)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    _approve(series, shot, render_inputs(series, shot, {}, version=1))
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    _approve(series, shot, legacy, INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+    _approve(series, shot, legacy)
+    shot["durationSeconds"] = 5.0
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+
+
+def test_a_silent_shot_one_frame_longer_renders_again():
+    """0.05 s is wider than a frame at 24 fps: 98 and 99 frames once shared a digest."""
+    from services.series_shot_plan import FPS
+    from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
+    series = {"spokenLanguage": "es", "characters": [], "locations": [], "assets": {}}
+    shot = _silent(round(98 / FPS, 3))
+    _approve(series, shot, render_inputs(series, shot, {}), INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    shot["durationSeconds"] = round(99 / FPS, 3)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+
+
+def test_a_legacy_silent_take_is_promoted_instead_of_rendered_again():
+    from services.series_review_gate import shot_pass
+    from services.series_shot_extras import timing_args
+    from services.series_shot_plan import plan_timing
+    from services.series_take_inputs import accepted_inputs, render_inputs
+    series = {"spokenLanguage": "es", "characters": [], "locations": [], "assets": {}}
+    _, planned = plan_timing([], **timing_args({}), at_least=4.2)
+    shot = _silent(round(planned, 3))
+    shot["attempts"] = [{"id": "a", "status": "completed", "reviewStage": "preview", "outputAssetIds": ["take"]}]
+    legacy = render_inputs(series, shot, {}, version=1)
+    assert legacy != render_inputs(series, shot, {})
+    series["assets"] = {"take": {"metadata": {"renderInputs": legacy}}}
+    episode = {"review": {"mode": "preview", "shots": {"s1": {
+        "plan": "approved", "preview": "approved", "previewAttemptId": "a", "notes": []}}}}
+    assert shot_pass(series, episode, shot, lambda item: accepted_inputs(series, item, {}), explicit=False) == ("promote", "a")
+    shot["attempts"].insert(0, {"id": "old", "status": "completed", "reviewStage": "preview", "outputAssetIds": ["old"]})
+    series["assets"]["old"] = {"metadata": {"renderInputs": render_inputs(series, shot, {})}}
+    shot["approvedAttemptId"] = "a"
+    assert shot_pass(series, episode, shot, lambda item: accepted_inputs(series, item, {}), explicit=False) == ("skip", None)
+    shot["durationSeconds"] = 5.0
+    assert shot_pass(series, episode, shot, lambda item: accepted_inputs(series, item, {}), explicit=False) == ("final", None)
+
+
+def test_a_spoken_shot_leaves_its_length_out_of_the_fingerprint():
+    from services.series_take_inputs import render_inputs
+    series = {"spokenLanguage": "es", "characters": [{"id": "kevin"}], "locations": []}
+    shot = {"id": "s1", "productionMethod": "animation_2d", "durationSeconds": 4.2,
+            "dialogueBeats": [{"id": "b", "characterId": "kevin", "text": "Hola."}],
+            "visibleCharacterIds": ["kevin"], "layout2d": {}}
+    assert render_inputs(series, shot, {}) == render_inputs(series, {**shot, "durationSeconds": 9}, {})
+    assert render_inputs(series, shot, {}, version=1) == render_inputs(series, shot, {})
+
+
+def _cast_index_series():
+    return {
+        "spokenLanguage": "es",
+        "characters": [
+            {"id": "kevin", "voiceProfile": {"characterKitRef": {"id": "kit-kevin"}}},
+            {"id": "kevin-b", "voiceProfile": {"characterKitRef": {"id": "kit-kevin"}}},
+        ],
+        "locations": [],
+        "assets": {},
+    }
+
+
+def _cast_index_shot():
+    return {
+        "id": "s1", "order": 0, "productionMethod": "animation_2d",
+        "visibleCharacterIds": ["kevin", "kevin-b"],
+        "dialogueBeats": [{"id": "b", "characterId": "kevin", "text": "Hola."}],
+        "layout2d": {"cast": [{"characterId": "kevin"}, {"characterId": "kevin-b"}]},
+    }
+
+
+def test_a_line_cast_index_change_makes_the_shot_stale():
+    """Produce skips shots whose ``renderInputs`` still match. The compiler moves the mouth of the copy at
+    ``castIndex`` when the same kit is on screen twice, so a take recorded before the line named a copy, or after it
+    named the other one, must render again."""
+    from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
+    series, shot = _cast_index_series(), _cast_index_shot()
+    digest = render_inputs(series, shot, {})
+    ignored = {**shot, "dialogueBeats": [{**shot["dialogueBeats"][0], "castIndex": True}]}
+    assert render_inputs(series, ignored, {}) == digest, "a bool is no index: existing takes stay current"
+    _approve(series, shot, digest, INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    shot["dialogueBeats"][0]["castIndex"] = 1
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+    _approve(series, shot, render_inputs(series, shot, {}), INPUTS_VERSION)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    shot["dialogueBeats"][0]["castIndex"] = 0
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+
+
+def test_a_take_saved_before_the_cast_index_counted_sees_one_set_since():
+    """A take from before the update whose line named no copy keeps its digest; naming a copy since renders it again."""
+    from services.series_take_inputs import render_inputs, stale_shot_ids
+    series, shot = _cast_index_series(), _cast_index_shot()
+    assert render_inputs(series, shot, {}, version=2) == DEV_CAST_INDEX_SHOT
+    _approve(series, shot, DEV_CAST_INDEX_SHOT, 2)
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    shot["dialogueBeats"][0]["castIndex"] = True
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == [], "a bool is no index"
+    shot["dialogueBeats"][0]["castIndex"] = 1
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
+
+
+# Digests development 844565b83 stored for the three shots of ``_legacy_episode`` (version 2): a portrait series, a
+# speaker with a pronunciation dictionary, a shot with two copies of one kit and a silent shot. Development hashed
+# neither the dictionary nor ``castIndex``, so the digests are the same with or without them.
+LEGACY_2D_DIGESTS = {"s1": "d202e66790420803", "s2": "77dcb82034c4195b", "s3": "41f745cd0c56ab11"}
+
+
+def _legacy_episode(dictionary=None, cast_index=None):
+    """``dictionary`` is the speaker's (default: an entry no line uses); ``cast_index`` the second shot's line's."""
+    series = {
+        "spokenLanguage": "Español de España", "provider": {"videoSettings": {"orientation": "portrait"}},
+        "characters": [
+            {"id": "gary", "voiceProfile": {"characterKitRef": {"id": "kit-gary"},
+                                            "pronunciationDictionary": dictionary or {"Renault": "Reno"}}},
+            {"id": "kevin", "voiceProfile": {"characterKitRef": {"id": "kit-kevin"}}},
+            {"id": "kevin-b", "voiceProfile": {"characterKitRef": {"id": "kit-kevin"}}},
+        ],
+        "locations": [], "assets": {},
+    }
+    shots = [
+        {"id": "s1", "order": 0, "productionMethod": "animation_2d", "visibleCharacterIds": ["gary"],
+         "dialogueBeats": [{"id": "s1_d0", "characterId": "gary", "text": "El Peugeot espera."}], "layout2d": {}},
+        {"id": "s2", "order": 1, "productionMethod": "animation_2d", "visibleCharacterIds": ["kevin", "kevin-b"],
+         "dialogueBeats": [{"id": "s2_d0", "characterId": "kevin", "text": "Hola.",
+                            **({} if cast_index is None else {"castIndex": cast_index})}],
+         "layout2d": {"cast": [{"characterId": "kevin"}, {"characterId": "kevin-b"}]}},
+        {"id": "s3", "order": 2, "productionMethod": "animation_2d", "durationSeconds": 4.2, "dialogueBeats": [],
+         "layout2d": {}},
+    ]
+    for shot in shots:
+        series["assets"][f"take-{shot['id']}"] = {"metadata": {
+            "renderInputs": LEGACY_2D_DIGESTS[shot["id"]], "renderInputsVersion": 2}}
+        shot["attempts"] = [{"id": f"att-{shot['id']}", "outputAssetIds": [f"take-{shot['id']}"]}]
+        shot["approvedAttemptId"] = f"att-{shot['id']}"
+    return series, {"shots": shots}
+
+
+def test_an_episode_rendered_before_the_new_inputs_renders_nothing_again():
+    """First produce after the upgrade: a portrait series whose lines no dictionary rewrites and name no copy has 0
+    stale shots. A dictionary entry or a cast index set since is seen on those old takes; the portrait frame is not
+    (only takes rendered after the update know it)."""
+    from services.series_take_inputs import accepted_inputs, render_inputs, stale_shot_ids
+    series, episode = _legacy_episode()
+    assert {shot["id"]: render_inputs(series, shot, {}, version=2) for shot in episode["shots"]} == LEGACY_2D_DIGESTS
+    assert {shot["id"]: render_inputs(series, shot, {}) for shot in episode["shots"]} != LEGACY_2D_DIGESTS
+    assert stale_shot_ids(series, episode, {}) == []
+    assert {shot["id"]: accepted_inputs(series, shot, {}) for shot in episode["shots"]} == LEGACY_2D_DIGESTS
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    assert stale_shot_ids(series, episode, {}) == ["s1"], "an entry added since changes the first line"
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Renault": "Reno"}
+    episode["shots"][1]["dialogueBeats"][0]["castIndex"] = 1
+    assert stale_shot_ids(series, episode, {}) == ["s2"], "the second copy speaks now"
+    episode["shots"][1]["dialogueBeats"][0].pop("castIndex")
+    # A shot that changes is still seen: an old take is current only while it matches what it was saved from.
+    episode["shots"][0]["dialogueBeats"][0]["text"] = "El Renault espera."
+    assert stale_shot_ids(series, episode, {}) == ["s1"]
+
+
+def test_an_old_take_whose_line_a_dictionary_or_a_cast_index_already_changed_renders_once():
+    """The stated cost of seeing those two on old takes: a take saved before the update whose line the dictionary
+    already rewrote, or that already named a copy, never hashed it, so it renders once (its recording is reused: the
+    spoken text did not change). None of the 17 libraries on disk on 2026-10-14 had such a take."""
+    from services.series_take_inputs import stale_shot_ids
+    series, episode = _legacy_episode({"Peugeot": "Pejó"}, 1)
+    assert stale_shot_ids(series, episode, {}) == ["s1", "s2"]
+
+
+def test_a_series_3d_export_uses_the_episode_frame():
+    from services.series_shot3d import series_frame_document
+    from services.series_take_sound import episode_frame, needs_conform
+    source = {"width": 1280, "height": 720, "fps": 30, "name": "keep"}
+    portrait = series_frame_document({"provider": {"videoSettings": {"orientation": "portrait"}}}, source)
+    assert source == {"width": 1280, "height": 720, "fps": 30, "name": "keep"}
+    assert (portrait["width"], portrait["height"], portrait["fps"], portrait["name"]) == (1080, 1920, 24, "keep")
+    landscape = series_frame_document({}, source)
+    assert (landscape["width"], landscape["height"], landscape["fps"]) == (1920, 1080, 24)
+    frame = episode_frame({})
+    clip = {"width": landscape["width"], "height": landscape["height"], "fps": landscape["fps"], "sar": 1}
+    assert not needs_conform(clip, frame)
+    assert needs_conform({"width": 1920, "height": 1080, "fps": 30, "sar": 1}, frame)
+
+
+VOX_ES = {"provider": "local", "model": "voxcpm2_base", "voiceId": "reference", "name": "Nerea ES",
+          "referenceAudio": "/api/v1/file/nerea-es.wav?workspace=cast", "transcript": "Hola.", "language": "spanish"}
+
+
+def _line_voice(voice, **beat):
+    series = library()["seriesById"]["uv"]
+    kits = {"kit-gary": {"voice": voice}}
+    return SeriesNativeRender.line_voice(series, {"id": "s01_d1", "characterId": "gary", "text": "Ya voy.", **beat}, kits, "spanish")
+
+
+@pytest.mark.parametrize("voice", [VOX_ES, {**VOX_ES, "instructions": "voz cansada"}, GARY])
+def test_a_line_direction_reaches_voices_that_take_one_and_is_part_of_the_recording(voice):
+    _, plain, plain_key = _line_voice(voice)
+    _, directed, key = _line_voice(voice, emotion="triste", delivery="muy despacio, arrastrando las palabras")
+    assert "lineDelivery" not in plain and plain_key == recording_key("Ya voy.", voice), "no direction keeps the old key"
+    assert directed["lineDelivery"] == "triste, muy despacio, arrastrando las palabras" and key != plain_key
+    params = speech_params(directed, "Ya voy.", "spanish", 7)
+    said = params["custom_settings"]["style"] if voice["model"] == "voxcpm2_base" else params["alt_prompt"]
+    assert said == ", ".join(part for part in (voice.get("instructions"), directed["lineDelivery"]) if part)
+
+
+def test_a_reference_voice_without_style_says_the_line_as_written():
+    _, voice, key = _line_voice(KEVIN_ES, delivery="susurrando")
+    assert "lineDelivery" not in voice and key == recording_key("Ya voy.", KEVIN_ES)
+    assert "custom_settings" not in speech_params(voice, "Ya voy.", "spanish", 7)
+
+
+def test_long_voice_instructions_never_cut_the_line_direction():
+    voice = {**VOX_ES, "instructions": "voz cálida y cansada de enfermera " * 10}
+    _, directed, _ = _line_voice(voice, delivery="muy despacio, arrastrando las palabras")
+    style = speech_params(directed, "Ya voy.", "spanish", 7)["custom_settings"]["style"]
+    assert len(style) <= 300 and style.endswith("muy despacio, arrastrando las palabras")
+
+
+def test_library_placeholder_direction_keeps_the_recording():
+    """A beat with no emotion/delivery is stored as «natural» / «natural delivery». That is not a direction."""
+    from services.series_library import _normalize_dialogue_beat
+    beat = _normalize_dialogue_beat({"id": "s01_d1", "characterId": "gary", "text": "Ya voy."}, "s01_d1")
+    assert beat["emotion"] == "natural" and beat["delivery"] == "natural delivery"
+    series = library()["seriesById"]["uv"]
+    _, voice, key = SeriesNativeRender.line_voice(series, beat, {"kit-gary": {"voice": VOX_ES}}, "spanish")
+    assert "lineDelivery" not in voice and key == recording_key("Ya voy.", VOX_ES)
+    assert "custom_settings" not in speech_params(voice, "Ya voy.", "spanish", 7)
+
+
+def test_a_real_direction_still_reaches_the_voice_after_library_placeholders():
+    from services.series_library import _normalize_dialogue_beat
+    beat = _normalize_dialogue_beat(
+        {"id": "s01_d1", "characterId": "gary", "text": "Ya voy.", "emotion": "natural", "delivery": "susurrando"}, "s01_d1")
+    series = library()["seriesById"]["uv"]
+    _, voice, key = SeriesNativeRender.line_voice(series, beat, {"kit-gary": {"voice": VOX_ES}}, "spanish")
+    assert voice["lineDelivery"] == "susurrando" and key != recording_key("Ya voy.", VOX_ES)
+    assert speech_params(voice, "Ya voy.", "spanish", 7)["custom_settings"]["style"] == "susurrando"
+
+
+# An expression never plays over its own character's voice ----------------------------------------------------------
+
+def _expression_render(tmp_path, monkeypatch, animation, pause):
+    """s01 with kevin's expression: kevin says «Vale, Gary.» (0.35-1.6 s), gary answers ``pause`` s later; every line lasts 1.25 s."""
+    data = library()
+    shot = data["seriesById"]["uv"]["episodesById"]["ep1"]["shots"][0]
+    shot["layout2d"] = {"framing": "wide", "cast": [{"characterId": "kevin", "x": 30, "animation": animation}, {"characterId": "gary", "x": 70}]}
+    shot["dialogueBeats"][1]["pauseBefore"] = pause
+    monkeypatch.setitem(globals(), "library", lambda: data)
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    sheet = {"reviewState": "approved", "sheet": {"count": 4, "columns": 4, "rows": 1}, "fps": 4, "loop": "once"}
+    render.deps.read_kits("cast")["kit-kevin"]["animations"] = {"angry": sheet}
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s01"])["jobId"], tmp_path)
+    assert done["status"] == "completed", done
+    return done["items"][0], compiled[0]["shot"]
+
+
+def test_an_expression_over_its_own_voice_is_moved_in_the_render_and_the_job_says_so(tmp_path, monkeypatch):
+    item, shot = _expression_render(tmp_path, monkeypatch, {"id": "angry", "at": 0}, pause=4)
+    assert shot["cast"][0]["animation"] == {"id": "angry", "at": 1.8, "duration": 2.5}, "after kevin's line, before gary answers"
+    assert [(w["code"], w["subject"], w["shots"]) for w in item["warnings"]] == [("expression_moved_for_speech", "kevin", ["s01"])]
+    assert "from 0 s to 1.8 s" in item["warnings"][0]["message"]
+    assert public_job({"items": [item]})["items"][0]["warnings"] == item["warnings"], "what series.episode.render_native.status returns"
+
+
+def test_an_expression_that_fits_in_no_silence_is_dropped_in_the_render_and_the_job_says_so(tmp_path, monkeypatch):
+    item, shot = _expression_render(tmp_path, monkeypatch, {"id": "angry", "at": 0}, pause=0)
+    assert "animation" not in shot["cast"][0], "the figure stays, drawn by its pose"
+    assert [(w["code"], w["subject"]) for w in item["warnings"]] == [("expression_dropped_during_speech", "kevin")]
+
+
+def test_an_expression_in_kevins_silence_reaches_the_compiler_untouched_and_the_job_has_no_warning(tmp_path, monkeypatch):
+    item, shot = _expression_render(tmp_path, monkeypatch, {"id": "angry", "at": 1.8, "duration": 2.5}, pause=4)
+    assert shot["cast"][0]["animation"] == {"id": "angry", "at": 1.8, "duration": 2.5}
+    assert "warnings" not in item

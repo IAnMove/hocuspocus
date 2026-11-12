@@ -1,0 +1,210 @@
+import { controlReason } from '../../i18n/controlLabel'
+import { useState } from 'react'
+import { Check, Loader2, RotateCcw, Trash2, WandSparkles, X } from 'lucide-react'
+import { isActiveJob, type AnimationJob } from '../../api/characterAnimationJobs'
+import { useUiTranslation } from '../../i18n'
+import { useStore } from '../../stores/useStore'
+import {
+  animationGroups, animationNotes, animationReference, animationState, animationsOf, canAddAnimation, freeAnimationId, isSheetCheckId, kitAnimations, kitCustomDefs, localized,
+  templateControls, type AnimationDef, type AnimationState, type KitAnimation,
+} from '../../lib/characterAnimations'
+import { contractOf } from '../../lib/characterAnimationDirections'
+import { characterImageModels, preferredCharacterImageModel } from '../../lib/characterImageModels'
+import type { CharacterKit, CharacterKitReviewState } from '../../lib/characterKit'
+import { AnimationAgentBadge } from './AnimationAgentBadge'
+import { AnimationSetBar } from './AnimationSetBar'
+import { AnimationSheetPlayer } from './AnimationSheetPlayer'
+import { CustomAnimationForm } from './CustomAnimationForm'
+import { useAnimationSets } from './useAnimationSets'
+import { pendingCustomDefs, useCharacterAnimations } from './useCharacterAnimations'
+import { useCharacterKitLibrary } from './useCharacterKitLibrary'
+
+const control = 'min-h-9 rounded-lg border border-border bg-bg-primary px-3 text-xs disabled:opacity-40'
+const small = 'inline-flex min-h-8 items-center gap-1 rounded-md border border-border px-2 text-[11px] disabled:opacity-40'
+const BADGE: Record<AnimationState, string> = {
+  none: 'border-border text-text-muted', pending: 'border-amber-400/40 text-amber-200',
+  approved: 'border-emerald-400/40 text-emerald-200', rejected: 'border-red-400/40 text-red-200',
+}
+
+type WalkMethod = 'poses' | 'video' | 'puppet'
+type Actions = {
+  busy: boolean; runs: Record<string, AnimationJob>
+  /** The latest completed job of each animation: its verdict on the sheet the card shows. */
+  finished: Record<string, AnimationJob>
+  make: (def: AnimationDef, remake?: string, method?: WalkMethod) => void; cancel: (jobId: string) => void
+  review: (id: string, state: CharacterKitReviewState) => void; remove: (id: string) => void
+}
+
+/** Pose by pose is the default. A guided clip or a puppet is opt-in, and only a catalog walk offers them. */
+function chosenMethod(value: string): WalkMethod {
+  return value === 'video' || value === 'puppet' ? value : 'poses'
+}
+
+function WalkMethodSelect({ id, value, disabled, onChange }: { id: string; value: WalkMethod; disabled: boolean; onChange: (method: WalkMethod) => void }) {
+  const { t } = useUiTranslation('characters')
+  return <label className="text-[11px] text-text-secondary">{t('animations.methodLabel')}
+    <select data-testid={`walk-method-${id}`} value={value} disabled={disabled} aria-label={t('animations.methodLabel')}
+      onChange={event => onChange(chosenMethod(event.target.value))} className={`${control} mt-1 block`}>
+      <option value="poses">{t('animations.methodPoses')}</option>
+      <option value="video">{t('animations.methodVideo')}</option>
+      <option value="puppet">{t('animations.methodPuppet')}</option>
+    </select>
+    {value === 'puppet' && <p data-testid={`puppet-note-${id}`} className="mt-1 text-[10px] text-text-muted">{t('animations.methodPuppetNote')}</p>}
+  </label>
+}
+
+/** Where a make job is: waiting for the GPU, a pose at a time, joining the sheet, or why it stopped (the poses made stay for the next try). */
+function RunProgress({ def, run }: { def: AnimationDef; run: AnimationJob }) {
+  const { t, i18n } = useUiTranslation('characters')
+  const headline = run.status === 'running' ? t(run.stage === 'sheet' ? 'animations.stage.sheet' : 'animations.stage.poses') : t(`animations.job.${run.status}`)
+  return <div className="space-y-1" role="status" data-testid="animation-progress">
+    <p className="text-[11px] text-text-secondary">{headline}{run.error ? ` — ${run.error}` : ''}</p>
+    <ul className="space-y-0.5 text-[11px]">{run.takes.map(take => {
+      const pose = def.poses.find(item => item.id === take.id)
+      return <li key={take.id} className={take.status === 'failed' ? 'text-red-300' : 'text-text-muted'}>
+        {pose ? localized(pose.label, i18n.language) : take.id}: {t(`animations.pose.${take.status}`)}{take.error ? ` — ${take.error}` : ''}
+      </li>
+    })}</ul>
+  </div>
+}
+
+/** What the automatic checks and the guide say of a finished sheet: the checks that failed, the poses whose legs missed it, and what to do. */
+function SheetNotes({ def, notes }: { def: AnimationDef; notes: NonNullable<ReturnType<typeof animationNotes>> }) {
+  const { t, i18n } = useUiTranslation('characters')
+  const checks = notes.checks.map(id => isSheetCheckId(id) ? t(`animations.notes.check.${id}`) : id).join(', ')
+  const poses = notes.poses.map(id => { const pose = def.poses.find(item => item.id === id); return pose ? localized(pose.label, i18n.language) : id }).join(', ')
+  return <div data-testid="animation-notes" className="space-y-0.5 text-[11px] text-amber-200">
+    {notes.checks.length > 0 && <p>{t('animations.notes.checks', { checks })}</p>}
+    {notes.poses.length > 0 && <p>{t('animations.notes.poses', { poses })}</p>}
+    <p className="text-text-muted">{t(def.guide === 'walk' ? 'animations.notes.remedyWalk' : 'animations.notes.remedy')}</p>
+  </div>
+}
+
+function MadeAnimation({ def, made, actions, how }: { def: AnimationDef; made: KitAnimation; actions: Actions; how: WalkMethod }) {
+  const { t, i18n } = useUiTranslation('characters')
+  // What the person can set on the card; the sheet's own facing and stride go to the card without being shown.
+  const controls = Object.entries(templateControls(made, def.template)).filter(([key]) => key !== 'sheetFacing' && key !== 'stride').map(([key, value]) => `${key} ${value}`).join(', ')
+  const notes = animationNotes(made, actions.finished[def.id])
+  return <div className="grid gap-3 sm:grid-cols-[14rem_minmax(0,1fr)]">
+    <AnimationSheetPlayer animation={made} title={localized(def.title, i18n.language)} />
+    <div className="space-y-2">
+      <ul className="flex flex-wrap gap-1.5">{made.frames.map(frame => {
+        const pose = def.poses.find(item => item.id === frame.id)
+        const missed = Boolean(notes?.poses.includes(frame.id))
+        return <li key={frame.id} className="w-16 space-y-1 text-center">
+          <img src={frame.source} alt={pose ? localized(pose.label, i18n.language) : frame.id} title={missed ? t('animations.notes.poseMissed') : undefined}
+            className={`aspect-[3/4] w-full rounded border ${missed ? 'border-amber-400' : 'border-border'} bg-bg-tertiary object-contain`} />
+          <button type="button" disabled={actions.busy} onClick={() => actions.make(def, frame.id)} className="w-full text-[10px] text-cyan-200 underline disabled:opacity-40"
+            aria-label={t('animations.remakePose', { pose: pose ? localized(pose.label, i18n.language) : frame.id })}>{t('animations.remake')}</button>
+        </li>
+      })}</ul>
+      {notes && <SheetNotes def={def} notes={notes} />}
+      <p className="text-[11px] text-text-muted">{t('animations.plays', { template: def.template, controls })}</p>
+      <div className="flex flex-wrap gap-1.5">
+        <button type="button" disabled={actions.busy || made.reviewState === 'approved'} className={small} onClick={() => actions.review(def.id, 'approved')}><Check size={12} />{t('animations.approve')}</button>
+        <button type="button" disabled={actions.busy || made.reviewState === 'rejected'} className={small} onClick={() => actions.review(def.id, 'rejected')}><X size={12} />{t('animations.reject')}</button>
+        <button type="button" disabled={actions.busy} className={small} onClick={() => actions.make(def, undefined, how)}><RotateCcw size={12} />{t('animations.makeAgain')}</button>
+        {made.guideVideo && <a className={small} href={made.guideVideo}>{t('animations.guideVideo')}</a>}
+        {made.clip && <a className={small} href={made.clip}>{t('animations.clip')}</a>}
+        <button type="button" disabled={actions.busy} className={small} onClick={() => actions.remove(def.id)}><Trash2 size={12} />{t('animations.delete')}</button>
+      </div>
+    </div>
+  </div>
+}
+
+/** Crear, or Reintentar after a stop (keeping the poses made), and Cancelar while it runs. */
+function MakeButtons({ def, run, actions, full, how }: { def: AnimationDef; run?: AnimationJob; actions: Actions; full: boolean; how: WalkMethod }) {
+  const { t } = useUiTranslation('characters')
+  const working = run ? isActiveJob(run) : false
+  const again = run?.remake ?? undefined
+  return <div className="flex gap-2">
+    <button type="button" disabled={actions.busy || full} className={`${small} text-cyan-200`} onClick={() => actions.make(def, again, again ? undefined : how)}>
+      {working ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
+      {t(run ? (working ? 'animations.working' : 'animations.tryAgain') : 'animations.make')}</button>
+    {run && working && run.status !== 'cancelling' && <button type="button" className={small} onClick={() => actions.cancel(run.jobId)}>{t('animations.cancel')}</button>}
+  </div>
+}
+
+function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: CharacterKit; actions: Actions }) {
+  const { t, i18n } = useUiTranslation('characters')
+  const [how, setHow] = useState<WalkMethod>('poses')
+  const state = animationState(kit, def.id)
+  const made = kitAnimations(kit)[def.id]
+  const run = actions.runs[def.id]
+  const contract = contractOf(def.id, { ...def, ...made })
+  return <article data-testid={`animation-${def.id}`} className="space-y-2 rounded-lg border border-border bg-bg-secondary p-3">
+    <header className="flex items-start justify-between gap-2">
+      <div className="min-w-0 flex-1">
+        <h5 className="text-sm font-medium">{localized(def.title, i18n.language)}</h5>
+        <p className="text-[11px] text-text-muted">{def.custom ? t('animations.custom.summary', { count: def.poses.length, view: t(`animations.view.${def.view}`) }) : localized(def.summary, i18n.language)}</p>
+        {contract.motion && contract.dir && <p data-testid="animation-contract" className="text-[10px] text-text-muted">{t('animations.contract', { motion: t(`animations.motion.${contract.motion}`), dir: t(`animations.dir.${contract.dir}`) })}</p>}
+      </div>
+      <div className="flex shrink-0 flex-wrap justify-end gap-1">
+        {made && <AnimationAgentBadge animation={made} />}
+        <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${BADGE[state]}`}>{t(`animations.state.${state}`)}</span>
+      </div>
+    </header>
+    {def.guide === 'walk' && <WalkMethodSelect id={def.id} value={how} disabled={actions.busy} onChange={setHow} />}
+    {run && <RunProgress def={def} run={run} />}
+    {made && !(run && isActiveJob(run)) && <MadeAnimation def={def} made={made} actions={actions} how={how} />}
+    {!made && !run && <p className="text-[11px] text-text-muted">{t('animations.posesCount', { count: def.poses.length })}</p>}
+    {(!made || run) && <MakeButtons def={def} run={run} actions={actions} full={!made && !canAddAnimation(kit)} how={how} />}
+  </article>
+}
+
+/** The small animations of a saved character: andar, gestos and the usual anime expressions. Each one is a few poses of the
+ * same figure, made with Qwen from the character's own picture, keyed and joined into a sprite sheet that the Video 2D cards play. */
+export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
+  const { t, i18n } = useUiTranslation('characters')
+  const models = useStore(state => state.models)
+  const { kits, activeId, error: loadError, loading, reload } = useCharacterKitLibrary(workspace)
+  const [kitId, setKitId] = useState('')
+  const [modelId, setModelId] = useState('')
+  const usable = kits.filter(kit => animationReference(kit))
+  // The one just saved is the active one: it is the character the person is working on.
+  const kit = usable.find(item => item.id === kitId) ?? usable.find(item => item.id === activeId) ?? usable[0]
+  // Every pose uses the character as an identity reference: only models that accept one (the server refuses the others).
+  const imageModels = characterImageModels(models, true)
+  const model = imageModels.some(item => item.model_type === modelId) ? modelId : preferredCharacterImageModel(imageModels, false)
+  const work = useCharacterAnimations(workspace, kit?.id, reload)
+  const sets = useAnimationSets(workspace, kit?.id)
+  const busy = work.busy || sets.active
+  const actions: Actions = {
+    busy, runs: work.runs, finished: work.finished, cancel: id => { void work.cancel(id) },
+    make: (def, remake, method) => { if (kit && model) void work.start(kit, def, model, remake, method) },
+    review: (id, state) => { if (kit) void work.review(kit.id, id, state) },
+    remove: id => { if (kit) void work.remove(kit.id, id) },
+  }
+  return <div className="space-y-4" data-testid="character-animations">
+    <p className="text-sm text-text-muted">{t('animations.intro')}</p>
+    {loadError && <p role="alert" className="text-sm text-red-300">{loadError}</p>}
+    {!loading && !usable.length && !loadError && <p className="rounded-lg border border-dashed border-border p-3 text-sm text-text-muted">{t('animations.noKits')}</p>}
+    {kit && <div className="flex flex-wrap gap-3">
+      <label className="text-xs text-text-secondary">{t('animations.kit')}
+        <select aria-label={t('animations.kit')} value={kit.id} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => setKitId(event.target.value)} className={`${control} mt-1 block min-w-48`}>
+          {usable.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select></label>
+      <label className="text-xs text-text-secondary">{t('lips.imageModel')}
+        <select aria-label={t('lips.imageModel')} value={model} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => setModelId(event.target.value)} className={`${control} mt-1 block min-w-48`}>
+          {!imageModels.length && <option value="">{t('lips.noImageModel')}</option>}
+          {imageModels.map(item => <option key={item.model_type} value={item.model_type}>{item.name}</option>)}
+        </select></label>
+    </div>}
+    {(work.error || sets.error) && <p role="alert" className="text-sm text-red-300">{work.error || sets.error}</p>}
+    {work.saved && <p role="status" className="text-sm text-emerald-200">{t('animations.saved')}</p>}
+    {kit && <AnimationSetBar kit={kit} model={model} busy={busy} latest={sets.latest} onStart={set => { if (model) void sets.start(set, model) }} onCancel={id => { void sets.cancel(id) }} />}
+    {kit && animationGroups.map(group => {
+      // An animation the author described is not on the kit until its first run is saved: it shows with that run, which keeps the words.
+      const showing = group.id === 'custom' ? [...kitCustomDefs(kit), ...pendingCustomDefs(work.runs, kit)] : animationsOf(group.id)
+      const done = showing.filter(def => kitAnimations(kit)[def.id]).length
+      return <details key={group.id} open={group.id === 'cycle' || group.id === 'custom' || done > 0} className="space-y-2" data-testid={`animation-group-${group.id}`}>
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-text-secondary">
+          {localized(group.title, i18n.language)} <span className="font-normal normal-case text-text-muted">· {t('animations.groupCount', { done, total: showing.length })}</span></summary>
+        <div className="mt-2 grid gap-3 md:grid-cols-2">{showing.map(def => <AnimationCard key={def.id} def={def} kit={kit} actions={actions} />)}</div>
+        {group.id === 'custom' && (canAddAnimation(kit)
+          ? <CustomAnimationForm disabled={busy || !model} freeId={name => freeAnimationId(kit, name, Object.keys(work.runs))} onCreate={def => actions.make(def)} />
+          : <p className="text-[11px] text-text-muted">{t('animations.custom.full')}</p>)}
+      </details>
+    })}
+  </div>
+}

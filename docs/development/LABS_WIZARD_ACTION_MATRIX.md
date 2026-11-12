@@ -1,7 +1,7 @@
 # Labs ↔ Wizard action matrix (L0)
 
 Status: detailed L0 fixture/reference with L5–L12 updates; not the startup checklist.
-For current delivery state and remaining QA, read [CURRENT_WORK](CURRENT_WORK.md).
+For current delivery state, read [CHANGELOG](../../CHANGELOG.md) and the pull requests on `development`.
 The machine fixture preserves historical classifications: a frozen defect ID is
 not proof that its defect is still present after the linked fixes.
 
@@ -1166,6 +1166,10 @@ These IDs are in `AGENT_ACTION_TYPES`. They are listed so L0 can prove every Wiz
 | `other.prepare_video` | `prepare_video` | `prepareVideo` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareVideo` |
 | `other.prepare_programmatic_video` | `prepare_programmatic_video` | `prepareProgrammaticVideo` | `ui/src/features/agent/programmaticVideo.ts` | `video3d.prepareProgrammaticVideo` |
 | `other.speech_analysis_engine` | other | condicional | out_of_scope | `speech_analysis_engine` | disponible | `setupSpeechAnalysis` | `ui/tests/speechAnalysisParity.test.tsx` |
+| `other.blob_make` | `blob_make` | `executeBlobMake` | `ui/src/features/agent/blobBodyAdapter.ts` | `blobBody.make` |
+| `other.make_character_face` | `make_character_face` | `executeMakeCharacterFace` | `ui/src/features/agent/characterFaceCapabilities.ts` | `characterFaces.make` |
+| `other.anime_make` | `anime_make` | `executeAnimeMake` | `ui/src/features/agent/animeCharacterAdapter.ts` | `animeCharacter.make` |
+| `other.make_real_character` | `make_real_character` | `executeMakeRealCharacter` | `ui/src/features/agent/realCharacterCapability.ts` | `realCharacter.make` |
 | `other.prepare_image` | `prepare_image` | `prepareImage` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareImage` |
 | `other.prepare_audio` | `prepare_audio` | `prepareAudio` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareAudio` |
 | `other.download_model` | `download_model` | `downloadModel` | `ui/src/features/agent/studioCapabilities.ts` | `studio.downloadModel` |
@@ -1193,6 +1197,9 @@ These IDs are in `AGENT_ACTION_TYPES`. They are listed so L0 can prove every Wiz
 | `other.generate_comic` | `generate_comic` | `generate` | `ui/src/features/agent/applicationAdapters.ts` | `comic.generate` |
 | `other.generate_comic_panel` | `generate_comic_panel` | `generatePanel` | `ui/src/features/agent/applicationAdapters.ts` | `comic.generatePanel` |
 | `other.create_character_kit` | `create_character_kit` | `create` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.create` |
+| `other.make_character_animation` | `make_character_animation` | `registerCharacterAnimationCapabilities` | `ui/src/features/agent/characterAnimationCapabilities.ts` | `characterAnimations.make` |
+| `other.make_character_animation_set` | `make_character_animation_set` | `executeMakeCharacterAnimationSet` | `ui/src/features/agent/characterAnimationCapabilities.ts` | `characterAnimations.makeSet` |
+| `other.review_character_animation` | `review_character_animation` | `executeReviewCharacterAnimation` | `ui/src/features/agent/characterAnimationCapabilities.ts` | `characterAnimations.review` |
 | `other.open_character_kit` | `open_character_kit` | `openKit` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.openKit` |
 | `other.update_character_kit` | `update_character_kit` | `update` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.update` |
 | `other.attach_character_kit_references` | `attach_character_kit_references` | `attachReference` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.attachReference` |
@@ -1338,6 +1345,15 @@ id through `world3dTemplates.command`, registered by
 and the production planner. A tied or unknown query does not create a scene.
 Coverage is in `ui/tests/world3dTemplatesWizard.test.ts`.
 
+`video3d.templates.plan` (`plan_3d_templates`) chooses the cards of every shot of a
+video in one call, with variety, through the same `world3dTemplates.command`,
+registered by `registerWorld3DTemplatePlanCapabilities` in
+`ui/src/features/agent/world3dTemplatePlanCapability.ts`. It is the operation
+`world3d.templates.plan` of MCP and REST (`app/services/world3d_template_plan.py`);
+`world3d_templates` does not take it. The Wizard lists `key | id | title | shot | why`
+per shot. Coverage is in `ui/tests/world3dTemplatePlanWizard.test.ts` and
+`tests/test_world3d_template_plan.py`.
+
 ## Productions
 
 `production.works.review` lists works in one workspace, opens one production, or
@@ -1348,3 +1364,77 @@ start a generator. The same intent reuses the production. `production.works.link
 attaches one existing production id to an existing project and does not match
 titles. `production.review` stays the vision QA tool. Coverage is in
 `ui/tests/productionWorksWizard.test.ts` and `tests/test_production_journey.py`.
+
+## Series shots by instruction
+
+`series.shots.edit_by_instruction` edits one shot of the open (or named) episode by
+its number (`#N`, "the fifth shot" is 5) or id through `seriesShots.edit`,
+registered by `registerSeriesShotEditCapabilities` in
+`ui/src/features/agent/seriesShotEditCapabilities.ts`. The Wizard passes the user's
+words as `instruction`; the server route behind the MCP tool `series.shot.update`
+has its LLM write the edit against the real shot, cast, poses, files and effects,
+checks it like a `series.episode.from_script` shot and writes only the changed
+fields. Takes are kept; a shot whose take no longer fits loses its approval.
+`series.shots.rerender_one` (`rerender_series_shot`, confirm=true) renders just that
+shot on the server, or with `produce` renders what changed and recuts. Coverage is
+in `ui/tests/seriesShotEditWizard.test.ts` and `tests/test_series_shot_edit.py`.
+`series.shots.record_line_voice` (`regenerate_series_line_voice`, confirm=true)
+records one line of a shot now through `seriesShots.voice`, the route behind the MCP
+tool `series.shot.voice`: the same speech path as the server render, so the next render
+of the shot reuses the recording; `retake` records another take and replaces the old one
+only when it is good. The shot inspector's Dialogue part (Record voice, New take) calls
+the same route. Coverage is in `ui/tests/seriesShotEditWizard.test.ts` and
+`tests/test_series_line_voice.py`.
+`series.shots.apply_card` (`apply_series_shot_card`) puts a Video 2D card on a 2D shot as a new take through `seriesShots.applyCard`,
+registered by `registerSeriesShotCardCapabilities` in `ui/src/features/agent/seriesShotCardCapabilities.ts`. It posts to
+`POST /api/v1/series/{series}/episodes/{episode}/shots/{shot}/card`, the route behind the MCP tool `series.shot.card.apply`
+(`app/services/series_shot_card.py`), with the same body: `card`, `cast` (`{slot, characterId, animation?, poseId?}`), `controls`,
+`assets`, `language` and `approve`. The server binds the card to the shot's characters (pose pictures, or the approved animation sheet
+for the sheet cards), compiles it, saves the scene so it opens in Video 2D, exports it and attaches the take as a candidate;
+`approve_take` approves it only in «Modo un solo disparo» and never over a take a person approved. A scene still being exported
+answers `exporting` and the Wizard sends the same request again for a few minutes. Coverage is in
+`ui/tests/seriesShotCardWizard.test.ts` and `tests/test_series_shot_card.py`.
+`series.locations.stage_set` (`set_series_location_stage`) and `series.locations.stage_check` (`check_series_location_stage`) calibrate a location
+plate's perspective through `seriesShots.setStage` and `seriesShots.checkStage`, registered by `registerSeriesStageCapabilities` in
+`ui/src/features/agent/seriesStageCapabilities.ts`. They post to `POST /api/v1/series/{series}/locations/{location}/stage` and `.../stage/check`, the
+routes behind the MCP tools `series.location.stage.set` and `series.location.stage.check` (`app/services/series_stage_ops.py`), with the same bodies
+(`horizon`, `ref {baseY, heightPct, heightM?}`, `floorTop`, `clear`; `step` and an optional proposal for the check); Series Lab's location panel
+(`SeriesLocationStage`) calls the same two. `check` only draws a grid over the plate into the workspace: the Wizard cannot see it, gives its address
+and the horizon guess and asks the person to read the numbers; it never invents them. Both replies carry `eyeHeightM` (the camera height the numbers
+imply) and a `warning` outside 1 to 2.4 m, which the Wizard repeats. Coverage is in `ui/tests/seriesStageWizard.test.ts`,
+`ui/tests/seriesLocationStage.test.tsx` and `tests/test_series_stage.py`.
+`characters.voice.band` (`set_voice_band`) stores a pitch band on a saved character's voice through `characterKit.setVoiceBand`,
+registered by `registerVoiceBandCapabilities` in `ui/src/features/agent/voiceBandCapabilities.ts`. It posts to
+`POST /api/v1/character-kits/library/kits/{kit_id}/voice-band`, the route behind the MCP tool `characters.voice.band`
+(`app/services/voice_band.py`). A voice with no band is recorded as before.
+
+## Media tools
+
+`media.tools.run` (`media_tool`) runs one media step through `mediaTools.command`,
+registered by `registerMediaToolCapabilities` in
+`ui/src/features/agent/mediaToolCapabilities.ts`: `media.frame`, `media.compose`,
+`audio.trim`, `assets.import_from_workspace` or `studio.key`, posted to
+`/api/v1/media/commands`, the handlers the MCP tools of the same names run. Each
+result is a workspace file with a provenance sidecar. Coverage is in
+`ui/tests/mediaToolWizard.test.ts` and `tests/test_production_media_router.py`.
+
+`shot.lipsync.redo` (`lipsync_redo`) redoes the lips of one finished shot as a new take through
+`lipsyncRedo.command`, registered by `registerLipsyncRedoCapabilities` in
+`ui/src/features/agent/lipsyncRedoCapabilities.ts`. It posts `shot.lipsync.redo` to
+`/api/v1/media/commands`, the handler the MCP tool of the same name runs. The original clip and any
+series approval stay. The redo engine is `infinitetalk` (Apache-2.0). `longcat_avatar` stays in the model catalog and is not offered: it does not read the shot video. Missing weights
+return their size on disk and wait for the existing model download. Coverage is in
+`ui/tests/lipsyncRedo.test.tsx` and `tests/test_shot_lipsync_redo.py`.
+
+## Video 2D music cards
+
+`video2d.templates.suggest` (`video2d_templates`) reads the Video 2D music cards through
+`video2dTemplates.command`, registered by `registerVideo2DTemplateCapabilities` in
+`ui/src/features/agent/video2dTemplateCapabilities.ts`: `scenes.templates.suggest` (a line, its speakers, mood,
+beat and format) or `scenes.catalog`, posted to `/api/v1/scenes/templates/commands`, the handlers the MCP tools of
+the same names run. It is read-only; the Wizard puts the card in a production spec as a `scene2d` shot. Coverage is
+in `ui/tests/video2dTemplatesWizard.test.ts` and `tests/test_video2d_template_commands_router.py`.
+
+`scene3d.room.put` (`room_sets`) stores a metric box room through `roomSets.command` and `put_room` in `app/services/room_box_commands.py`, posted to `/api/v1/scene3d/rooms/commands`. Coverage is in `ui/tests/roomSetsWizard.test.ts`.
+
+`scene3d.room.paint` (`room_sets`, with `scene3d.room.paint.status`) paints a stored box room with the image model in the background through `roomSets.command` and `paint_room` in `app/services/room_box_commands.py`, the same endpoint. Coverage is in `ui/tests/roomSetsWizard.test.ts` and `tests/test_room_box.py`.

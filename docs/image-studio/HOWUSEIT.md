@@ -38,9 +38,14 @@ image-studio draft (`resetImageStudio`). It does not cancel a queued job.
 1. **Edit is stills, not video.** Studio → Edit remains the video retake /
    outpaint / recast family. Do not send an `edit` intent to those workers.
 2. **No separate Edit-2.1 checkpoint.** Qwen Image 2.1 is one architecture
-   (`qwen_image_21`, plus `_bf16`, `_gguf_*`, and `_uncensored_gguf_*`).
+   (`qwen_image_21`, plus `_turbo`, `_bf16`, `_gguf_*`, and `_uncensored_gguf_*`).
    Identity/style still uses `subject` / `style` refs (up to `max_image_refs`,
-   10 on 2.1).
+   10 on 2.1). `qwen_image_21_turbo` is the official eight-step checkpoint
+   (CFG 1, ~7.3 GB extra transformer). Turbo is the default image model (the 40-step base stays
+   selectable); it is not the Viggle six-step LoRA. Native 2K
+   and up to ten refs remain available, but the local comparison measured only
+   1K text-to-image pairs; the model entry recommends a 24 GB GPU for native 2K
+   and 1K on smaller GPUs.
 3. **Local files stay in the tab.** A computer photo becomes a
    `local-edit:<n>` token (`rememberLocalImage`). It is **not** in the gallery
    until Generate uploads it. Closing the tab or calling `forgetLocalImage`
@@ -63,7 +68,15 @@ image-studio draft (`resetImageStudio`). It does not cancel a queued job.
    `qwen_image_21_uncensored_gguf_q4_k_m` / `_q5_k_m` / `_q6_k` are local
    image weights, not the Wizard LLM. Q8_0 from that pack is **not** shipped
    (upstream shape mismatch). License still follows Qwen Research License.
-7. **Fit-to-model is optional.** Edit → **Fit size to the model** crops,
+7. **MiniMax Image-01 is the model for a busy GPU.** `minimax:image-01` appears in the
+   same pickers as Qwen Turbo (family MiniMax, badge `API`, no VRAM) and runs on MiniMax's
+   servers, so it never waits in the local queue. It needs the MiniMax Image API key in
+   Settings → Services; without it the request is refused with `provider_key_missing` and
+   nothing is admitted. It takes **one** character reference (the face is kept, the outfit is
+   invented, the pose is ignored); extra references, a negative prompt and LoRAs are not sent
+   and the receipt lists them in `notes`. Steps, guidance and seed do not apply. See
+   `docs/development/IMAGE_COMMANDS.md`.
+8. **Fit-to-model is optional.** Edit → **Fit size to the model** crops,
    letterboxes, or stretches the source to a size the selected model admits.
    It writes another local-edit token; it does not generate.
 
@@ -131,4 +144,5 @@ declare.
 | `ui/src/lib/studioImageEdit.ts` | 2.1 capability flags |
 | `ui/src/i18n/locales/en/studio.json` (`imageIntent`, `imageEdit`) | Operator copy |
 | `ui/tests/studioImageEdit.test.ts` | Intent list and Auto mapping |
-| `app/defaults/qwen_image_21*.json` | Installed 2.1 variants |
+| `app/defaults/qwen_image_21*.json` | Installed 2.1 variants, including `qwen_image_21_turbo` |
+| `docs/development/QWEN21_TURBO.md` | Official Turbo schedule, comparison, reproduce |

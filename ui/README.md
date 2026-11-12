@@ -40,14 +40,16 @@ app/env/bin/python app/launch.py
 ## Quality checks
 
 ```bash
+npm run unreachable:check
 npm run test
 npm run lint -- --max-warnings=0
 npm run build
 npm run budget
 ```
 
-`npm run check` runs the same test, lint, type-check/build and bundle-budget
-sequence used by CI. The build output is `ui/dist`; do not edit it manually.
+`npm run check` runs the same unreachable-file, test, lint, type-check/build
+and bundle-budget sequence used by CI. The build output is `ui/dist`; do not
+edit it manually.
 
 ## Architecture
 
@@ -65,6 +67,9 @@ sequence used by CI. The build output is `ui/dist`; do not edit it manually.
   regression tests.
 - `scripts/check-build-budget.mjs` prevents accidental growth of the entry
   bundle and verifies that heavy overlays remain lazy-loaded.
+- `scripts/check-unreachable.mjs` fails when a file under `src/` is not
+  reached from a Vite entry (imports, dynamic imports, workers, globs). A file
+  kept on purpose goes in `scripts/unreachable-allowlist.json` with a reason.
 
 The browser uses same-origin `/api/v1/...` routes in production. Authentication
 for an explicitly shared LAN server is supplied by the application session;

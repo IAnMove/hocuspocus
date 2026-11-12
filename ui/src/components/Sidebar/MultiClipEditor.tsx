@@ -92,7 +92,7 @@ export function MultiClipEditor() {
   return (
     <div className="space-y-3">
       <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer">
-        <input
+        <input aria-label={t('multiClip.samePrompt')}
           type="checkbox"
           checked={singlePromptMode}
           onChange={e => setSinglePromptMode(e.target.checked)}
@@ -164,7 +164,7 @@ export function MultiClipEditor() {
               )}
             </div>
 
-            <textarea
+            <textarea aria-label={t('multiClip.placeholder', { n: i + 1 })}
               value={singlePromptMode && i > 0 ? clips[0].prompt : clip.prompt}
               onChange={e => {
                 if (singlePromptMode) {

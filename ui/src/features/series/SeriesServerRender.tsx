@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import {
@@ -48,14 +49,14 @@ export function SeriesServerRender({ workspace, series, episode, language }: { w
   const done = job ? job.items.filter(item => item.status === 'done').length : 0
   return <div className="space-y-2 rounded-lg border border-border p-3" data-testid="series-server-render">
     <p className="text-xs text-text-secondary">{t('serverRender.hint')}</p>
-    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={approve} disabled={live || busy}
+    <label className="flex items-center gap-2 text-xs"><input aria-label={t('serverRender.approve')} type="checkbox" checked={approve} disabled={live || busy}
       onChange={event => setApprove(event.target.checked)} />{t('serverRender.approve')}</label>
     <div className="flex flex-wrap gap-2">
       <button className={primaryButton} disabled={live || busy} onClick={() => void act(() => startSeriesServerRender(workspace, series.id, episode.id, approve, language))}>
         {t('serverRender.start')}</button>
       {live && <button className={secondaryButton} disabled={busy || job?.status === 'cancelling'}
         onClick={() => void act(() => controlSeriesServerRender(workspace, job!.jobId, 'cancel'))}>{t('serverRender.stop')}</button>}
-      {job && ['failed', 'cancelled'].includes(job.status) && <button className={secondaryButton} disabled={busy}
+      {job && ['failed', 'cancelled', 'interrupted'].includes(job.status) && <button className={secondaryButton} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         onClick={() => void act(() => controlSeriesServerRender(workspace, job.jobId, 'resume'))}>{t('serverRender.resume')}</button>}
     </div>
     {job && <p role="status" className="text-xs">{t('serverRender.progress', { done, total: job.items.length, status: t(`serverRender.status.${job.status}`) })}</p>}
@@ -63,6 +64,7 @@ export function SeriesServerRender({ workspace, series, episode, language }: { w
       {job.items.map(item => <li key={item.shotId} data-testid={`server-render-${item.shotId}`}>
         <span className="font-mono">{item.shotId}</span> · {t(`serverRender.stage.${item.stage}`)}
         {item.status === 'failed' && <span className="text-red-300"> · {item.error}</span>}
+        {item.warning && <span className="text-amber-300"> · {item.warning}</span>}
       </li>)}
     </ul>}
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}

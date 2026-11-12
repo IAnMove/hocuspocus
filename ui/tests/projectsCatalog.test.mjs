@@ -48,5 +48,5 @@ test('project opening prefers the active registered source and never resolves by
   }
   assert.equal(resolveProjectSource(project, 'beta').workspace_id, 'beta')
   assert.equal(resolveProjectSource(project, 'missing').workspace_id, 'alpha')
-  assert.throws(() => resolveProjectSource({ ...project, sources: [] }, 'alpha'), /ubicación persistente/)
+  assert.throws(() => resolveProjectSource({ ...project, sources: [] }, 'alpha'), /persistent location/)
 })

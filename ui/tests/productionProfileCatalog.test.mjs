@@ -41,7 +41,12 @@ test('switching text provider drops a model that belongs to another API', () => 
 
 test('3D catalog is provider-specific so Meshy/Hi3D never inherit Hunyuan ids', () => {
   const hunyuan = [{ id: 'hunyuan3d-2mini-turbo', label: 'Hunyuan 2 Mini Turbo' }]
-  assert.deepEqual(model3dProfileOptions('meshy', hunyuan).map(option => option.id), ['latest'])
+  assert.deepEqual(model3dProfileOptions('meshy', hunyuan).map(option => option.id), [
+    'latest',
+    'meshy-7.1',
+    'meshy-6',
+    'meshy-6-lite',
+  ])
   assert.deepEqual(model3dProfileOptions('hi3d', hunyuan).map(option => option.id), ['hitem3dv2.1'])
   assert.deepEqual(model3dProfileOptions('local', hunyuan).map(option => option.id), [
     'hunyuan3d-2mini-turbo',

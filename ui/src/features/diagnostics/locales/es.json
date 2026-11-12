@@ -13,5 +13,10 @@
   "build": "Compilación",
   "platform": "Plataforma",
   "repair": "Reparación",
-  "tab": "Diagnóstico"
+  "tab": "Diagnóstico",
+  "stateAvailable": "disponible",
+  "stateUnavailable": "no disponible",
+  "na": "n/d",
+  "memory": "RAM {{ram}} GB / VRAM {{vram}} GB",
+  "task": "tarea"
 }

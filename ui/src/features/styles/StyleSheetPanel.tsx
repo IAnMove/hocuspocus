@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import {
@@ -397,23 +398,23 @@ export function StyleSheetPanel() {
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_170px_auto]">
               <label className="flex items-center gap-2 rounded-lg border border-border bg-bg-primary px-2.5">
                 <Search size={13} className="text-text-muted" />
-                <input
+                <input aria-label={t('search')}
                   value={queryInput}
                   onChange={event => setQueryInput(event.target.value)}
                   placeholder={t('search')}
                   className="min-w-0 flex-1 bg-transparent py-2 text-xs text-text-primary outline-none placeholder:text-text-muted"
                 />
-                {queryInput && <button type="button" onClick={() => setQueryInput('')} className="text-text-muted hover:text-text-primary"><X size={12} /></button>}
+                {queryInput && <button type="button" onClick={() => setQueryInput('')} className="text-text-muted hover:text-text-primary" title={controlLabel('a11y.clearSearch')} aria-label={controlLabel('a11y.clearSearch')}><X size={12} /></button>}
               </label>
-              <select value={collection} onChange={event => { setCollection(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
+              <select aria-label={t('collection')} value={collection} onChange={event => { setCollection(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
                 <option value="">{t('allCollections')}</option>
                 {collections.map(value => <option key={value} value={value}>{value}</option>)}
               </select>
-              <select value={group} onChange={event => { setGroup(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
+              <select aria-label={t('group')} value={group} onChange={event => { setGroup(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
                 <option value="">{t('allGroups')}</option>
                 {groups.map(value => <option key={value} value={value}>{value}</option>)}
               </select>
-              <select value={sort} onChange={event => { setSort(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
+              <select aria-label={t('sortBy')} value={sort} onChange={event => { setSort(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
                 <option value="source_order">{t('sort.source')}</option>
                 <option value="newest">{t('sort.newest')}</option>
                 <option value="oldest">{t('sort.oldest')}</option>
@@ -456,7 +457,7 @@ export function StyleSheetPanel() {
           <div className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border bg-bg-secondary shadow-2xl" onClick={event => event.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div className="min-w-0"><h2 className="truncate text-sm font-semibold text-text-primary">{selected.title}</h2><p className="mt-0.5 truncate text-[10px] text-text-muted">{t('source', { repo: selected.source.repoId })} · #{selected.sourceOrder}</p></div>
-              <button type="button" onClick={() => setSelected(null)} className="rounded-lg p-2 text-text-muted hover:bg-bg-hover hover:text-text-primary"><X size={16} /></button>
+              <button type="button" onClick={() => setSelected(null)} className="rounded-lg p-2 text-text-muted hover:bg-bg-hover hover:text-text-primary" title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}><X size={16} /></button>
             </div>
             <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.85fr)]">
               <div className="flex min-h-[260px] items-center justify-center bg-black">

@@ -408,12 +408,15 @@ def register_abort_state(
     state: MutableMapping[str, Any],
     *,
     interrupt_model: Callable[[], None] | None = None,
+    preparing_engine: bool = False,
 ) -> bool:
     """Register a worker's abort dictionary unless cancellation won first.
 
     Dummy states for non-Wan tools still receive ``abort=True`` but have no
     interrupt callback. Callback ownership is tracked separately by state
     identity so an old worker cannot interrupt or unregister a newer phase.
+    ``preparing_engine`` marks a job that holds the GPU only to load a model:
+    Cancel can settle it before any sample exists.
     """
     with _lifecycle_lock:
         state.setdefault("abort", False)
@@ -422,6 +425,8 @@ def register_abort_state(
             return False
         active_states[job_id] = state
         _registrations[job_id] = (job, state, interrupt_model)
+        if preparing_engine:
+            job["preparing_engine"] = True
         return True
 
 
@@ -509,6 +514,43 @@ def acknowledge_cancel(
     return changed
 
 
+def mark_producing(job: MutableMapping[str, Any]) -> bool:
+    """Record that this job has left engine load and started sampling.
+
+    Returns False when cancellation already won, so the worker must not begin
+    (or continue to treat the job as) a sample. The preparing/producing flags
+    stay unchanged in that case: Cancel still sees a load, not a sample.
+    """
+    with _lifecycle_lock:
+        if is_cancel_requested(job):
+            return False
+        job["producing"] = True
+        job["preparing_engine"] = False
+        return True
+
+
+def _still_preparing(job: Mapping[str, Any]) -> bool:
+    """True when the job is loading an engine and has not sampled yet."""
+    return bool(job.get("preparing_engine")) and not job.get("producing")
+
+
+def _drop_generation_queue_slot(job: MutableMapping[str, Any]) -> None:
+    """Remove a cancelled waiter so the next job does not wait for it to poll."""
+    lock_key = job.get("_generation_queue_lock_key")
+    token = job.get("_generation_queue_token")
+    if lock_key is None or token is None:
+        return
+    with _generation_queue_condition:
+        _remove_generation_waiter(lock_key, token, job)
+
+
+def _invoke_interrupt(interrupt: Callable[[], None]) -> None:
+    try:
+        interrupt()
+    except Exception:
+        pass
+
+
 def request_cancel(
     job: MutableMapping[str, Any],
     *,
@@ -516,17 +558,15 @@ def request_cancel(
     active_states: MutableMapping[str, MutableMapping[str, Any]] | None = None,
 ) -> CancelResult:
     """Atomically request cancellation and signal the matching active state."""
-    result: CancelResult
+    interrupt: Callable[[], None] | None = None
+    immediate = False
     with _lifecycle_lock:
         status = job.get("status")
-        if status in TERMINAL_STATUSES:
-            return CancelResult(False, False, False)
-        if status == "cancelling":
+        if status in TERMINAL_STATUSES or status == "cancelling":
             return CancelResult(False, False, False)
 
         was_running = status == "running"
         job["cancel_requested"] = True
-
         abort_signalled = False
         state = active_states.get(job_id) if active_states is not None and job_id else None
         registration = _registrations.get(job_id) if job_id else None
@@ -539,26 +579,34 @@ def request_cancel(
         ):
             state["abort"] = True
             abort_signalled = True
-            if registration[2] is not None:
-                try:
-                    registration[2]()
-                except Exception:
-                    pass
+            interrupt = registration[2]
 
-        if was_running:
-            # The request is durable and inference has been signalled, but the
-            # worker still owns its resource until finish/unregister/explicit
-            # acknowledgement.  Do not publish a terminal timestamp early.
+        # Queued work, and a running job that is only loading its engine, have
+        # no sample yet. Settle now: the caller must not wait out the load.
+        # A job that has started producing stays `cancelling` until its worker
+        # releases the abort registration.
+        immediate = (not was_running) or _still_preparing(job)
+        if immediate:
+            _acknowledge_cancel_locked(job)
+        else:
             job["status"] = "cancelling"
             job["phase"] = "cancelling"
             job["message"] = "Cancelling…"
             job["finished_at"] = None
-        else:
-            # Queued/waiting jobs own no active model invocation and can settle
-            # synchronously without a worker acknowledgement.
-            _acknowledge_cancel_locked(job)
-
         result = CancelResult(True, was_running, abort_signalled)
+    _drop_generation_queue_slot(job)
+    if interrupt is not None:
+        # Engine-load interrupts can block on a runtime HTTP call. The abort
+        # flag is already set; do not make Cancel wait for that call.
+        if immediate:
+            threading.Thread(
+                target=_invoke_interrupt,
+                args=(interrupt,),
+                daemon=True,
+                name="maestro_cancel_interrupt",
+            ).start()
+        else:
+            _invoke_interrupt(interrupt)
     _notify_job_state(job)
     return result
 
@@ -687,6 +735,8 @@ def _pop_command_priority(command: dict[str, Any]) -> Any:
             inner = params.pop("priority")
             if found is _MISSING:
                 found = inner
+            if not params:
+                payload.pop("params", None)
     return found
 
 
@@ -865,18 +915,54 @@ def _remove_generation_waiter(
     _generation_queue_condition.notify_all()
 
 
+def _ready_head(
+    queue: deque[tuple[int, object, MutableMapping[str, Any]]] | None,
+    token: object,
+    job: MutableMapping[str, Any],
+    yield_to: Callable[[float], bool] | None,
+) -> bool:
+    """Whether ``job`` heads the queue and is not standing aside for ``yield_to``."""
+    if not (queue and queue[0][1] is token):
+        return False
+    waited = time.monotonic() - float(job.get("_queue_entered_at") or time.monotonic())
+    return yield_to is None or not yield_to(waited)
+
+
+def _hold_machine_turn(machine: Any, ready: bool, poll_interval: float) -> bool:
+    """Whether the ready queue head holds its machine turn (always, without one).
+
+    Only the ready head keeps a ticket or the machine lock: a head that stops
+    being ready gives them back, so a local job ahead of it can take its turn.
+    """
+    if machine is None:
+        return True
+    if not ready:
+        machine.release()
+        return False
+    if machine.take():
+        return True
+    with _generation_queue_condition:
+        _generation_queue_condition.wait(timeout=poll_interval)
+    return False
+
+
 def acquire_generation_slot(
     generation_lock: threading.Lock,
     job: MutableMapping[str, Any],
     *,
     poll_interval: float = 0.1,
     yield_to: Callable[[float], bool] | None = None,
+    machine: Any = None,
 ) -> bool:
     """Acquire the single GPU lock in scheduled pending order.
 
     ``yield_to(waited)`` receives how long this job has waited. While it
     returns true, the queue head leaves the free lock to another waiter on the
     same device (see ``ResourceCoordinator.has_waiter_owed_turn``).
+
+    ``machine`` is the job's ``gpu_machine_lock.MachineTurn``. The ready queue
+    head takes it before the process lock, so waiting for another instance
+    never holds the process GPU. A head that stops being ready gives it back.
     """
     register_generation_job(generation_lock, job)
     lock_key = id(generation_lock)
@@ -893,14 +979,13 @@ def acquire_generation_slot(
             while queue and is_cancel_requested(queue[0][2]):
                 _, cancelled_token, cancelled_job = queue[0]
                 _remove_generation_waiter(lock_key, cancelled_token, cancelled_job)
-            is_head = bool(queue and queue[0][1] is token)
-            if not is_head:
+            ready = _ready_head(queue, token, job, yield_to)
+            if not ready and not getattr(machine, "active", False):
                 _generation_queue_condition.wait(timeout=poll_interval)
                 continue
-            waited = time.monotonic() - float(job.get("_queue_entered_at") or time.monotonic())
-            if yield_to is not None and yield_to(waited):
-                _generation_queue_condition.wait(timeout=poll_interval)
-                continue
+
+        if not _hold_machine_turn(machine, ready, poll_interval):
+            continue
 
         # Only the FIFO head is allowed to compete for the underlying mutex.
         if not generation_lock.acquire(timeout=poll_interval):
@@ -929,13 +1014,25 @@ def generation_slot(
     poll_interval: float = 0.1,
     yield_to: Callable[[float], bool] | None = None,
 ) -> Iterator[bool]:
-    """Context manager form of :func:`acquire_generation_slot`."""
-    acquired = acquire_generation_slot(
-        generation_lock, job, poll_interval=poll_interval, yield_to=yield_to,
-    )
+    """Context manager form of :func:`acquire_generation_slot`.
+
+    With ``HOCUS_GPU_MACHINE_LOCK=1`` the job also holds the machine lock
+    (``services.gpu_machine_lock``), taken before the process GPU.
+    """
+    from services.gpu_machine_lock import MachineTurn
+
+    machine = MachineTurn(job, publish=_notify_job_state)
+    try:
+        acquired = acquire_generation_slot(
+            generation_lock, job, poll_interval=poll_interval, yield_to=yield_to, machine=machine,
+        )
+    except BaseException:
+        machine.release()
+        raise
     try:
         yield acquired
     finally:
+        machine.release()
         if acquired:
             generation_lock.release()
             with _generation_queue_condition:

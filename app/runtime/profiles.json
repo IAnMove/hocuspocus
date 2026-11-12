@@ -19,6 +19,13 @@
     "13.0": {
       "linux": "580.0",
       "win32": "580.0"
+    },
+    "12.4": {
+      "linux": "550.54.14"
+    },
+    "12.1": {
+      "linux": "530.30.02",
+      "win32": "531.14"
     }
   },
   "driverRecommended": {
@@ -29,6 +36,13 @@
     "13.0": {
       "linux": "580.65.06",
       "win32": "580.88"
+    },
+    "12.4": {
+      "linux": "550.54.14"
+    },
+    "12.1": {
+      "linux": "530.30.02",
+      "win32": "531.14"
     }
   },
   "engines": {
@@ -110,8 +124,14 @@
           "triton-windows==3.3.1.post19",
           "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows/sageattention-2.2.0+cu128torch2.7.1-cp310-cp310-win_amd64.whl"
         ],
-        "excludedPackages": ["torchcodec", "flash-attn"],
-        "verificationImports": ["xformers.ops", "diffusers.models.transformers.pixart_transformer_2d"]
+        "excludedPackages": [
+          "torchcodec",
+          "flash-attn"
+        ],
+        "verificationImports": [
+          "xformers.ops",
+          "diffusers.models.transformers.pixart_transformer_2d"
+        ]
       },
       "defaultInstall": true,
       "acceleratorPackages": [
@@ -236,9 +256,228 @@
         "flash-attn": "2.7.4.post1",
         "bpy": "4.2.22"
       },
-      "verificationImports": ["bpy", "flash_attn", "torch_scatter", "torch_cluster", "spconv.pytorch"],
+      "verificationImports": [
+        "bpy",
+        "flash_attn",
+        "torch_scatter",
+        "torch_cluster",
+        "spconv.pytorch"
+      ],
       "vendors": [
         "unirig"
+      ],
+      "defaultInstall": false
+    },
+    "trellis2": {
+      "label": "TRELLIS.2 (official Microsoft 4B)",
+      "installStepsVersion": 1,
+      "env": "app/services/model3d_runtimes/trellis2/env",
+      "environment": "conda",
+      "python": "3.10",
+      "required": false,
+      "platforms": [
+        "linux"
+      ],
+      "unsupportedReason": "TRELLIS.2 is optional and supports Linux x64 with NVIDIA 24GB only.",
+      "cuda": "12.4",
+      "torch": "2.6.0",
+      "torchvision": "0.21.0",
+      "requirements": "app/services/trellis2/requirements.txt",
+      "constraints": {
+        "numpy": "1.26.4",
+        "transformers": "4.57.1",
+        "huggingface-hub": "0.36.0",
+        "pillow": "11.3.0",
+        "opencv-python-headless": "4.11.0.86",
+        "timm": "1.0.22",
+        "kornia": "0.8.2"
+      },
+      "vendors": [
+        "trellis2",
+        "trellis2_cumesh",
+        "trellis2_flexgemm",
+        "trellis2_nvdiffrast",
+        "trellis2_nvdiffrec",
+        "trellis2_utils3d"
+      ],
+      "verificationImports": [
+        "flash_attn",
+        "cumesh",
+        "flex_gemm",
+        "o_voxel",
+        "nvdiffrast.torch",
+        "nvdiffrec_render",
+        "utils3d",
+        "trellis2.pipelines"
+      ],
+      "defaultInstall": false,
+      "minimumVramMiB": 24064,
+      "computeCapabilityRange": [
+        8,
+        10
+      ]
+    },
+    "creation_models": {
+      "label": "FLUX 3 Klein / Drama 3",
+      "installStepsVersion": 1,
+      "env": "app/services/creation_models/env",
+      "environment": "conda",
+      "python": "3.11",
+      "required": false,
+      "platforms": [
+        "linux",
+        "win32"
+      ],
+      "cuda": "13.0",
+      "torch": "2.10.0",
+      "torchvision": "0.25.0",
+      "torchaudio": "2.10.0",
+      "requirements": "app/services/creation_models/vendor/ComfyUI/requirements.txt",
+      "constraints": {
+        "numpy": "2.2.6",
+        "transformers": "4.57.1",
+        "tokenizers": "0.22.1"
+      },
+      "windows": {
+        "constraints": {
+          "triton-windows": "3.6.0.post26"
+        }
+      },
+      "vendors": [
+        "creation_comfy",
+        "drama3_nodes"
+      ],
+      "defaultInstall": false
+    },
+    "template_semantic": {
+      "label": "Template semantic search",
+      "installStepsVersion": 1,
+      "env": "app/services/template_semantic_model",
+      "environment": "venv",
+      "python": "3.10",
+      "required": false,
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "architectures": {
+        "darwin": [
+          "arm64"
+        ],
+        "linux": [
+          "x64",
+          "arm64"
+        ],
+        "win32": [
+          "x64"
+        ]
+      },
+      "requirements": "app/runtime/requirements-template-semantic.txt",
+      "constraints": {},
+      "defaultInstall": false
+    }
+,
+    "anime_face": {
+      "label": "Anime face landmarks",
+      "installStepsVersion": 1,
+      "env": "app/services/anime_face/env",
+      "environment": "venv",
+      "python": "3.12",
+      "required": false,
+      "platforms": [
+        "linux",
+        "win32",
+        "darwin"
+      ],
+      "architectures": {
+        "linux": [
+          "x64"
+        ],
+        "win32": [
+          "x64"
+        ],
+        "darwin": [
+          "arm64"
+        ]
+      },
+      "torchIndex": "cpu",
+      "torch": "2.7.0",
+      "torchvision": "0.22.0",
+      "requirements": "app/services/anime_face/requirements.txt",
+      "constraints": {},
+      "defaultInstall": false
+
+    },
+    "see_through": {
+      "label": "See-through",
+      "installStepsVersion": 1,
+      "env": "app/services/see_through/env",
+      "environment": "conda",
+      "python": "3.12",
+      "required": false,
+      "platforms": ["linux"],
+      "unsupportedReason": "See-through layers need Linux x64 with an NVIDIA GPU. The flat rig still places the eyes and the mouth without them.",
+      "cuda": "12.8",
+      "torch": "2.8.0",
+      "torchvision": "0.23.0",
+      "torchaudio": "2.8.0",
+      "requirements": "app/services/see_through/requirements.txt",
+      "constraints": {
+        "accelerate": "1.13.0",
+        "bitsandbytes": "0.49.2",
+        "diffusers": "0.37.0",
+        "einops": "0.8.2",
+        "huggingface-hub": "1.7.2",
+        "numpy": "2.2.6",
+        "omegaconf": "2.3.0",
+        "opencv-python": "4.13.0.92",
+        "pillow": "12.1.1",
+        "pillow-jxl-plugin": "1.3.7",
+        "psd-tools": "1.14.2",
+        "pyyaml": "6.0.3",
+        "safetensors": "0.7.0",
+        "scipy": "1.15.3",
+        "setuptools": "75.8.0",
+        "tokenizers": "0.22.2",
+        "tqdm": "4.67.3",
+        "transformers": "5.0.0"
+      },
+      "vendors": [],
+      "defaultInstall": false,
+      "source": {
+        "url": "https://github.com/shitagaki-lab/see-through",
+        "revision": "df019de5129d6c4b406587a14c3501669441a783",
+        "license": "Apache-2.0"
+      }
+
+    },
+    "mia": {
+      "label": "Make-It-Animatable",
+      "installStepsVersion": 1,
+      "env": "app/services/mia/env",
+      "environment": "conda",
+      "python": "3.11",
+      "required": false,
+      "platforms": [
+        "linux"
+      ],
+      "unsupportedReason": "Make-It-Animatable's Blender export (bpy) and its CUDA 12.1 wheels are available on Linux x64 only. The humanoid and procedural rigs stay available.",
+      "cuda": "12.1",
+      "torch": "2.1.2",
+      "torchvision": "0.16.2",
+      "requirements": "app/services/mia/requirements.txt",
+      "constraints": {
+        "numpy": "1.26.4",
+        "bpy": "4.3.0"
+      },
+      "verificationImports": [
+        "bpy",
+        "torch",
+        "pygltflib"
+      ],
+      "vendors": [
+        "make_it_animatable"
       ],
       "defaultInstall": false
     }

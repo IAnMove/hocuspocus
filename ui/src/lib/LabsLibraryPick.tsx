@@ -8,11 +8,13 @@ import { fileFromOutput, loadWorkspaceImages } from './labsImagePick'
 export function LabsLibraryPick({
   workspace,
   disabled,
+  title,
   onFile,
   onError,
 }: {
   workspace: string
   disabled?: boolean
+  title?: string
   onFile: (file: File) => void
   onError?: (message: string) => void
 }) {
@@ -26,7 +28,7 @@ export function LabsLibraryPick({
   }
   return (
     <>
-      <button type="button" disabled={disabled} onClick={openLibrary} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-secondary disabled:opacity-40">
+      <button type="button" disabled={disabled} title={disabled ? title : undefined} onClick={openLibrary} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-secondary disabled:opacity-40">
         <FolderOpen size={10} />{t('picker.fromLibrary')}
       </button>
       <AssetExplorerDialog

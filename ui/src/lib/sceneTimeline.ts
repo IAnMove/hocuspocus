@@ -145,6 +145,28 @@ export const sceneTimeToLayerTime = (layer: SceneLayer, sceneTime: number) => {
   return timing.trimStart + Math.min(timing.span, elapsed)
 }
 
+/** Seconds into a video layer's clip shown at a scene time; ``fps`` is the scene's, so the last frame held is a whole
+ * frame before the clip ends. With ``playback`` the clip runs on its own clock (``start`` + scene time × ``speed``) and
+ * then loops, holds its last frame or plays back and forth; without it the clip follows the layer's motion time. Pure:
+ * the same scene time always shows the same clip time, in the editor preview and in the headless export. */
+export const sceneVideoTime = (layer: SceneLayer, sceneSeconds: number, clipDuration: number, fps: number) => {
+  if (!(clipDuration > 0)) return 0
+  const last = Math.max(0, clipDuration - 1 / Math.max(1, fps))
+  const playback = layer.playback
+  if (!playback) {
+    const layerTime = sceneTimeToLayerTime(layer, sceneSeconds)
+    return layer.animation.loop ? layerTime % clipDuration : Math.min(last, layerTime)
+  }
+  const time = playback.start + Math.max(0, sceneSeconds) * playback.speed
+  if (playback.loop === 'hold') return Math.min(last, time)
+  if (playback.loop === 'pingpong') {
+    if (!(last > 0)) return 0
+    const phase = time % (2 * last)
+    return phase <= last ? phase : 2 * last - phase
+  }
+  return time % clipDuration
+}
+
 export const layerTimeToSceneTime = (layer: SceneLayer, layerTime: number) => {
   const timing = getSceneLayerTiming(layer)
   return timing.offset + (Math.max(timing.trimStart, layerTime) - timing.trimStart) / timing.speed

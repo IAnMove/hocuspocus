@@ -446,9 +446,10 @@ function buildGroup(id: string, members: ActivityTaskLike[]): ActivityGroup {
   }
 }
 
+/** ``terminalLimit`` finished groups are kept (12 by default); ``order: 'updated'`` lists the most recently changed first. */
 export function groupActivityTasks(
   tasks: ActivityTaskLike[],
-  options: { workspace?: string } = {},
+  options: { workspace?: string; terminalLimit?: number; order?: 'created' | 'updated' } = {},
 ): ActivityGroup[] {
   const scoped = uniqueTasks(tasks).filter(task => {
     if (!options.workspace) return true
@@ -471,7 +472,15 @@ export function groupActivityTasks(
   const byCreated = (left: ActivityGroup, right: ActivityGroup) => (
     right.createdAt - left.createdAt || left.id.localeCompare(right.id)
   )
-  return [...live.sort(byCreated), ...terminal.sort(byCreated).slice(0, 12)]
+  const byUpdated = (left: ActivityGroup, right: ActivityGroup) => (
+    groupUpdatedAt(right) - groupUpdatedAt(left) || left.id.localeCompare(right.id)
+  )
+  const order = options.order === 'updated' ? byUpdated : byCreated
+  return [...live.sort(byCreated), ...terminal.sort(order).slice(0, options.terminalLimit ?? 12)]
+}
+
+function groupUpdatedAt(group: ActivityGroup): number {
+  return Math.max(finiteNumber(group.primary.updated_at, 0), ...group.jobs.map(job => finiteNumber(job.task.updated_at, 0)))
 }
 
 export function findActivityGroup(

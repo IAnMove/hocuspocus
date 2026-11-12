@@ -88,6 +88,44 @@ test('compact activity truncates the visible prompt and exposes the complete tex
   }
 })
 
+test('the footer button says Runs and opens the runs panel', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { ActivityCompactBar } = await import('../src/features/activity/ActivityCompactBar.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const { setUiLanguage } = await import('../src/i18n/index.ts')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ outputs: [] }) }) as Response
+  useStore.setState({ mediaFilter: 'images', dashboardOpen: true })
+  try {
+    render(<ActivityCompactBar
+      detailsOpen={false} liveCount={0} clock={1}
+      primary={undefined} primaryGroup={null} busyIds={new Set()} toggleRef={{ current: null }}
+      onToggle={() => undefined} onCopyPrompt={() => undefined} onControl={() => undefined}
+    />)
+    const button = screen.getByRole('button', { name: 'Runs' })
+    assert.equal(button.getAttribute('title'), 'Open Runs to inspect prompts, references and the generation queue')
+    assert.equal(screen.queryByRole('button', { name: 'Workspaces' }), null)
+    fireEvent.click(button)
+    assert.equal(useStore.getState().mediaFilter, 'runs')
+    assert.equal(useStore.getState().dashboardOpen, false)
+
+    cleanup()
+    await setUiLanguage('es')
+    render(<ActivityCompactBar
+      detailsOpen={false} liveCount={0} clock={1}
+      primary={undefined} primaryGroup={null} busyIds={new Set()} toggleRef={{ current: null }}
+      onToggle={() => undefined} onCopyPrompt={() => undefined} onControl={() => undefined}
+    />)
+    const spanish = screen.getByRole('button', { name: 'Ejecuciones' })
+    assert.equal(spanish.getAttribute('title'), 'Abrir Ejecuciones para revisar los prompts, las referencias y la cola de generación')
+  } finally {
+    cleanup()
+    globalThis.fetch = originalFetch
+    await setUiLanguage('en')
+    useStore.setState({ mediaFilter: 'all', dashboardOpen: false })
+  }
+})
+
 test('activity opens while the server is slow, then explains an empty history', { concurrency: false }, async () => {
   const { render, screen, fireEvent, cleanup, act } = await import('@testing-library/react')
   const { ActivityFooter } = await import('../src/components/ActivityFooter.tsx')

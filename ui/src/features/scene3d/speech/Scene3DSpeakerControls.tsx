@@ -55,7 +55,7 @@ export function Scene3DSpeakerControls(props: SpeechControlsProps) {
           offset: 0, gain: 1, cues: [], driver: 'imported' }] })
         setSelected(existing.length)
       }}>{t('speech.addIntervention')}</button>
-      {stored.clips && clip && <label className="block text-xs">{t('speech.literalText')}<textarea className={speechInput + ' mt-1 w-full'} value={clip.text ?? ''}
+      {stored.clips && clip && <label className="block text-xs">{t('speech.literalText')}<textarea aria-label={t('speech.literalText')} className={speechInput + ' mt-1 w-full'} value={clip.text ?? ''}
         disabled={locked} maxLength={4000} onChange={event => commit({ ...stored, clips: clips.map((item, i) => i === index ? { ...item, text: event.target.value } : item) })} /></label>}
       {stored.clips && clip && <GenerateCharacterLine key={clip.id} clip={clip} voice={characterVoiceFor(props.slot.character, clip.language)} workspace={props.workspace}
         disabled={isLocked('voice')} onBusyChange={setVoiceBusy}
@@ -65,7 +65,7 @@ export function Scene3DSpeakerControls(props: SpeechControlsProps) {
     <fieldset disabled={locked} className="space-y-2 rounded-lg border border-border p-3 text-xs">
       <SpeechNumber label={t('speech.end')} value={interventionEnd(editing)}
         min={editing.start + .01} max={600} step={.1} onChange={end => { if (!locked) change({ ...editing, end }) }} />
-      <label className="flex items-center gap-2"><input type="checkbox" disabled={locked} checked={editing.audible !== false}
+      <label className="flex items-center gap-2"><input aria-label={t('speech.playVoice')} type="checkbox" disabled={locked} checked={editing.audible !== false}
         onChange={event => change({ ...editing, audible: event.target.checked })} />{t('speech.playVoice')}</label>
       <p className="text-text-muted">{t('speech.playVoiceHint')}</p>
       <button className={speechInput} disabled={locked || !stored.face || !props.slot.sourceUrl} onClick={() => {

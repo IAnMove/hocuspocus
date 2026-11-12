@@ -644,3 +644,5 @@ def test_pixel_world_lighting_is_a_known_document_field():
     document = {"version": 1, "slots": [], "dressing": "pixel-lake",
                 "pixelWorld": {"palettes": ["midnight", "aurora"], "hold": 6}}
     assert collect_unknown_fields(document) == []
+    tilted = {"version": 1, "slots": [{"id": "hero", "rotationY": 0.2, "rotationX": 0.4, "rotationZ": -0.1}]}
+    assert collect_unknown_fields(tilted) == []

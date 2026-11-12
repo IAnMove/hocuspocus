@@ -11,7 +11,7 @@ export function withFxShowcase<T extends { duration: number }>(document: T, coll
   layers[0].animation.duration = duration
   return { ...document, ...('layers' in document && Array.isArray(document.layers) && !document.layers.length ? { layers } : {}), duration,
     sfx: parseSceneFx(presets.map((preset, i) => ({ id: `showcase-${preset.id}`, kind: preset.id,
-      label: preset.id.replace('speedlines', 'speed lines').toUpperCase(), start: i * 3, end: i * 3 + 2.8, color: preset.color, size: 95, sound: true, seed: i + 17 }))) }
+      label: preset.id.replace('speedlines', 'speed lines').toUpperCase(), start: i * 3, end: i * 3 + 2.8, color: preset.color, size: preset.size ?? 95, sound: true, seed: i + 17 }))) }
 }
 
 /** Server/MCP showcase commands omit `document` and return a stock base. */
@@ -28,8 +28,8 @@ export function showcaseCollectionFrom(document: unknown): FxShowcaseCollection 
   const cues = document && typeof document === 'object' && !Array.isArray(document)
     ? (document as { sfx?: { kind?: string }[] }).sfx : undefined
   const kinds = Array.isArray(cues) ? cues.map(cue => cue?.kind).filter((kind): kind is string => Boolean(kind)) : []
-  if (kinds.length > 0 && kinds.length <= 12 && kinds.every(kind => anime.has(kind))) return 'anime'
-  if (kinds.length > 0 && kinds.length <= 12 && kinds.every(kind => retro.has(kind))) return 'retro'
+  if (kinds.length > 0 && kinds.length <= anime.size && kinds.every(kind => anime.has(kind))) return 'anime'
+  if (kinds.length > 0 && kinds.length <= retro.size && kinds.every(kind => retro.has(kind))) return 'retro'
   return 'all'
 }
 

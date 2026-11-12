@@ -18,7 +18,10 @@ def test_selected_montage_clip_can_be_opened_in_video_creation():
     assert '"action": "Rehacer en Creación de vídeo"' in (
         ROOT / "ui" / "src" / "i18n" / "locales" / "es" / "videoEditor.json"
     ).read_text(encoding="utf-8")
-    assert "fetchOutputMetadata(outputName, activeWorkspace)" in editor
+    assert "reusableMetadata([...candidates, outputName], activeWorkspace)" in editor
+    assert "fetchOutputMetadata(name, workspace)" in (
+        ROOT / "ui" / "src" / "features" / "video-editor" / "comicRemake.ts"
+    ).read_text(encoding="utf-8")
     assert "loadSettingsFromOutput()" in editor
     assert "writeVideoEditorReplacementTarget" in editor
     assert "setMediaFilter('videos')" in editor

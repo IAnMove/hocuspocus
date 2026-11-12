@@ -1,10 +1,11 @@
 import { parseEndlessRoad } from './endlessRoad'
+import { GROUND_STYLES, isGroundStyle, parseGroundScroll } from './groundStyles'
 import type { Scene3DDocument, Scene3DSlot } from './types'
 
 type Environment = NonNullable<Scene3DDocument['environment']>
 type FloorStyle = NonNullable<Environment['floorStyle']>
 
-const FLOOR_STYLES = new Set<FloorStyle>(['mirror', 'none', 'tiles', 'backdrop', 'road'])
+const FLOOR_STYLES = new Set<FloorStyle>(['mirror', 'none', 'tiles', 'backdrop', 'road', ...GROUND_STYLES])
 const bounded = (n: unknown, fallback: number, min: number, max: number) =>
   typeof n === 'number' && Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback
 
@@ -20,9 +21,10 @@ function optionalField<K extends string, T>(key: K, value: T | undefined): Parti
   return value === undefined ? {} : { [key]: value } as Partial<Record<K, T>>
 }
 
-/** Seamless/tiles reflectors stay hidden when the floor is off or replaced by the road. */
+/** Seamless/tiles reflectors stay hidden when the floor is off or replaced by the road or a ground style. */
 export function cinematicReflectorVisible(environment: Scene3DDocument['environment']) {
   return environment?.reflectiveFloor === true && environment.floorStyle !== 'none' && environment.floorStyle !== 'road'
+    && !isGroundStyle(environment.floorStyle)
 }
 
 export function parseEnvironment(raw: unknown): Scene3DDocument['environment'] {
@@ -38,6 +40,8 @@ export function parseEnvironment(raw: unknown): Scene3DDocument['environment'] {
     ...optionalField('floorStyle', parseFloorStyle(v.floorStyle)),
     ...optionalField('floorColor', parseHexColor(v.floorColor)),
     ...optionalField('floorSourceHeight', floorSourceHeight),
+    ...optionalField('groundScroll', isGroundStyle(v.floorStyle) ? parseGroundScroll(v.groundScroll) : undefined),
+    ...optionalField('groundSeed', isGroundStyle(v.floorStyle) && Number.isInteger(v.groundSeed) ? bounded(v.groundSeed, 1, 0, 1e9) : undefined),
   }
 }
 

@@ -27,7 +27,7 @@ function installDom() {
 
 const dom = installDom()
 
-test('Video Editor keeps import, export, trim, inspector and timeline reachable in the responsive DOM', async () => {
+test('Video Editor keeps import, export, trim, inspector and timeline reachable in the responsive DOM', { concurrency: false }, async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
   const { VideoEditorPanel } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
   dom.window.localStorage.setItem('maestro-video-editor-draft-v1', JSON.stringify({
@@ -59,4 +59,26 @@ test('Video Editor keeps import, export, trim, inspector and timeline reachable 
   assert.ok(screen.getByText(/Timeline · 1 clip/))
   view.unmount()
   cleanup()
+})
+
+test('the project name takes the free width and the tooltip shows all of it', { concurrency: false }, async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { VideoEditorPanel } = await import('../src/features/video-editor/VideoEditorPanel.tsx')
+  const projectName = 'Una vista cómic, prueba larga del nombre del proyecto'
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const workspace = useStore.getState().activeWorkspace || 'default'
+  dom.window.localStorage.setItem(`maestro-video-editor-draft-v1:${encodeURIComponent(workspace)}`, JSON.stringify({
+    projectName, resolution: { label: 'Landscape 480p', width: 864, height: 480 }, fps: 30, clips: [],
+  }))
+  try {
+    render(<VideoEditorPanel />)
+    const name = screen.getByRole('textbox', { name: 'Project name' }) as HTMLInputElement
+    assert.equal(name.value, projectName)
+    assert.equal(name.title, projectName)
+    assert.match(name.className, /flex-1/)
+    assert.match(name.className, /truncate/)
+    assert.equal(/\bw-32\b|\bw-56\b/.test(name.className), false)
+  } finally {
+    cleanup()
+  }
 })

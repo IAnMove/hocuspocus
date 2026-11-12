@@ -92,6 +92,7 @@ class MeshReport:
     morph_target_count: int
     has_joints: bool
     has_weights: bool
+    triangle_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,7 @@ class GlbInspectionReport:
     extensions_used: list[str] = field(default_factory=list)
     extensions_required: list[str] = field(default_factory=list)
     issues: list[InspectorIssue] = field(default_factory=list)
+    total_triangles: int | None = None
 
 
 def report_to_dict(report: GlbInspectionReport) -> dict[str, Any]:
@@ -691,6 +693,7 @@ class _Inspector:
                     morph_target_count=morphs,
                     has_joints="JOINTS_0" in attributes,
                     has_weights="WEIGHTS_0" in attributes,
+                    triangle_count=_mesh_triangles(self._accessors, primitive_list),
                 )
             )
         return reports
@@ -1097,7 +1100,68 @@ class _Inspector:
             extensions_used=self.extensions_used,
             extensions_required=self.extensions_required,
             issues=self.issues,
+            total_triangles=_total_triangles(self.meshes),
         )
+
+
+def _accessor_count(accessors: list[Any], index: object) -> int | None:
+    if isinstance(index, bool) or not isinstance(index, int):
+        return None
+    if index < 0 or index >= len(accessors):
+        return None
+    accessor = accessors[index]
+    if not isinstance(accessor, dict):
+        return None
+    count = accessor.get("count")
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        return None
+    return count
+
+
+def _vertex_count(accessors: list[Any], primitive: dict[str, Any]) -> int | None:
+    """``count(indices)`` for an indexed primitive, otherwise ``count(POSITION)``."""
+    if "indices" in primitive:
+        return _accessor_count(accessors, primitive.get("indices"))
+    attributes = primitive.get("attributes")
+    position = attributes.get("POSITION") if isinstance(attributes, dict) else None
+    return _accessor_count(accessors, position)
+
+
+def _primitive_triangles(accessors: list[Any], primitive: dict[str, Any]) -> int | None:
+    """Triangles one primitive draws, or ``None`` when that cannot be read.
+
+    TRIANGLES (mode 4, also the default when ``mode`` is omitted) draws
+    ``n / 3``. TRIANGLE_STRIP (5) and TRIANGLE_FAN (6) draw ``n - 2``.
+    POINTS and LINES (0 to 3) draw none, so they do not hide the triangles of
+    the other primitives. Morph targets move vertices and add no triangles.
+    """
+    mode = primitive.get("mode", 4)
+    if isinstance(mode, bool) or not isinstance(mode, int) or not 0 <= mode <= 6:
+        return None
+    if mode < 4:
+        return 0
+    count = _vertex_count(accessors, primitive)
+    if count is None or (mode == 4 and count % 3):
+        return None
+    return count // 3 if mode == 4 else max(0, count - 2)
+
+
+def _mesh_triangles(accessors: list[Any], primitives: list[Any]) -> int | None:
+    counts: list[int] = []
+    for primitive in primitives:
+        if not isinstance(primitive, dict):
+            return None
+        count = _primitive_triangles(accessors, primitive)
+        if count is None:
+            return None
+        counts.append(count)
+    return sum(counts)
+
+
+def _total_triangles(meshes: list[MeshReport]) -> int | None:
+    if any(mesh.triangle_count is None for mesh in meshes):
+        return None
+    return sum(int(mesh.triangle_count or 0) for mesh in meshes)
 
 
 def _string_list(raw: object) -> list[str]:

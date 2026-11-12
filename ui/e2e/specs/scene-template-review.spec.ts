@@ -163,7 +163,7 @@ async function installReviewRoutes(page: Page, state: ReviewRouteState): Promise
 
 async function openGallery(page: Page): Promise<void> {
   await page.goto('/scene-template-review')
-  await expect(page.locator('section[aria-label="Galería de plantillas candidatas de Video3D"]')).toBeVisible()
+  await expect(page.locator('section[aria-label="Video3D candidate template gallery"]')).toBeVisible()
   await expect(page.locator('[data-template-id]')).toHaveCount(48)
 }
 
@@ -230,7 +230,7 @@ test('opens cinema-establishing in the real editor, saves exact scene JSON, and 
       controls: expect.objectContaining({
         catalogVersion: CATALOG_VERSION,
         templateVersion: 1,
-        reviewStatus: 'candidate',
+        reviewStatus: 'approved',
       }),
     })
     expect(SAVED_OUTPUT).toMatchObject({ name: 'review.scene.json', type: 'scene', url: expect.stringContaining('/api/v1/file/review.scene.json') })
@@ -254,7 +254,7 @@ test('opens cinema-establishing in the real editor, saves exact scene JSON, and 
     const recoveredScene = await readAutosave(page)
     expect(recoveredScene?.narrative).toMatchObject({
       templateId: 'cinema-establishing',
-      controls: expect.objectContaining({ catalogVersion: CATALOG_VERSION, templateVersion: 1, reviewStatus: 'candidate' }),
+      controls: expect.objectContaining({ catalogVersion: CATALOG_VERSION, templateVersion: 1, reviewStatus: 'approved' }),
     })
     expect(recoveredScene).toEqual(postedScene)
   } finally {
@@ -286,7 +286,8 @@ test('Library template bindings survive the real editor save and reopen without 
     await page.goto('/scene-template-review?editor=1')
     await page.getByRole('button', { name: 'Templates · create with my Library assets' }).click()
     const composer = page.getByRole('dialog', { name: 'Create scene from Library' })
-    await expect(composer.getByLabel('Visual BPM')).toBeDisabled()
+    // The shelf opens on music-pulse, a rhythmic card: its exposed BPM is editable.
+    await expect(composer.getByLabel('Visual BPM')).toBeEnabled()
     await chooseComposerLibraryFile(page, composer, 'hero(1).svg')
     await composer.getByRole('button', { name: 'Background (required)', exact: true }).click()
     await chooseComposerLibraryFile(page, composer, 'plate(1).svg')
@@ -302,8 +303,8 @@ test('Library template bindings survive the real editor save and reopen without 
     const saved = state.postedPayloads[0].scene as SceneLike
     expect(saved.generationPolicy).toBe('provided_only')
     expect(saved.narrative).toMatchObject({ assets: [
-      { slot: 'hero', catalogAtAssignment: { assetId: 'canonical-hero', workspaceId: 'default', runId: 'run-hero' } },
-      { slot: 'plate', catalogAtAssignment: { assetId: 'canonical-plate', workspaceId: 'default', runId: 'run-plate' } },
+      { slot: 'subject_1', catalogAtAssignment: { assetId: 'canonical-hero', workspaceId: 'default', runId: 'run-hero' } },
+      { slot: 'background', catalogAtAssignment: { assetId: 'canonical-plate', workspaceId: 'default', runId: 'run-plate' } },
     ] })
     await name.fill('Not saved')
     await page.getByRole('button', { name: 'Open scene', exact: true }).first().click()
@@ -326,7 +327,7 @@ test('shows a visible error and keeps the gallery when the saved reference is mi
     const card = page.locator('[data-template-id="cinema-establishing"]')
     await card.getByTestId('open-scene-cinema-establishing').click()
     await expect(page).toHaveURL(/\/scene-template-review$/)
-    await expect(card.getByRole('alert').filter({ hasText: 'No está disponible el snapshot' })).toBeVisible()
+    await expect(card.getByRole('alert').filter({ hasText: 'snapshot is not available' })).toBeVisible()
     await expect.poll(() => page.evaluate(key => sessionStorage.getItem(key), PENDING_SCENE_KEY)).toBeNull()
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('__scene_template_test_handoff'))).toBeNull()
     expect(state.referenceRequests).toHaveLength(1)
@@ -346,7 +347,7 @@ test('rejects a mismatched saved reference without navigating or handing it to t
     const card = page.locator('[data-template-id="cinema-establishing"]')
     await card.getByTestId('open-scene-cinema-establishing').click()
     await expect(page).toHaveURL(/\/scene-template-review$/)
-    await expect(card.getByRole('alert').filter({ hasText: 'La escena guardada no coincide' })).toBeVisible()
+    await expect(card.getByRole('alert').filter({ hasText: 'The saved scene does not match' })).toBeVisible()
     await expect.poll(() => page.evaluate(key => sessionStorage.getItem(key), PENDING_SCENE_KEY)).toBeNull()
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('__scene_template_test_handoff'))).toBeNull()
     expect(state.referenceRequests).toHaveLength(1)
@@ -360,7 +361,7 @@ test('keeps review decisions across reload and exports catalog/template versions
   try {
     await openGallery(page)
     const card = page.locator('[data-template-id="cinema-establishing"]')
-    const keep = card.getByRole('button', { name: 'Conservar', exact: true })
+    const keep = card.getByRole('button', { name: 'Keep', exact: true })
     await keep.click()
     await expect(keep).toHaveAttribute('aria-pressed', 'true')
     await expect.poll(() => page.evaluate(key => {
@@ -372,11 +373,11 @@ test('keeps review decisions across reload and exports catalog/template versions
     })
 
     await page.reload()
-    const reloadedKeep = page.locator('[data-template-id="cinema-establishing"]').getByRole('button', { name: 'Conservar', exact: true })
+    const reloadedKeep = page.locator('[data-template-id="cinema-establishing"]').getByRole('button', { name: 'Keep', exact: true })
     await expect(reloadedKeep).toHaveAttribute('aria-pressed', 'true')
 
     const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Exportar revisión JSON', exact: true }).click()
+    await page.getByRole('button', { name: 'Export review JSON', exact: true }).click()
     const download = await downloadPromise
     expect(download.suggestedFilename()).toBe(`scene-template-review-${EXPANDED_CATALOG_VERSION}.json`)
     const downloadPath = await download.path()
@@ -409,10 +410,10 @@ test('keeps one active preview player when switching candidate previews', async 
     await openGallery(page)
     const first = page.locator('[data-template-id="cinema-establishing"]')
     const second = page.locator('[data-template-id="music-pulse"]')
-    await first.getByRole('button', { name: /Ver escena/ }).click()
+    await first.getByRole('button', { name: /Watch scene/ }).click()
     await expect(page.locator('video')).toHaveCount(1)
     await expect(first.locator('video')).toHaveCount(1)
-    await second.getByRole('button', { name: /Ver escena/ }).click()
+    await second.getByRole('button', { name: /Watch scene/ }).click()
     await expect(page.locator('video')).toHaveCount(1)
     await expect(first.locator('video')).toHaveCount(0)
     await expect(second.locator('video')).toHaveCount(1)
@@ -457,8 +458,8 @@ test('migrates legacy decisions without overwriting them or approving the new mu
       localStorage.setItem(key, raw)
     }, { key: legacyKey, raw: legacy, expanded: CATALOG_REVIEW_STORAGE_KEY })
     await page.reload()
-    await expect(page.locator('[data-template-id="cinema-establishing"]').getByRole('button', { name: 'Conservar', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.locator('[data-template-id="music-spiral-exit"]').getByRole('button', { name: 'Pendiente', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('[data-template-id="cinema-establishing"]').getByRole('button', { name: 'Keep', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('[data-template-id="music-spiral-exit"]').getByRole('button', { name: 'Pending', exact: true })).toHaveAttribute('aria-pressed', 'true')
     expect(await page.evaluate(key => localStorage.getItem(key), legacyKey)).toBe(legacy)
   } finally {
     await closeApp(page, session)

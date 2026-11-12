@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useMemo, useState } from 'react'
 import type { ApiOutput } from '../../api/outputs'
 import { AssetInput } from '../asset-picker'
@@ -92,7 +93,7 @@ function ExportPane({
       <p>{copy.exportHelp}</p>
       <p>{interpolate(copy.shots, { count: documents.length })} · {interpolate(copy.assetsUsed, { count: uses })}</p>
       <label className="block">{copy.packageName}
-        <input className="mt-1 min-h-10 w-full rounded-lg border border-border bg-bg-secondary px-3" value={title} maxLength={120} onChange={event => onTitle(event.target.value)} />
+        <input aria-label={copy.packageName} className="mt-1 min-h-10 w-full rounded-lg border border-border bg-bg-secondary px-3" value={title} maxLength={120} onChange={event => onTitle(event.target.value)} />
       </label>
       <button type="button" className="min-h-10 rounded-lg border border-border px-3" disabled={busy || documents.length === 0} onClick={onExport}>
         {busy ? copy.exporting : copy.exportAction}
@@ -145,7 +146,7 @@ function ImportPane({
       <p>{copy.importHelp}</p>
       <label className="block">
         {copy.chooseZip}
-        <input type="file" accept=".zip,application/zip" className="mt-1 block w-full" aria-label={copy.chooseZip} disabled={busy}
+        <input type="file" accept=".zip,application/zip" className="mt-1 block w-full" aria-label={copy.chooseZip} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
           onChange={event => { onInspect(event.target.files?.[0]); event.target.value = '' }} />
       </label>
       {busy && !report ? <p role="status">{copy.inspecting}</p> : null}

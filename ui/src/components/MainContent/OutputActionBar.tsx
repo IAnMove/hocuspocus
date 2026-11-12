@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pencil, SlidersHorizontal, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Film, BadgeInfo } from 'lucide-react'
+import { Pencil, SlidersHorizontal, RefreshCw, Copy, Trash2, Check, Combine, Loader2, Heart, ArrowLeftToLine, Download, FolderInput, Scissors, FastForward, BookMarked, Film, BadgeInfo, Clapperboard } from 'lucide-react'
 import { editOutputImage, addOutputImageReference } from '../../features/studio/imageInputActions'
 import { beginImageSettingsChange } from '../../features/studio/imageSettingsRestore'
 import { outputImageUrl, outputMediaUrl } from '../../lib/storedImageFiles'
+import { captureShownFrame } from './videoFrameCapture'
 import { SaveRecipeDialog } from '../Recipes/SaveRecipeDialog'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { MediaMoveDialog } from './MediaMoveDialog'
@@ -12,6 +13,9 @@ import { galleryWorkspaceName } from '../../stores/gallerySlice'
 import { useStore } from '../../stores/useStore'
 import { fetchOutputMetadata, moveOutput, uploadImage, selectPipelineClipVideo } from '../../api/client'
 import type { OutputFile } from '../../types'
+import { exportedSceneKind, openExportedScene } from '../../lib/exportedScene'
+import { outputProvenance } from '../../lib/outputProvenance'
+import { isExtendOrBlendOutput } from '../../features/studio/studioRestore'
 import {
   readVideoEditorReplacementTarget,
   writeVideoEditorReplacementResult,
@@ -292,8 +296,13 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
         // The dialog releases its player on close; recover its selected frame.
         video = document.createElement('video')
         temporaryVideo = video
-        video.src = outputMediaUrl(file.name, outputWorkspace)
         video.muted = true
+        video.playsInline = true
+        // A detached player can finish `seeked` with a black picture. Keep it in the
+        // document, off screen, so Chromium actually presents the saved frame.
+        video.style.cssText = 'position:fixed;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none'
+        document.body.appendChild(video)
+        video.src = outputMediaUrl(file.name, outputWorkspace)
         await new Promise<void>((resolve, reject) => {
           video!.onloadeddata = () => resolve()
           video!.onerror = () => reject(new Error('video load failed'))
@@ -310,15 +319,7 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
           })
         }
       }
-      const canvas = document.createElement('canvas')
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('canvas unavailable')
-      ctx.drawImage(video, 0, 0)
-      const blob: Blob = await new Promise((resolve, reject) =>
-        canvas.toBlob(b => (b ? resolve(b) : reject(new Error('frame capture failed'))), 'image/png')
-      )
+      const blob = await captureShownFrame(video)
       const stem = file.name.replace(/\.[^.]+$/, '')
       const frameFile = new File([blob], `${stem}_t${video.currentTime.toFixed(2)}s.png`, { type: 'image/png' })
       addImageRef(frameFile)
@@ -329,6 +330,7 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
     } finally {
       if (temporaryVideo) {
         temporaryVideo.pause()
+        temporaryVideo.remove()
         temporaryVideo.removeAttribute('src')
         temporaryVideo.load()
       }
@@ -364,8 +366,43 @@ function useOutputActions({ file, index, params: providedParams, getVideoElement
 
 type OutputActions = ReturnType<typeof useOutputActions>
 
+/** A Video 2D/3D export reopens the scene it was rendered from (also when an agent made it through MCP). */
+function EditSceneButton({ params, t }: { params: Params; t: OutputActions['t'] }) {
+  const [error, setError] = useState('')
+  const kind = exportedSceneKind(params)
+  if (!kind) return null
+  const label = t(kind === '3d' ? 'editScene3d' : 'editScene2d')
+  return (
+    <>
+      <button type="button" data-testid="output-edit-scene" data-scene-kind={kind}
+        onClick={event => { event.stopPropagation(); setError(''); void openExportedScene(params).catch(reason => setError(reason instanceof Error ? reason.message : String(reason))) }}
+        className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors" title={label} aria-label={label}>
+        <Clapperboard size={13} />
+      </button>
+      {error && <span role="alert" className="max-w-40 truncate text-[9px] text-red-400" title={error}>{error}</span>}
+    </>
+  )
+}
+
+/** A Video Editor export made from a saved montage (an agent's montages.export, or the editor) reopens that montage. */
+function EditMontageButton({ params, workspace, t }: { params: Params; workspace: string; t: OutputActions['t'] }) {
+  const file = outputProvenance({ params: params ?? undefined }).montageFile
+  if (!file) return null
+  const label = t('editMontage', { name: file })
+  return (
+    <button type="button" data-testid="output-edit-montage"
+      onClick={event => {
+        event.stopPropagation()
+        void import('../../features/music-productions/useOpenProductionMontage').then(({ requestOpenMontage }) => requestOpenMontage(workspace, file))
+      }}
+      className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors" title={label} aria-label={label}>
+      <Scissors size={13} />
+    </button>
+  )
+}
+
 function HandoffActions({ a }: { a: OutputActions }) {
-  const { directorReplacementTarget, editorReplacementTarget, file, handleOpenInVideoEditor, handleUseAsDirectorReplacement, handleUseAsEditorReplacement, montageSelectionError, selectingForMontage, t } = a
+  const { directorReplacementTarget, editorReplacementTarget, file, handleOpenInVideoEditor, handleUseAsDirectorReplacement, handleUseAsEditorReplacement, montageSelectionError, params, selectingForMontage, t } = a
   return (
     <>
         {file.type === 'video' && directorReplacementTarget && (
@@ -399,13 +436,33 @@ function HandoffActions({ a }: { a: OutputActions }) {
             <Film size={13} />
           </button>
         )}
+        {file.type === 'video' && <EditSceneButton params={params} t={t} />}
+        {file.type === 'video' && <EditMontageButton params={params} workspace={a.outputWorkspace} t={t} />}
         {montageSelectionError && <span className="max-w-40 truncate text-[9px] text-red-400" title={montageSelectionError}>{montageSelectionError}</span>}
     </>
   )
 }
 
+function restoreActionDisabled(busy: boolean, blocked: boolean) {
+  return busy || blocked
+}
+
+function restoreActionTitle(blocked: boolean, blockedTitle: string, actionTitle: string) {
+  return blocked ? blockedTitle : actionTitle
+}
+
+function shownClipCount(count: number | null | undefined) {
+  return count ?? 0
+}
+
 function GenerationActions({ a }: { a: OutputActions }) {
-  const { clipTotal, copied, file, groupId, handleContinueFrom, handleCopyPrompt, handleOutputSettings, handleRejoin, openRetakeDialog, params, rejoining, setShowSaveRecipe, settingsBusy, settingsError, tStudio } = a
+  const { clipTotal, copied, file, groupId, handleContinueFrom, handleCopyPrompt, handleOutputSettings, handleRejoin, openRetakeDialog, params, rejoining, setShowSaveRecipe, settingsBusy, settingsError, t, tStudio } = a
+  // Extend/Blend sidecars cannot be restored yet (see isExtendOrBlendOutput).
+  const restoreBlocked = isExtendOrBlendOutput(params)
+  const restoreBlockedTitle = t('extendBlendRestoreUnavailable')
+  const loadSettingsTitle = restoreActionTitle(restoreBlocked, restoreBlockedTitle, tStudio('imageActions.loadSettings'))
+  const regenerateTitle = restoreActionTitle(restoreBlocked, restoreBlockedTitle, t('actions.regenerate'))
+  const rejoinTotal = shownClipCount(clipTotal)
   return (
     <>
         {params && (
@@ -413,23 +470,23 @@ function GenerationActions({ a }: { a: OutputActions }) {
             <button
               onClick={(e) => { e.stopPropagation(); setShowSaveRecipe(true) }}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors"
-              title="Save as Recipe — reuse this look with one click"
+              title={t('actions.saveRecipe')} aria-label={t('actions.saveRecipe')}
             >
               <BookMarked size={13} />
             </button>
             <button
               onClick={event => { event.stopPropagation(); void handleOutputSettings(false) }}
-              disabled={settingsBusy}
-              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title={tStudio('imageActions.loadSettings')}
+              disabled={restoreActionDisabled(settingsBusy, restoreBlocked)}
+              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
+              title={loadSettingsTitle} aria-label={loadSettingsTitle}
             >
               <SlidersHorizontal size={13} />
             </button>
             <button
               onClick={event => { event.stopPropagation(); void handleOutputSettings(true) }}
-              disabled={settingsBusy}
-              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title="Re-generate with same settings"
+              disabled={restoreActionDisabled(settingsBusy, restoreBlocked)}
+              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
+              title={regenerateTitle} aria-label={regenerateTitle}
             >
               <RefreshCw size={13} />
             </button>
@@ -439,14 +496,14 @@ function GenerationActions({ a }: { a: OutputActions }) {
                 <button
                   onClick={() => openRetakeDialog(file.name)}
                   className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-indicator-warning transition-colors"
-                  title="Retake — regenerate a time region"
+                  title={t('actions.retake')} aria-label={t('actions.retake')}
                 >
                   <Scissors size={13} />
                 </button>
                 <button
                   onClick={handleContinueFrom}
                   className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors"
-                  title="Extend this video with new content"
+                  title={t('actions.extend')} aria-label={t('actions.extend')}
                 >
                   <FastForward size={13} />
                 </button>
@@ -457,7 +514,7 @@ function GenerationActions({ a }: { a: OutputActions }) {
                 onClick={handleRejoin}
                 disabled={rejoining}
                 className="p-1.5 rounded-lg hover:bg-bg-hover text-accent-blue hover:text-accent-blue-hover transition-colors disabled:opacity-50"
-                title={`Rejoin all ${clipTotal} clips in this group`}
+                title={t('actions.rejoin', { count: rejoinTotal })} aria-label={t('actions.rejoin', { count: rejoinTotal })}
               >
                 {rejoining ? <Loader2 size={13} className="animate-spin" /> : <Combine size={13} />}
               </button>
@@ -465,7 +522,7 @@ function GenerationActions({ a }: { a: OutputActions }) {
             <button
               onClick={handleCopyPrompt}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title="Copy prompt"
+              title={t('actions.copyPrompt')} aria-label={t('actions.copyPrompt')}
             >
               {copied ? <Check size={13} className="text-accent-green" /> : <Copy size={13} />}
             </button>
@@ -482,7 +539,7 @@ function InputActions({ a }: { a: OutputActions }) {
         {file.type === 'image' && (
           <button onClick={event => { event.stopPropagation(); void handleEditImage() }} disabled={settingsBusy}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue disabled:opacity-40"
-            title={tStudio('imageActions.edit')}><Pencil size={13} /></button>
+            title={tStudio('imageActions.edit')} aria-label={tStudio('imageActions.edit')}><Pencil size={13} /></button>
         )}
         {file.type === 'image' && (
           <button
@@ -492,7 +549,8 @@ function InputActions({ a }: { a: OutputActions }) {
                 ? 'text-accent-green'
                 : 'hover:bg-bg-hover text-text-secondary hover:text-accent-blue'
             }`}
-            title={generationMode === 'image' ? tStudio('imageActions.reference') : 'Use as start frame'}
+            title={generationMode === 'image' ? tStudio('imageActions.reference') : t('actions.startFrame')}
+            aria-label={generationMode === 'image' ? tStudio('imageActions.reference') : t('actions.startFrame')}
           >
             {sentToInput ? <Check size={13} /> : <ArrowLeftToLine size={13} />}
           </button>
@@ -506,14 +564,14 @@ function InputActions({ a }: { a: OutputActions }) {
                   ? 'text-accent-green'
                   : 'hover:bg-bg-hover text-text-secondary hover:text-accent-blue'
               }`}
-              title="Use current frame as reference image"
+              title={t('actions.referenceFrame')} aria-label={t('actions.referenceFrame')}
             >
               {sentToInput ? <Check size={13} /> : <ArrowLeftToLine size={13} />}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); setShowExtraInfo(true) }}
               className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] text-text-secondary transition-colors hover:bg-bg-hover hover:text-accent-blue"
-              title="Generate descriptions and social copy from saved prompts"
+              title={t('actions.extraInfoHint')}
             >
               <BadgeInfo size={13} />
               {t('extraInfo')}
@@ -539,7 +597,7 @@ function LibraryActions({ a }: { a: OutputActions }) {
             document.body.removeChild(link)
           }}
           className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-          title="Download"
+          title={t('actions.download')} aria-label={t('actions.download')}
         >
           <Download size={13} />
         </button>
@@ -552,7 +610,7 @@ function LibraryActions({ a }: { a: OutputActions }) {
             className={`flex min-h-11 min-w-11 items-center justify-center p-1.5 rounded-lg transition-colors ${
               moving ? 'text-accent-blue animate-pulse' : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
             }`}
-            title="Move to workspace"
+            title={t('moveOutput.title')} aria-label={t('moveOutput.title')}
           >
             <FolderInput size={13} />
           </button>
@@ -569,7 +627,7 @@ function LibraryActions({ a }: { a: OutputActions }) {
               ? 'text-red-400 hover:text-red-300'
               : 'hover:bg-bg-hover text-text-secondary hover:text-red-400'
           }`}
-          title={file.favorite ? 'Remove from favorites' : 'Add to favorites'}
+          title={file.favorite ? t('actions.removeFavorite') : t('actions.addFavorite')} aria-label={file.favorite ? t('actions.removeFavorite') : t('actions.addFavorite')}
         >
           <Heart size={13} fill={file.favorite ? 'currentColor' : 'none'} />
         </button>

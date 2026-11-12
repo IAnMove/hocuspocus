@@ -56,7 +56,7 @@ test('adding a language starts a recording in that language; removing it returns
   const view = render(<Editor />)
   fireEvent.change(view.getByTestId('add-language-voice'), { target: { value: 'spanish' } })
   fireEvent.click(view.getByTestId('add-language-voice-confirm'))
-  assert.equal(current?.spanish?.model, 'qwen3_tts_base')
+  assert.equal(current?.spanish?.model, 'voxcpm2_base', 'new language voices start on VoxCPM2')
   assert.equal((current?.spanish as CustomCharacterVoice).language, 'spanish')
   const block = within(view.getByTestId('language-voice-spanish'))
   const languageSelect = block.getByLabelText('Language for new dialogue') as HTMLSelectElement

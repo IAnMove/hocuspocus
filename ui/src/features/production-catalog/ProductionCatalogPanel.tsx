@@ -31,13 +31,13 @@ export function ProductionCatalogPanel({
     <div className="mb-3 flex flex-wrap gap-2 text-xs">
       <label>
         {t('filters.format')}
-        <select className="ml-1 rounded border border-border bg-bg-primary" data-filter="format" value={format} onChange={event => onFormat(event.target.value)}>
+        <select aria-label={t('filters.format')} className="ml-1 rounded border border-border bg-bg-primary" data-filter="format" value={format} onChange={event => onFormat(event.target.value)}>
           {FILTER_FORMATS.map(item => <option key={item || 'all'} value={item}>{item && isFormat(item) ? t(FORMAT_KEYS[item]) : t('filters.all')}</option>)}
         </select>
       </label>
       <label>
         {t('filters.status')}
-        <select className="ml-1 rounded border border-border bg-bg-primary" data-filter="status" value={status} onChange={event => onStatus(event.target.value)}>
+        <select aria-label={t('filters.status')} className="ml-1 rounded border border-border bg-bg-primary" data-filter="status" value={status} onChange={event => onStatus(event.target.value)}>
           {FILTER_STATUSES.map(item => <option key={item || 'all'} value={item}>{item && isStatus(item) ? t(STATUS_KEYS[item]) : t('filters.all')}</option>)}
         </select>
       </label>

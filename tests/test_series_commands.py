@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from routers.wangp_mcp import tool_definitions
-from services.series_commands import command_catalog, command_handlers
+from services.series_commands import OPERATIONS, command_catalog, command_handlers
 
 
 class Response(io.BytesIO):
@@ -135,17 +135,160 @@ def test_rigging_a_flat_character_posts_to_the_kit_and_summarises_it(tmp_path):
     assert result["result"]["review"].endswith("r.png?workspace=series")
 
 
+def test_rigging_passes_ink_mouths_and_placement_hints_to_the_kit(tmp_path):
+    kit = {"id": "anselmo", "name": "Anselmo", "base": {"source": "x"}, "poses": {}, "mouth": {"closed": {}}}
+    handlers, calls, _, _ = harness(tmp_path, [{"revision": 2, "character": kit, "review": "r", "unwipedPoses": [],
+                                                "poses": {"base": {"wiped": False, "mouthFound": True, "face": "realistic"}}}])
+    hints = {"base": {"mouth": [44.2, 17.45]}, "busto": None}
+    call(handlers, "characters.rig.flat", {"workspace": "series", "character_id": "anselmo", "base_revision": 1,
+                                           "style": {"mouthStyle": "ink"}, "hints": hints})
+    assert calls[0][2] == {"workspace": "series", "baseRevision": 1, "style": {"mouthStyle": "ink"}, "hints": hints}
+    schema = OPERATIONS["characters.rig.flat"][0]
+    assert schema["style"]["properties"]["mouthStyle"] == {"enum": ["paper", "ink", "warp"]} and "hints" in schema
+    assert set(schema["hints"]["additionalProperties"]["anyOf"][1]["properties"]) == {"mouth", "eyes", "mouthWidth", "exact", "blink"}
+
+
+def test_previewing_warp_mouths_posts_the_line_and_asks_for_a_sheet(tmp_path):
+    preview = {"pose": "busto", "mouth": [61.6, 20.48], "mouthWidth": 6.55, "found": True, "from": "hint",
+               "sheet": "/api/v1/file/.kit-blas-busto-warp-preview.png?workspace=series&v=1"}
+    handlers, calls, _, _ = harness(tmp_path, [preview])
+    result = call(handlers, "characters.rig.flat.preview", {"workspace": "series", "character_id": "blas", "pose": "busto",
+                                                            "mouth": [61.6, 20.1], "mouthWidth": 6.5})
+    method, url, body = calls[0]
+    assert (method, url) == ("POST", "http://127.0.0.1:9/api/v1/character-kits/library/kits/blas/flat-rig/preview")
+    assert body == {"workspace": "series", "pose": "busto", "sheet": True, "mouth": [61.6, 20.1], "mouthWidth": 6.5}
+    assert result["result"]["sheet"].endswith("warp-preview.png?workspace=series&v=1")
+    assert OPERATIONS["characters.rig.flat.preview"][2] is False, "a preview saves nothing on the kit"
+
+
+def test_the_agent_trail_names_the_rigged_kit_and_leaves_previews_out():
+    from services.agent_activity import artifact_targets
+    from services.series_commands import _operation_schema
+    rigged = {"result": {"revision": 3, "character": {"id": "blas", "name": "Blas"}, "review": "/api/v1/file/kit-blas-rig-review-1.png"}}
+    targets = artifact_targets({"input": {"workspace": "series", "character_id": "blas"}}, rigged)
+    assert targets[0] == {"kind": "character_kit", "id": "blas", "title": "Blas"}
+    # The dispatcher records mutating calls only: the preview's warped sheet is not something the agent made.
+    preview = OPERATIONS["characters.rig.flat.preview"]
+    assert _operation_schema("characters.rig.flat.preview", *preview)["mutation"] is False
+
+
+def test_checking_a_pose_posts_the_rig_check_and_saves_nothing(tmp_path):
+    from services.series_commands import _operation_schema
+    report = {"ready": False, "reasons": ["eyes_small"], "face": {"box": [1, 2, 30, 40], "confidence": 0.4}}
+    handlers, calls, _, _ = harness(tmp_path, [report])
+    result = call(handlers, "characters.rig.check", {"workspace": "series", "source": "/api/v1/file/pose.png?workspace=series"})
+    method, url, body = calls[0]
+    assert (method, url) == ("POST", "http://127.0.0.1:9/api/v1/character-kits/rig-check")
+    assert body == {"workspace": "series", "source": "/api/v1/file/pose.png?workspace=series"}
+    assert result["result"] == report
+    assert OPERATIONS["characters.rig.check"][2] is False
+    assert _operation_schema("characters.rig.check", *OPERATIONS["characters.rig.check"])["mutation"] is False
+
+
 def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp_path):
     handlers, calls, _, _ = harness(tmp_path, [])
     listed = call(handlers, "characters.styles", {})["result"]
     assert "paper-cutout" in [style["id"] for style in listed["styles"]] and "prompt" not in listed
+    rigs = {style["id"]: style["rig"] for style in listed["styles"]}
+    assert rigs["graphic-novel"] == {"mouthStyle": "warp"}, "painted characters talk with their own drawing"
     built = call(handlers, "characters.styles", {"style": "paper-cutout", "kind": "character",
                                                  "description": "Ana, green jacket"})["result"]["prompt"]
     assert built["screen"] == "magenta" and "Ana, green jacket" in built["prompt"]
+    pose = call(handlers, "characters.styles", {"style": "paper-cutout", "kind": "pose", "description": "waving",
+                                                "screen": "magenta"})["result"]["prompt"]
+    assert pose["screen"] == "magenta" and "magenta" in pose["prompt"], "a pose keeps its character's screen"
     assert calls == []
     with pytest.raises(HTTPException) as error:
         call(handlers, "characters.styles", {"style": "oil-painting", "kind": "character"})
     assert error.value.status_code == 404
+
+
+def test_character_animations_and_their_sheet_go_through_the_http_contract(tmp_path):
+    handlers, calls, _, _ = harness(tmp_path, [{"animations": [{"id": "walk"}], "sheet": {"feet": 0.96}},
+                                               {"animations": [{"id": "walk"}], "sheet": {"feet": 0.96}}, {"prompt": "p", "screen": "green"},
+                                               {"source": "/api/v1/file/walk-sheet-1.png?workspace=w", "count": 4}])
+    listed = call(handlers, "characters.animations", {})["result"]
+    assert listed["animations"][0]["id"] == "walk" and "prompt" not in listed
+    built = call(handlers, "characters.animations", {"animation": "walk", "pose": "contact", "description": "Ana", "style": "paper-cutout"})["result"]
+    assert built["prompt"] == {"prompt": "p", "screen": "green"}
+    sheet = call(handlers, "characters.animation.sheet", {"workspace": "w", "sources": ["a.png", "b.png"], "name": "walk"})["result"]
+    assert sheet["count"] == 4
+    assert [(method, url.split("9", 1)[1]) for method, url, _ in calls] == [
+        ("GET", "/api/v1/character-kits/animations/catalog"), ("GET", "/api/v1/character-kits/animations/catalog"),
+        ("POST", "/api/v1/character-kits/animations/prompt"), ("POST", "/api/v1/character-kits/animations/sheet")]
+    assert calls[2][2] == {"animation": "walk", "pose": "contact", "description": "Ana", "style": "paper-cutout"}
+    assert "custom" in OPERATIONS["characters.animations"][0] and "scaleBy" in OPERATIONS["characters.animation.sheet"][0]
+    assert calls[3][2] == {"workspace": "w", "sources": ["a.png", "b.png"], "name": "walk"}
+    from services.series_commands import _operation_schema
+    assert _operation_schema("characters.animations", *OPERATIONS["characters.animations"])["mutation"] is False
+    assert _operation_schema("characters.animation.sheet", *OPERATIONS["characters.animation.sheet"])["mutation"] is True
+
+
+def test_an_animation_is_reviewed_and_made_with_auto_approve_over_mcp_through_the_same_routes_as_the_wizard(tmp_path):
+    from services.series_commands import _operation_schema
+    handlers, calls, _, _ = harness(tmp_path, [{"review": {"reviewState": "approved", "reviewedBy": "agent"}}, {"job": {"jobId": "anim-1", "autoApprove": True}},
+                                               {"job": {"jobId": "anim-2"}}, {"job": {"jobId": "anim-3"}}])
+    reviewed = call(handlers, "characters.animation.review", {"workspace": "w", "character_id": "ana", "animation": "walk", "decision": "approve", "note": "ok"})
+    assert calls[0] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/review",
+                        {"workspace": "w", "kitId": "ana", "animation": "walk", "decision": "approve", "note": "ok"}), "the Wizard posts the same body to this route"
+    assert reviewed["result"]["review"]["reviewedBy"] == "agent"
+    call(handlers, "characters.animation.make", {"workspace": "w", "character_id": "ana", "animation": "walk", "autoApprove": True})
+    assert calls[1] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/make", {"workspace": "w", "kitId": "ana", "animation": "walk", "autoApprove": True})
+    call(handlers, "characters.animation.make", {"workspace": "w", "character_id": "ana", "animation": "wave"})
+    assert "autoApprove" not in calls[2][2] and "method" not in calls[2][2], "approval is asked for, never assumed"
+    call(handlers, "characters.animation.make", {"workspace": "w", "character_id": "ana", "animation": "walk-12", "method": "video"})
+    assert calls[3] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/make",
+                        {"workspace": "w", "kitId": "ana", "animation": "walk-12", "method": "video"})
+    review = _operation_schema("characters.animation.review", *OPERATIONS["characters.animation.review"])
+    assert review["mutation"] is True and review["inputSchema"]["properties"]["input"]["required"] == ["workspace", "character_id", "animation", "decision"]
+    assert review["inputSchema"]["properties"]["input"]["properties"]["decision"] == {"enum": ["approve", "reject"]}
+    make = OPERATIONS["characters.animation.make"]
+    assert "autoApprove" in make[0] and "Never approve it yourself" not in make[3] and "characters.animation.review" in make[3] and "one_shot" in make[3]
+    from services.mcp_profiles import SERIES_TOOLS
+    assert "characters.animation.review" in SERIES_TOOLS
+
+
+def test_a_set_of_animations_is_made_followed_and_cancelled_over_mcp_through_the_routes_of_the_wizard_and_the_panel(tmp_path):
+    from services.mcp_profiles import SERIES_TOOLS
+    from services.series_commands import _operation_schema
+    handlers, calls, _, _ = harness(tmp_path, [{"job": {"jobId": "animset-1", "sheets": []}}, {"job": {"jobId": "animset-1"}}, {"job": {"jobId": "animset-1"}},
+                                               {"job": {"jobId": "anim-9"}}, {"job": {"jobId": "anim-9"}}])
+    made = call(handlers, "characters.animation.make_set", {"workspace": "w", "character_id": "ana", "set": "walk-directions", "autoApprove": True, "model": "qwen_image_21_turbo"})
+    assert calls[0] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/make-set",
+                        {"workspace": "w", "kitId": "ana", "set": "walk-directions", "autoApprove": True, "model": "qwen_image_21_turbo"})
+    assert made["result"]["job"]["jobId"] == "animset-1"
+    call(handlers, "characters.animation.status", {"workspace": "w", "job_id": "animset-1"})
+    assert calls[1][:2] == ("GET", "http://127.0.0.1:9/api/v1/character-kits/animations/sets/animset-1?workspace=w"), "a set job is followed with the same status tool"
+    call(handlers, "characters.animation.cancel", {"workspace": "w", "job_id": "animset-1"})
+    assert calls[2] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/sets/animset-1/cancel", {"workspace": "w"})
+    call(handlers, "characters.animation.status", {"workspace": "w", "job_id": "anim-9"})
+    call(handlers, "characters.animation.cancel", {"workspace": "w", "job_id": "anim-9"})
+    assert calls[3][1].endswith("/animations/jobs/anim-9?workspace=w") and calls[4][1].endswith("/animations/jobs/anim-9/cancel"), "an animation job is followed as before"
+    schema = _operation_schema("characters.animation.make_set", *OPERATIONS["characters.animation.make_set"])
+    assert schema["mutation"] is True and schema["inputSchema"]["properties"]["input"]["required"] == ["workspace", "character_id", "set"]
+    properties = schema["inputSchema"]["properties"]["input"]["properties"]
+    assert properties["set"] == {"enum": ["walk-12", "walk-directions", "idle-directions"]} and properties["autoApprove"] == {"type": "boolean"}
+    text = OPERATIONS["characters.animation.make_set"][3]
+    assert "one_shot" in text and "mirror" in text and "walk-directions" in text and "characters.animation.status" in text
+    assert "characters.animation.make_set" in SERIES_TOOLS
+
+
+def test_a_custom_animation_takes_twelve_poses_over_mcp_in_any_direction():
+    make, listed = OPERATIONS["characters.animation.make"], OPERATIONS["characters.animations"]
+    custom = make[0]["custom"]["properties"]
+    assert custom["poses"]["maxItems"] == 12 and custom["view"] == {"enum": ["bust", "front", "side", "front34", "back34", "back"]}
+    assert listed[0]["custom"]["properties"]["view"] == custom["view"]
+    assert "up to 12" in make[3] and "up to 6" not in make[3] and "walk-12" in listed[3] and "motion" in listed[3]
+    assert make[0]["method"] == {"enum": ["poses", "video", "puppet"]} and "method video" in make[3] and "make_set stays pose by pose" in make[3]
+
+
+def test_a_voice_band_is_set_over_mcp_through_the_same_route_as_the_wizard(tmp_path):
+    from services.mcp_profiles import SERIES_TOOLS
+    handlers, calls, _, _ = harness(tmp_path, [{"kits": {"gary": {"id": "gary"}}}])
+    call(handlers, "characters.voice.band", {"workspace": "w", "character_id": "gary", "voiceType": "man"})
+    assert calls[0] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/library/kits/gary/voice-band",
+                        {"workspace": "w", "voiceType": "man"})
+    assert "characters.voice.band" in OPERATIONS and "characters.voice.band" in SERIES_TOOLS
 
 
 def test_the_server_episode_render_is_reachable_over_mcp(tmp_path):
@@ -160,3 +303,88 @@ def test_the_server_episode_render_is_reachable_over_mcp(tmp_path):
     assert calls[1][:2] == ("GET", "http://127.0.0.1:9/api/v1/series/native-render/jobs/native-1?workspace=series")
     call(handlers, "series.episode.render_native.resume", {"workspace": "series", "job_id": "native-1"})
     assert calls[2][:2] == ("POST", "http://127.0.0.1:9/api/v1/series/native-render/jobs/native-1/resume")
+
+
+def test_a_shot_is_read_and_edited_by_its_number_over_mcp(tmp_path):
+    handlers, calls, _, _ = harness(tmp_path, [{"shotId": "e1s04", "number": 5}, {"shotId": "e1s04", "changed": ["fx"]}])
+    read = call(handlers, "series.shot.get", {"workspace": "series", "series_id": "uv", "episode_id": "ep1", "shot": 5})
+    assert calls[0][:2] == ("GET", "http://127.0.0.1:9/api/v1/series/uv/episodes/ep1/shots/5?workspace=series")
+    assert read["result"]["shotId"] == "e1s04"
+    edited = call(handlers, "series.shot.update", {"workspace": "series", "series_id": "uv", "episode_id": "ep1", "shot": "e1s04",
+                                                   "append": {"fx": [{"kind": "confetti", "at": 1}]}, "render": True})
+    assert calls[1] == ("POST", "http://127.0.0.1:9/api/v1/series/uv/episodes/ep1/shots/edit",
+                        {"workspace": "series", "shot": "e1s04", "append": {"fx": [{"kind": "confetti", "at": 1}]}, "render": True})
+    assert edited["result"]["changed"] == ["fx"]
+    schema = next(item for item in command_catalog() if item["name"] == "series.shot.update")["inputSchema"]["properties"]["input"]
+    assert schema["required"] == ["workspace", "series_id", "episode_id", "shot"] and "append" in schema["properties"]
+
+
+def test_a_location_plate_with_people_warns_and_still_imports(tmp_path, monkeypatch):
+    warning = {"code": "people_in_plate", "count": 1, "boxes": [[1, 2, 3, 4]]}
+    series = {"revision": 3, "locations": [{"id": "plaza"}], "assets": {}}
+    handlers, _, workspace, _ = harness(tmp_path, [{"asset": {"id": "asset_plate"}, "series": series, "warnings": [warning]}])
+    (workspace / "plate.png").write_bytes(b"png")
+    result = call(handlers, "series.asset.import", {"workspace": "series", "series_id": "uv", "file": "plate.png",
+                                                    "owner_type": "location", "owner_id": "plaza", "kind": "image",
+                                                    "reference_role": "environment"})
+    assert result["result"]["asset"]["id"] == "asset_plate"
+    assert result["result"]["warnings"] == [warning]
+
+
+@pytest.mark.parametrize("reply", [{"warnings": []}, {}], ids=["clean plate", "no warnings key"])
+def test_the_mcp_import_never_scans_a_plate_again(tmp_path, monkeypatch, reply):
+    """The server checks the plate once. A clean one answers warnings: [], and the handler does not run the detector."""
+    series = {"revision": 3, "locations": [{"id": "plaza"}], "assets": {}}
+    handlers, _, workspace, _ = harness(tmp_path, [{"asset": {"id": "asset_plate"}, "series": series, **reply}])
+    (workspace / "plate.png").write_bytes(b"png")
+    scans = []
+    monkeypatch.setattr("services.series_plate_checks.detect_people", lambda path: scans.append(path) or [[1, 2, 3, 4]])
+    result = call(handlers, "series.asset.import", {"workspace": "series", "series_id": "uv", "file": "plate.png",
+                                                    "owner_type": "location", "owner_id": "plaza", "kind": "image",
+                                                    "reference_role": "environment"})
+    assert "warnings" not in result["result"] and scans == []
+
+
+def test_the_import_reply_of_a_plate_always_lists_its_warnings(monkeypatch):
+    from services.series_plate_checks import with_plate_warning
+    scans = []
+    monkeypatch.setattr("services.series_plate_checks.detect_people", lambda path: scans.append(path) or [])
+    series = {"locations": [{"id": "plaza"}]}
+    body = {"referenceRole": "plate", "ownerType": "location", "ownerId": "plaza"}
+    assert with_plate_warning({"asset": {"id": "a"}}, "p.png", body, series) == {"asset": {"id": "a"}, "warnings": []}
+    monkeypatch.setattr("services.series_plate_checks.detect_people", lambda path: scans.append(path) or [[1, 2, 3, 4]])
+    assert with_plate_warning({"asset": {"id": "a"}}, "p.png", body, series)["warnings"] == [
+        {"code": "people_in_plate", "count": 1, "boxes": [[1, 2, 3, 4]]}]
+    portrait = {**body, "referenceRole": "primary_portrait"}
+    assert with_plate_warning({"asset": {"id": "a"}}, "p.png", portrait, series) == {"asset": {"id": "a"}}
+    assert scans == ["p.png", "p.png"]
+
+
+def test_plate_people_and_the_location_picture():
+    from services.series_plate_checks import location_plate_url, plate_people_warning
+    found = lambda _path: [[1, 2, 3, 4]]
+    assert plate_people_warning("p.png", role="environment", location={}, detect=found)["count"] == 1
+    assert plate_people_warning("p.png", role="environment", location={"layout2d": {"allowPeople": True}}, detect=found) is None
+    assert plate_people_warning("p.png", role="primary_portrait", location={}, detect=found) is None
+    assert plate_people_warning("p.png", role="environment", location={}, detect=lambda _path: []) is None
+    assert plate_people_warning("p.png", role="location_reference", location=None, detect=found)["code"] == "people_in_plate"
+    assets = {"plate": {"kind": "image", "uri": "assets/plate.png"}, "bg": {"kind": "image", "uri": "assets/bg.png"},
+              "ref": {"kind": "image", "uri": "outputs/ref.png"}, "picked": {"kind": "image", "uri": "assets/picked.png"},
+              "loop": {"kind": "video", "uri": "assets/loop.mp4"}, "night": {"kind": "image", "uri": "assets/night.png"}}
+    place = {"id": "plaza", "layout2d": {"plateAssetId": "plate", "backgroundAssetId": "bg"}, "referenceAssetIds": ["ref"],
+             "variants": [{"id": "dusk", "referenceAssetIds": ["night"]}]}
+    library = {"locations": [place], "assets": assets}
+    shot = {"locationId": "plaza", "scene3d": {"template": "user-mars", "backdrop": "location"}}
+    assert location_plate_url(library, shot, "cast") == "/api/v1/file/assets/plate.png?workspace=cast"
+    # A plate3d loop is a video; the backdrop slot draws a still, so the next image is used.
+    place["layout2d"]["plateAssetId"] = "loop"
+    assert location_plate_url(library, shot, "cast") == "/api/v1/file/assets/bg.png?workspace=cast"
+    place["layout2d"].pop("backgroundAssetId")
+    assert location_plate_url(library, shot, "cast") == "/api/v1/file/ref.png?workspace=cast"
+    assert location_plate_url(library, {**shot, "locationVariantId": "dusk"}, "cast") == "/api/v1/file/assets/night.png?workspace=cast"
+    place["referenceAssetIds"] = []
+    assert location_plate_url(library, shot, "cast") is None
+    picked = {"locationId": "plaza", "scene3d": {"template": "user-mars", "backdrop": {"asset": "picked"}}}
+    assert location_plate_url(library, picked, "cast") == "/api/v1/file/assets/picked.png?workspace=cast"
+    assert location_plate_url(library, {**picked, "scene3d": {"template": "user-mars", "backdrop": {"asset": "loop"}}}, "cast") is None
+    assert location_plate_url(library, {"locationId": "plaza", "scene3d": {"template": "user-mars"}}, "cast") is None

@@ -9,7 +9,14 @@ export const MAX_PATH_POINTS = 62
 export function walkKey(slot: Scene3DSlot, duration: number): string {
   const motion = slot.motion
   if (!motion) return ''
-  return JSON.stringify([slot.position, slot.rotationY, slot.scale, motion.to, motion.via ?? null, motion.points ?? null, duration])
+  const key = [slot.position, slot.rotationY, slot.scale, motion.to, motion.via ?? null, motion.points ?? null, duration]
+  // A timed move is not the path the bake walked over the whole shot; without a window the key is what it always was.
+  return JSON.stringify(isTimedMove(motion) ? [...key, motion.start ?? null, motion.end ?? null] : key)
+}
+
+/** The move runs over part of the shot (`motion.start` or `motion.end`), which a baked walk does not know. */
+export function isTimedMove(motion: Pick<Scene3DMotion, 'start' | 'end'> | undefined): boolean {
+  return motion?.start !== undefined || motion?.end !== undefined
 }
 
 /** The slot plays a baked walk of exactly its current path. */

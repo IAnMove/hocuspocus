@@ -152,13 +152,15 @@ class TestDedicatedScail2Model(unittest.TestCase):
         handler_path = os.path.join(
             _APP, "models", "wan", "wan_handler.py",
         )
-        launch_path = os.path.join(_APP, "_launch_runtime.py")
+        # Recast's shot manifest, which sets these keys for each shot, moved from launch to recast_shot_manifest
+        # (C8a); launch's other copy was Repaint's manifest (C6).
+        shot_manifest_path = os.path.join(_APP, "services", "recast_shot_manifest.py")
         with open(scail2_path, "r", encoding="utf-8") as handle:
             scail2_source = handle.read()
         with open(handler_path, "r", encoding="utf-8") as handle:
             handler_source = handle.read()
-        with open(launch_path, "r", encoding="utf-8") as handle:
-            launch_source = handle.read()
+        with open(shot_manifest_path, "r", encoding="utf-8") as handle:
+            shot_manifest_source = handle.read()
 
         for key in (
             '"scail2_source_scene_reference_path"',
@@ -166,14 +168,19 @@ class TestDedicatedScail2Model(unittest.TestCase):
         ):
             self.assertIn(key, scail2_source)
             self.assertIn(key, handler_source)
-            self.assertIn(key, launch_source)
+            self.assertIn(key, shot_manifest_source)
         self.assertIn(
             "def _load_static_source_scene_reference",
             scail2_source,
         )
+        compose_path = os.path.join(
+            _APP, "services", "recast_reference_compose.py",
+        )
+        with open(compose_path, "r", encoding="utf-8") as handle:
+            compose_source = handle.read()
         self.assertIn(
             '"stable_official_reference"',
-            launch_source,
+            compose_source,
         )
 
     def test_dedicated_model_skips_legacy_identity_reinforcement(self):

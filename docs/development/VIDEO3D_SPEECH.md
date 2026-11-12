@@ -199,6 +199,13 @@ a todos los personajes. Tamaño de boca, contorno y posición siguen en el perfi
 Grabar y colocar mediante clic son acciones del navegador. MCP puede preparar
 la voz sin una pestaña, pero este circuito de exportación utiliza el editor.
 
+Sin calibrar: si el slot no trae `face`, la boca se coloca con la estimación
+humanoide del propio modelo (el perfil `generic`, que necesita un hueso `Head`
+en el rig). Así un agente prepara la voz con `scenes.speech.prepare` y exporta
+sin abrir el navegador. Una calibración guardada en `face` siempre gana; sin
+`Head` ni calibración la exportación falla con «Calibrate the face before
+exporting a speech scene».
+
 ## Evidencia y recursos
 
 La frase incluida se generó localmente con KugelAudio 0 Open 7B. Su texto,

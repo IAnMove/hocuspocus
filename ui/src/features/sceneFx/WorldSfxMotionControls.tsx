@@ -20,12 +20,12 @@ export function WorldSfxMotionControls({ cue, onChange }: Props) {
     <fieldset disabled={Boolean(cue.anchor)} className="space-y-2 disabled:opacity-50">
       {frames.map((frame, index) => <div key={index} className="space-y-2 rounded border border-border p-2">
         <div className="grid grid-cols-2 gap-2">
-          {(['time', 'scale'] as const).map(field => <label key={field} className="text-xs">{t(`motion.${field}`)}<input className={inputClass} type="number" min="0" max={field === 'time' ? 600 : 64} step="0.05" value={frame[field]} onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) patchFrame(index, { [field]: e.target.valueAsNumber }) }} /></label>)}
+          {(['time', 'scale'] as const).map(field => <label key={field} className="text-xs">{t(`motion.${field}`)}<input aria-label={t(`motion.${field}`)} className={inputClass} type="number" min="0" max={field === 'time' ? 600 : 64} step="0.05" value={frame[field]} onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) patchFrame(index, { [field]: e.target.valueAsNumber }) }} /></label>)}
         </div>
         {(['position', 'rotation'] as const).map(field => <div key={field} className="grid grid-cols-3 gap-2">
-          {(['x', 'y', 'z'] as const).map(axis => <label key={axis} className="text-xs">{t(field === 'position' ? 'worldPosition' : 'worldRotation')} {axis.toUpperCase()}<input type="number" className={inputClass} step={field === 'position' ? '.05' : '15'} value={frame[field][axis]} onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) patchFrame(index, { [field]: { ...frame[field], [axis]: e.target.valueAsNumber } }) }} /></label>)}
+          {(['x', 'y', 'z'] as const).map(axis => <label key={axis} className="text-xs">{t(field === 'position' ? 'worldPosition' : 'worldRotation')} {axis.toUpperCase()}<input aria-label={t(field === 'position' ? 'worldPosition' : 'worldRotation')} type="number" className={inputClass} step={field === 'position' ? '.05' : '15'} value={frame[field][axis]} onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) patchFrame(index, { [field]: { ...frame[field], [axis]: e.target.valueAsNumber } }) }} /></label>)}
         </div>)}
-        <label className="text-xs">{t('motion.easing')}<select className={inputClass} value={frame.easing ?? 'smooth'} onChange={e => patchFrame(index, { easing: e.target.value as 'smooth' | 'linear' })}><option value="smooth">{t('motion.smooth')}</option><option value="linear">{t('motion.linear')}</option></select></label>
+        <label className="text-xs">{t('motion.easing')}<select aria-label={t('motion.easing')} className={inputClass} value={frame.easing ?? 'smooth'} onChange={e => patchFrame(index, { easing: e.target.value as 'smooth' | 'linear' })}><option value="smooth">{t('motion.smooth')}</option><option value="linear">{t('motion.linear')}</option></select></label>
         <button type="button" className="min-h-9 text-xs text-red-300" onClick={() => onChange({ motion: frames.filter((_, i) => i !== index) })}>{t('remove')}</button>
       </div>)}
       <button type="button" className="min-h-9 rounded border border-violet-400/40 px-3 text-xs" disabled={frames.length >= 32 || frames.at(-1)?.time === 600} onClick={addFrame}>{t('motion.add')}</button>
@@ -39,11 +39,11 @@ export function PortalPlaybackControls({ cue, onChange }: Props) {
   const playback = cue.mediaPlayback ?? { start: 0, speed: 1, loop: true }
   return <details className="rounded border border-border p-2">
     <summary className="cursor-pointer text-xs font-semibold">{t('portalPlayback.title')}</summary>
-    <label className="my-2 block text-xs"><input type="checkbox" checked={cue.mediaProjection === 'screen'} onChange={e => onChange({ mediaProjection: e.target.checked ? 'screen' : undefined })} /> {t('portalPlayback.screen')}</label>
+    <label className="my-2 block text-xs"><input aria-label={t('portalPlayback.screen')} type="checkbox" checked={cue.mediaProjection === 'screen'} onChange={e => onChange({ mediaProjection: e.target.checked ? 'screen' : undefined })} /> {t('portalPlayback.screen')}</label>
     <p className="mb-2 text-xs text-text-muted">{t('portalPlayback.help')}</p>
     <div className="grid grid-cols-2 gap-2">
-      {(['start', 'speed'] as const).map(field => <label key={field} className="text-xs">{t(`portalPlayback.${field}`)}<input className={inputClass} type="number" min={field === 'start' ? 0 : .05} step="0.05" value={playback[field]} onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) onChange({ mediaPlayback: { ...playback, [field]: e.target.valueAsNumber } }) }} /></label>)}
+      {(['start', 'speed'] as const).map(field => <label key={field} className="text-xs">{t(`portalPlayback.${field}`)}<input aria-label={t(`portalPlayback.${field}`)} className={inputClass} type="number" min={field === 'start' ? 0 : .05} step="0.05" value={playback[field]} onChange={e => { if (Number.isFinite(e.target.valueAsNumber)) onChange({ mediaPlayback: { ...playback, [field]: e.target.valueAsNumber } }) }} /></label>)}
     </div>
-    <label className="mt-2 block text-xs"><input type="checkbox" checked={playback.loop} onChange={e => onChange({ mediaPlayback: { ...playback, loop: e.target.checked } })} /> {t('portalPlayback.loop')}</label>
+    <label className="mt-2 block text-xs"><input aria-label={t('portalPlayback.loop')} type="checkbox" checked={playback.loop} onChange={e => onChange({ mediaPlayback: { ...playback, loop: e.target.checked } })} /> {t('portalPlayback.loop')}</label>
   </details>
 }

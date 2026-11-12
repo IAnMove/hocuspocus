@@ -6,7 +6,7 @@ export function Scene3DTransport({ playing, disabled, seconds, duration, speed, 
   onToggle: () => void; onSeek: (seconds: number) => void; onSpeed: (speed: number) => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
-  return <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 rounded-xl border border-cyan-300/30 bg-bg-secondary p-3" data-testid="world3d-transport">
+  return <div className="flex flex-wrap items-center gap-3 border-t border-cyan-300/30 bg-bg-secondary p-3" data-testid="world3d-transport">
     <button type="button" disabled={disabled} onClick={onToggle} aria-pressed={playing}
       className="inline-flex min-h-12 min-w-36 items-center justify-center gap-2 rounded-lg bg-cyan-300 px-5 text-sm font-bold text-slate-950 shadow-lg shadow-cyan-950/30 hover:bg-cyan-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-200 disabled:opacity-40">
       {playing ? <Pause size={22} fill="currentColor" aria-hidden="true" /> : <Play size={22} fill="currentColor" aria-hidden="true" />}

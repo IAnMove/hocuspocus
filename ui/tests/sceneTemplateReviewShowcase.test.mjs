@@ -144,7 +144,7 @@ test('rejects traversal, symlinked files, overwrite targets, and unsupported inp
     scene: reference('scene-one.json', original.scene, 'Editable showcase scene'),
   })
   await fs.writeFile(path.join(paths.showcaseDir, 'manifest.json'), JSON.stringify(traversal))
-  await assert.rejects(() => prepareShowcase(paths), /URL relativa|relative|unsafe/i)
+  await assert.rejects(() => prepareShowcase(paths), /relative URL|unsafe/i)
 
   await fs.writeFile(path.join(paths.showcaseDir, 'manifest.json'), JSON.stringify(original.manifest))
   await fs.rm(path.join(paths.showcaseDir, 'scene-one.mp4'))
@@ -229,15 +229,16 @@ test('requires every raster source to be a verified input and keeps the package 
   await assert.rejects(() => prepareShowcase(paths), /silent|audioTracks/i)
 })
 
-test('accepts only the four exact built-in compositor graphics', async t => {
+test('accepts only the exact built-in compositor graphics', async t => {
   const paths = await fixture()
   t.after(() => fs.rm(paths.directory, { recursive: true, force: true }))
   const context = { duration: 4, bpm: 120, intensity: .5, bindings: {} }
-  const graphics = ['beam', 'shield', 'burst', 'debris'].map(kind => effect(context, kind, `graphic-${kind}`, []).source)
-  assert.deepEqual(graphics.map(isBuiltInShowcaseGraphic), [true, true, true, true])
+  const kinds = ['beam', 'bolt', 'shield', 'burst', 'debris']
+  const graphics = kinds.map(kind => effect(context, kind, `graphic-${kind}`, []).source)
+  assert.deepEqual(graphics.map(isBuiltInShowcaseGraphic), [true, true, true, true, true], 'the broadside bolt too')
   const sceneObject = JSON.parse(sceneBytes('Built-in graphics').toString())
   sceneObject.layers = graphics.map((source, index) => ({
-    ...effect(context, ['beam', 'shield', 'burst', 'debris'][index], `graphic-${index}`, []),
+    ...effect(context, kinds[index], `graphic-${index}`, []),
     source,
   }))
   const scene = bytes(JSON.stringify(sceneObject))

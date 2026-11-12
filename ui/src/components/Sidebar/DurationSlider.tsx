@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { useEffect } from 'react'
 import { Lock, Unlock } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -45,6 +46,8 @@ export const recommendedWindowProfile = (
 }
 
 export function DurationSlider() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const duration = useStore(s => s.durationSeconds)
   const setDuration = useStore(s => s.setDurationSeconds)
@@ -145,7 +148,7 @@ export function DurationSlider() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('duration.label')}</label>
+        <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('duration.label')}</label>
         <span className="text-xs text-text-secondary">
           {duration >= 60 ? `${Math.floor(duration / 60)}m${duration % 60 ? ` ${Math.round(duration % 60)}s` : ''}` : formatSeconds(duration)}
           {showSlidingWindow && (
@@ -153,7 +156,7 @@ export function DurationSlider() {
           )}
         </span>
       </div>
-      <input
+      <input aria-label={t('duration.label')} id={fieldIds('f0')}
         type="range"
         min={minDuration}
         max={maxDuration}
@@ -163,7 +166,7 @@ export function DurationSlider() {
       />
       {generationMode === 'video' && supportsH3ExtendedDuration(modelOptions) && (
         <label className="mt-2 flex items-start gap-2 rounded-lg border border-border p-2.5 text-xs">
-          <input type="checkbox" className="mt-0.5 accent-accent-blue"
+          <input aria-label={t('duration.allow30s')} type="checkbox" className="mt-0.5 accent-accent-blue"
             checked={extendedDuration}
             onChange={event => setExtendedDuration(event.target.checked)} />
           <span>
@@ -199,6 +202,8 @@ export function DurationSlider() {
 
 /** Exposed for Advanced Settings popup */
 export function WindowSettings() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const studioDuration = useStore(s => s.durationSeconds)
   const generationMode = useStore(s => s.generationMode)
@@ -267,7 +272,7 @@ export function WindowSettings() {
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('window.size')}</label>
+            <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('window.size')}</label>
             <button
               onClick={() => {
                 if (locked) {
@@ -282,7 +287,7 @@ export function WindowSettings() {
                   ? 'text-accent-blue hover:text-accent-blue/70'
                   : 'text-text-muted hover:text-text-secondary'
               }`}
-              title={locked ? t('window.lockTitle') : t('window.unlockTitle')}
+              title={locked ? t('window.lockTitle') : t('window.unlockTitle')} aria-label={locked ? t('window.lockTitle') : t('window.unlockTitle')}
             >
               {locked ? <Lock size={10} /> : <Unlock size={10} />}
             </button>
@@ -292,7 +297,7 @@ export function WindowSettings() {
             {locked && <span className="text-accent-blue/60 ml-1 text-[9px]">{t('chrome.locked')}</span>}
           </span>
         </div>
-        <input
+        <input aria-label={t('window.size')} id={fieldIds('f0')}
           type="range"
           min={windowMinSeconds}
           max={windowMaxSeconds}
@@ -329,10 +334,10 @@ export function WindowSettings() {
       {showSlidingWindow && overlapStep > 0 && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('window.overlap')}</label>
+            <label htmlFor={fieldIds('f1')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('window.overlap')}</label>
             <span className="text-xs text-text-secondary">{overlap}f ({formatSeconds(overlapSeconds)})</span>
           </div>
-          <input
+          <input aria-label={t('window.overlap')} id={fieldIds('f1')}
             type="range"
             min={overlapMin}
             max={overlapMax}

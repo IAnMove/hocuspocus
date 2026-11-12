@@ -41,7 +41,7 @@ test('approved old takes expose draft regeneration and link directly to missing 
   await page.route('**/api/v1/character-kits/library**', route => route.fulfill({ json: library }))
   await page.route('**/fixture-body.svg', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><circle cx="128" cy="128" r="100" fill="#fab"/></svg>' }))
   await page.getByRole('tab', { name: 'Series Lab', exact: true }).click()
-  await page.getByRole('button', { name: '5 · Results', exact: true }).click()
+  await page.getByRole('button', { name: '6 · Results', exact: true }).click()
   await expect(page.getByRole('link', { name: 'Watch full episode' })).toHaveAttribute('href', /fixture-master\.mp4\?workspace=default/)
   await expect(page.getByRole('link', { name: 'Download joined episode' })).toBeVisible()
   await page.getByRole('button', { name: '4 · Shots', exact: true }).click()

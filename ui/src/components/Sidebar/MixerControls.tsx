@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState } from 'react'
 import { Plus, Trash2, Play, ArrowRight } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -134,7 +135,7 @@ export function MixerControls() {
                 <span className="text-[9px] text-text-muted">{t('mixer.volume')}</span>
                 <span className="text-[9px] text-text-muted">{baseTrack.volume}%</span>
               </div>
-              <input type="range" min={0} max={100} step={1}
+              <input aria-label={t('mixer.volume')} type="range" min={0} max={100} step={1}
                 value={baseTrack.volume}
                 onChange={e => setBaseTrack(t => ({ ...t, volume: Number(e.target.value) }))}
                 className="w-full"
@@ -198,7 +199,7 @@ export function MixerControls() {
                 <button
                   onClick={() => removeOverlay(track.id)}
                   className="p-0.5 rounded hover:bg-bg-hover text-text-muted hover:text-red-400 transition-colors shrink-0"
-                >
+                 title={controlLabel('a11y.removeOverlay')} aria-label={controlLabel('a11y.removeOverlay')}>
                   <Trash2 size={11} />
                 </button>
               </div>
@@ -210,7 +211,7 @@ export function MixerControls() {
                       <span className="text-[9px] text-text-muted">{t('mixer.start')}</span>
                       <span className="text-[9px] text-text-muted">{track.startTime}s</span>
                     </div>
-                    <input type="number" min={0} step={0.1}
+                    <input aria-label={t('mixer.start')} type="number" min={0} step={0.1}
                       value={track.startTime}
                       onChange={e => updateOverlay(track.id, { startTime: Math.max(0, parseFloat(e.target.value) || 0) })}
                       className="w-full bg-bg-tertiary border border-border rounded px-1.5 py-0.5 text-[10px] text-text-primary focus:outline-none focus:border-accent-blue"
@@ -221,7 +222,7 @@ export function MixerControls() {
                       <span className="text-[9px] text-text-muted">{t('mixer.volume')}</span>
                       <span className="text-[9px] text-text-muted">{track.volume}%</span>
                     </div>
-                    <input type="range" min={0} max={100} step={1}
+                    <input aria-label={t('mixer.volume')} type="range" min={0} max={100} step={1}
                       value={track.volume}
                       onChange={e => updateOverlay(track.id, { volume: Number(e.target.value) })}
                       className="w-full"

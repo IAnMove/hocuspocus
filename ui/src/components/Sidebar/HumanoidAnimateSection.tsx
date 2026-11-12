@@ -77,13 +77,13 @@ export function HumanoidAnimateSection({ clips, refreshKey }: { clips: RigAnimat
           <p className="flex items-center gap-1.5 text-[11px] font-medium text-text-primary"><PlusCircle size={13} className="text-accent-blue" /> {t('rig.animateTitle')}</p>
           <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">{t('rig.animateHelp')}</p>
         </div>
-        <button type="button" onClick={() => void load()} title={t('rig.refreshOutputs')} className="text-text-muted hover:text-text-primary"><RefreshCw size={11} /></button>
+        <button type="button" onClick={() => void load()} title={t('rig.refreshOutputs')} aria-label={t('rig.refreshOutputs')} className="text-text-muted hover:text-text-primary"><RefreshCw size={11} /></button>
       </div>
       <RigPicker rigs={rigs} rig={rig} onPick={setRig} />
       <ClipChips clips={clips} chosen={chosen} onToggle={toggle} />
       <label className="block text-[10px] uppercase tracking-wider text-text-muted">
         <span className="flex items-center justify-between"><span>{t('rig.bpm')}</span><span className="text-text-primary">{bpm}</span></span>
-        <input type="range" min={60} max={180} value={bpm} onChange={event => setBpm(clampBpm(Number(event.target.value)))} className="mt-1 w-full" />
+        <input aria-label={t('rig.bpm')} type="range" min={60} max={180} value={bpm} onChange={event => setBpm(clampBpm(Number(event.target.value)))} className="mt-1 w-full" />
       </label>
       <ImportFile file={file} onFile={setFile} />
       <button type="button" disabled={!canRun} onClick={() => void run()} className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-medium ${canRun ? 'bg-accent-blue/80 text-white hover:bg-accent-blue' : 'cursor-not-allowed border border-border text-text-muted'}`}>
@@ -102,7 +102,7 @@ function RigPicker({ rigs, rig, onPick }: { rigs: HumanoidRig[] | null; rig: str
   if (!rigs.length) return <p className="rounded border border-dashed border-border p-2 text-[10px] text-text-muted">{t('rig.animateNone')}</p>
   return (
     <label className="block text-[10px] uppercase tracking-wider text-text-muted">{t('rig.animateCharacter')}
-      <select value={rig ?? ''} onChange={event => onPick(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs normal-case tracking-normal text-text-primary">
+      <select aria-label={t('rig.animateCharacter')} value={rig ?? ''} onChange={event => onPick(event.target.value)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs normal-case tracking-normal text-text-primary">
         {rigs.map(item => <option key={item.name} value={item.name}>{rigLabel(item.name)} · {t('rig.animateClipCount', { count: item.clips.length })}</option>)}
       </select>
     </label>
@@ -135,12 +135,12 @@ function ImportFile({ file, onFile }: { file: File | null; onFile: (file: File |
       {file ? (
         <p className="mt-1 flex items-center justify-between gap-2 rounded border border-border bg-bg-primary px-2 py-1 text-text-primary">
           <span className="truncate">{file.name}</span>
-          <button type="button" onClick={() => onFile(null)} title={t('rig.animateRemoveFile')} className="text-text-muted hover:text-text-primary"><X size={11} /></button>
+          <button type="button" onClick={() => onFile(null)} title={t('rig.animateRemoveFile')} aria-label={t('rig.animateRemoveFile')} className="text-text-muted hover:text-text-primary"><X size={11} /></button>
         </p>
       ) : (
         <label className="mt-1 flex cursor-pointer items-center gap-1.5 rounded border border-dashed border-border px-2 py-1.5 hover:border-border-light">
           <FileUp size={11} /> {t('rig.animatePickFile')}
-          <input type="file" accept={IMPORT_TYPES} className="hidden" onChange={event => onFile(event.target.files?.[0] ?? null)} />
+          <input aria-label={t('rig.animatePickFile')} type="file" accept={IMPORT_TYPES} className="hidden" onChange={event => onFile(event.target.files?.[0] ?? null)} />
         </label>
       )}
       <p className="mt-0.5 text-[9px] leading-relaxed">{t('rig.animateFileHelp')}</p>

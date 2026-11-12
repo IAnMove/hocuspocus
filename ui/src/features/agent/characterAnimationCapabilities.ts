@@ -1,0 +1,224 @@
+import type { defineCapability } from './capabilityRegistry'
+import i18n from '../../i18n'
+import { fetchCharacterKitLibrary } from '../../api/characters'
+import { reviewAnimation, startAnimationJob, type CustomAnimationRequest } from '../../api/characterAnimationJobs'
+import { startAnimationSet } from '../../api/characterAnimationSets'
+import { animationDef, animationSets, customViews, localized, MAX_CUSTOM_POSES, MAX_CUSTOM_TEXT, type AnimationSetName } from '../../lib/characterAnimations'
+import type { CharacterKit } from '../../lib/characterKit'
+
+/**
+ * "Hazle una cara de enfado a Heroína", "que Inés salude": one animation of a saved character, made by the same server job that the
+ * Character Creator's Animaciones panel and the characters.animation.make MCP tool start (POST /api/v1/character-kits/animations/make).
+ * Every pose is made from the character's own picture and the result waits for a person's review in the panel. The Wizard approves it only
+ * in «Modo un solo disparo» (Settings › Services, agent_autonomy = one_shot): then `auto_approve` lets the job approve a sheet that passes
+ * the automatic checks and `review_character_animation` approves or rejects one (POST /api/v1/character-kits/animations/review, the route
+ * of the characters.animation.review MCP tool); with the mode off the server refuses it. A job takes minutes, so the Wizard starts it and
+ * says where to follow it instead of waiting.
+ */
+export interface AgentMakeCharacterAnimationAction {
+  type: 'make_character_animation'
+  /** The character's name or id; empty means the only (or the active) one. */
+  kitName: string
+  animation: string
+  custom?: CustomAnimationRequest
+  pose?: string
+  /** Ask the job to approve what it made when the sheet passes the automatic checks. The server ignores it (and says so) in review mode. */
+  autoApprove?: boolean
+  /** poses is the default and is omitted. video or puppet ask for a whole catalog walk and never for one pose. */
+  method?: 'poses' | 'video' | 'puppet'
+  confirm: true
+}
+
+/** "Haz los andares completos de Heroína": the twelve-pose walks of the five directions as ONE server job (the panel's «Crear andares completos»
+ * and the characters.animation.make_set MCP tool start the same one, POST /api/v1/character-kits/animations/make-set). It makes the sheets the
+ * character lacks one after another and is resumable; `autoApprove` is the same one-shot-mode request as for a single animation. */
+export interface AgentMakeCharacterAnimationSetAction {
+  type: 'make_character_animation_set'
+  kitName: string
+  set: AnimationSetName
+  autoApprove?: boolean
+  /** Passed through to every sheet. Omit it and each sheet stays pose by pose. puppet refuses a sheet that is not a walk. */
+  method?: 'poses' | 'video' | 'puppet'
+  confirm: true
+}
+
+/** "Aprueba la animación de andar de Heroína": the agent's own review of an animation, only in «Modo un solo disparo». */
+export interface AgentReviewCharacterAnimationAction {
+  type: 'review_character_animation'
+  kitName: string
+  animation: string
+  decision: 'approve' | 'reject'
+  note: string
+}
+
+const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
+const text = (value: unknown, limit: number): string => typeof value === 'string' ? value.trim().slice(0, limit) : ''
+
+function customOf(raw: unknown): CustomAnimationRequest | undefined | null {
+  if (raw === undefined || raw === null) return undefined
+  if (typeof raw !== 'object' || Array.isArray(raw)) return null
+  const { title, view, poses } = raw as Record<string, unknown>
+  const words = Array.isArray(poses) ? poses.map(pose => text(pose, MAX_CUSTOM_TEXT)).filter(Boolean) : []
+  // The model fills the fields it does not use with empty values: those name no custom animation.
+  if (!text(title, 80) && !text(view, 20) && !words.length) return undefined
+  const framing = (customViews as string[]).includes(String(view)) ? view as CustomAnimationRequest['view'] : undefined
+  return text(title, 80) && framing && words.length <= MAX_CUSTOM_POSES ? { title: text(title, 80), view: framing, poses: words } : null
+}
+
+/** The character the user named: by id or name, or the only one, or the active one. */
+export function findAnimationKit(kits: Record<string, CharacterKit>, activeId: string | undefined, name: string): CharacterKit {
+  const all = Object.values(kits)
+  const wanted = name.trim().toLowerCase()
+  const found = wanted ? all.find(kit => kit.id.toLowerCase() === wanted || kit.name.trim().toLowerCase() === wanted) : (all.length === 1 ? all[0] : kits[activeId ?? ''])
+  if (found) return found
+  const names = all.map(kit => kit.name).join(', ')
+  throw new Error(wanted ? `There is no character called “${name}” in this workspace${names ? ` (there are: ${names})` : ''}.`
+    : all.length ? `Say which character: ${names}.` : 'There is no saved character in this workspace: create one in Character Creator first.')
+}
+
+export async function executeMakeCharacterAnimation(action: AgentMakeCharacterAnimationAction, workspace?: string) {
+  const space = workspace || 'default' // executeAgentActions always passes the workspace it runs in
+  const library = await fetchCharacterKitLibrary(space)
+  const kit = findAnimationKit(library.kits, library.activeId, action.kitName)
+  const job = await startAnimationJob({ workspace: space, kitId: kit.id, animation: action.animation,
+    ...(action.pose ? { pose: action.pose } : {}), ...(action.custom ? { custom: action.custom } : {}), ...(action.autoApprove ? { autoApprove: true } : {}),
+    ...(action.method && action.method !== 'poses' && !action.pose ? { method: action.method } : {}) })
+  const key = job.status === 'queued' ? 'wizard:replies.characterAnimationQueued' : 'wizard:replies.characterAnimationStarted'
+  const said = i18n.t(key, { name: kit.name, animation: job.title || action.animation, poses: job.takes.length, jobId: job.jobId })
+  return {
+    // autoApprove asked for in review mode: the server ignores it and says why, so the person knows they approve it themselves.
+    message: job.autoApproveNote ? `${said}\n${job.autoApproveNote}` : said,
+    metadata: job as unknown as Record<string, unknown>, jobId: job.jobId,
+    target: { kind: 'character_kit', id: kit.id, title: kit.name },
+  }
+}
+
+export async function executeMakeCharacterAnimationSet(action: AgentMakeCharacterAnimationSetAction, workspace?: string) {
+  const space = workspace || 'default'
+  const library = await fetchCharacterKitLibrary(space)
+  const kit = findAnimationKit(library.kits, library.activeId, action.kitName)
+  const job = await startAnimationSet({ workspace: space, kitId: kit.id, set: action.set, ...(action.autoApprove ? { autoApprove: true } : {}),
+    ...(action.method && action.method !== 'poses' ? { method: action.method } : {}) })
+  const nothing = job.status === 'completed' && job.sheets.every(sheet => sheet.status === 'skipped')
+  const key = nothing ? 'wizard:replies.characterAnimationSetNothing' : job.status === 'queued' ? 'wizard:replies.characterAnimationSetQueued' : 'wizard:replies.characterAnimationSetStarted'
+  const said = i18n.t(key, { name: kit.name, set: localized(animationSets[action.set].title, i18n.language), sheets: job.sheets.filter(sheet => sheet.status !== 'skipped').length, jobId: job.jobId })
+  return {
+    // autoApprove asked for in review mode: the server ignores it and says why, so the person knows they approve the sheets themselves.
+    message: job.autoApproveNote ? `${said}\n${job.autoApproveNote}` : said,
+    metadata: job as unknown as Record<string, unknown>, jobId: job.jobId,
+    target: { kind: 'character_kit', id: kit.id, title: kit.name },
+  }
+}
+
+export async function executeReviewCharacterAnimation(action: AgentReviewCharacterAnimationAction, workspace?: string) {
+  const space = workspace || 'default'
+  const library = await fetchCharacterKitLibrary(space)
+  const kit = findAnimationKit(library.kits, library.activeId, action.kitName)
+  // The server decides: in review mode (the default) it answers with the way to approve by hand, and that is what the person reads.
+  const review = await reviewAnimation({ workspace: space, kitId: kit.id, animation: action.animation, decision: action.decision, ...(action.note ? { note: action.note } : {}) })
+  return {
+    message: i18n.t(review.reviewState === 'approved' ? 'wizard:replies.characterAnimationApproved' : 'wizard:replies.characterAnimationRejected', { name: kit.name, animation: action.animation }),
+    metadata: review as unknown as Record<string, unknown>,
+    target: { kind: 'character_kit', id: kit.id, title: kit.name },
+  }
+}
+
+export function registerCharacterAnimationCapabilities(register: typeof defineCapability) {
+  register<AgentMakeCharacterAnimationAction>({
+    name: 'make_character_animation',
+    title: 'Make an animation of a saved character',
+    description: 'Make one small animation (a walk, a gesture such as waving, or an anime expression such as angry) of a saved Character Kit with its own picture as the identity reference, on the server: every pose with Qwen, keyed, joined into a sprite sheet and saved on the character as pending review. animation_id is an id of the animation catalog; for one the catalog does not list give a new lowercase slug and custom_animation {title, view bust|front|side, poses: one description per pose, up to six}. pose_id makes that one pose of an animation already made again. method "video" (a catalog walk, with LTX-2.3 distilled and its union-control pose LoRA installed, and with pose_id empty) makes that walk from one skeleton-guided clip; method "puppet" (a catalog walk, pose_id empty) cuts one drawing into the walk. Leave method out for the usual poses. It takes minutes, one animation at a time; the person reviews and approves it in Character Creator › Animaciones. You approve it only when the owner turned on one-shot mode (Settings › Services): then auto_approve=true lets the job approve it when the sheet passes the automatic checks, and review_character_animation approves or rejects one yourself; otherwise the server refuses.',
+    useWhen: 'The user asks for an animation, gesture, expression or walk of a saved character ("hazle una cara de enfado a Heroína", "que salude", "una animación de andar", "una sonrisa pícara"), or to redo one pose of one.',
+    parameters: ['kit_name', 'animation_id', 'custom_animation', 'pose_id', 'auto_approve', 'method', 'confirm'],
+    inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        type: { const: 'make_character_animation' }, kit_name: { type: 'string', maxLength: 160 }, animation_id: { type: 'string', maxLength: 64 },
+        custom_animation: { type: 'object', additionalProperties: false, required: ['title', 'view', 'poses'], properties: {
+          title: { type: 'string', maxLength: 80 }, view: { enum: [...customViews] },
+          poses: { type: 'array', minItems: 1, maxItems: MAX_CUSTOM_POSES, items: { type: 'string', maxLength: MAX_CUSTOM_TEXT } } } },
+        pose_id: { type: 'string', maxLength: 120 }, auto_approve: { type: 'boolean' },
+        method: { enum: ['poses', 'video', 'puppet'] }, confirm: { const: true },
+      },
+      required: ['type', 'animation_id', 'confirm'],
+    },
+    risk: 'compute', confirmation: 'required', progress: 'wizard:progress.makingCharacterAnimation',
+    resolve(raw) {
+      const animation = text(raw.animation_id, 64).toLowerCase()
+      const custom = customOf(raw.custom_animation)
+      if (raw.confirm !== true || !SLUG.test(animation) || custom === null) return null
+      const pose = text(raw.pose_id, 120)
+      return { type: 'make_character_animation', kitName: text(raw.kit_name, 160), animation, confirm: true,
+               ...(custom ? { custom } : {}), ...(pose ? { pose } : {}), ...(raw.auto_approve === true ? { autoApprove: true } : {}),
+               ...((raw.method === 'video' || raw.method === 'puppet') && !pose ? { method: raw.method } : {}) }
+    },
+    validate(action) {
+      if (action.confirm !== true) return ['confirmation is required']
+      if (action.custom && animationDef(action.animation)) return [`${action.animation} is in the catalog: leave custom out`]
+      return []
+    },
+    async prepare(action) { return action },
+    async execute(action, context) { return context.adapters.characterAnimations.make(action, context.workspace) },
+    correlate(_action, outcome) { return outcome.target },
+    async track(_action, outcome) { return outcome },
+    report: { targetKind: 'character_kit', successState: 'queued' },
+    summarize(_action, outcome) { return outcome.message },
+    presentation: { destination: 'character_creator', anchors: ['animations'], replay: 'atomic' },
+  })
+  register<AgentMakeCharacterAnimationSetAction>({
+    name: 'make_character_animation_set',
+    title: 'Make the full walks of a saved character in five directions',
+    description: 'Make several animations of a saved Character Kit in turn as ONE server job, for a character that moves in a 3D set: set walk-directions makes the twelve-pose walks of the five directions (side, front three-quarter, front, back three-quarter, back; the ones that look left are the same sheets mirrored when rendered), walk-12 only the side walk, idle-directions the breaths. Only the sheets the character does not have are made, one after another with Qwen, taking the neighbouring direction as a second identity reference; each one is saved as pending review with the same automatic checks (including that it is not a copy or the mirror of another direction). It takes many minutes and is resumable: if it stops, asking again continues. It is the job the «Crear andares completos» button of Character Creator › Animaciones starts. You approve the sheets only when the owner turned on one-shot mode (Settings › Services): then auto_approve=true makes each sheet that passes the checks approved by the agent; otherwise the person approves them in the panel. Pass method "puppet" or method "video" only when every sheet is a catalog walk; omit method and every sheet stays pose by pose.',
+    useWhen: 'The user asks for the full walk of a character, its walk in all directions, for the character to be able to move in a 3D set or room, or for the five directions ("haz los andares completos de Heroína", "quiero que camine en todas direcciones").',
+    parameters: ['kit_name', 'set', 'auto_approve', 'method', 'confirm'],
+    inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: { type: { const: 'make_character_animation_set' }, kit_name: { type: 'string', maxLength: 160 }, set: { enum: Object.keys(animationSets) }, auto_approve: { type: 'boolean' }, method: { enum: ['poses', 'video', 'puppet'] }, confirm: { const: true } },
+      required: ['type', 'set', 'confirm'],
+    },
+    risk: 'compute', confirmation: 'required', progress: 'wizard:progress.makingCharacterAnimationSet',
+    resolve(raw) {
+      const set = text(raw.set, 40).toLowerCase()
+      if (raw.confirm !== true || !Object.hasOwn(animationSets, set)) return null
+      const method = raw.method === 'video' || raw.method === 'puppet' ? raw.method : undefined
+      return { type: 'make_character_animation_set', kitName: text(raw.kit_name, 160), set: set as AnimationSetName, confirm: true, ...(raw.auto_approve === true ? { autoApprove: true } : {}), ...(method ? { method } : {}) }
+    },
+    validate(action) { return action.confirm === true ? [] : ['confirmation is required'] },
+    async prepare(action) { return action },
+    async execute(action, context) { return context.adapters.characterAnimations.makeSet(action, context.workspace) },
+    correlate(_action, outcome) { return outcome.target },
+    async track(_action, outcome) { return outcome },
+    report: { targetKind: 'character_kit', successState: 'queued' },
+    summarize(_action, outcome) { return outcome.message },
+    presentation: { destination: 'character_creator', anchors: ['animations'], replay: 'atomic' },
+  })
+  register<AgentReviewCharacterAnimationAction>({
+    name: 'review_character_animation',
+    title: 'Approve or reject the animation of a saved character',
+    description: 'Approve or reject one made animation of a saved Character Kit as the agent. It works only when the owner turned on one-shot mode (Settings › Services); in the default review mode the server refuses and the person approves it in Character Creator › Animaciones. Look at the sheet first (the same character, one size, feet on one line). note says why; the app shows the animation as "approved by the agent" with that note so the owner can audit and revert it. A rejected animation keeps its poses: make one pose again with make_character_animation (pose_id).',
+    useWhen: 'One-shot mode is on and the user asks you to approve or reject an animation you made ("aprueba la animación de andar de Heroína", "recházala, la mano no se ve").',
+    parameters: ['kit_name', 'animation_id', 'decision', 'note'],
+    inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        type: { const: 'review_character_animation' }, kit_name: { type: 'string', maxLength: 160 }, animation_id: { type: 'string', maxLength: 64 },
+        decision: { enum: ['approve', 'reject'] }, note: { type: 'string', maxLength: 500 },
+      },
+      required: ['type', 'animation_id', 'decision'],
+    },
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.reviewingCharacterAnimation',
+    resolve(raw) {
+      const animation = text(raw.animation_id, 64).toLowerCase()
+      if (!SLUG.test(animation) || (raw.decision !== 'approve' && raw.decision !== 'reject')) return null
+      return { type: 'review_character_animation', kitName: text(raw.kit_name, 160), animation, decision: raw.decision, note: text(raw.note, 500) }
+    },
+    validate() { return [] },
+    async prepare(action) { return action },
+    async execute(action, context) { return context.adapters.characterAnimations.review(action, context.workspace) },
+    correlate(_action, outcome) { return outcome.target },
+    async track(_action, outcome) { return outcome },
+    report: { targetKind: 'character_kit', successState: 'completed' },
+    summarize(_action, outcome) { return outcome.message },
+    presentation: { destination: 'character_creator', anchors: ['animations'], replay: 'atomic' },
+  })
+}

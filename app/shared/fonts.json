@@ -85,6 +85,16 @@
       "source": "cormorant-garamond-600-wordmark.woff2",
       "files": ["/fonts/cormorant-garamond-600-wordmark.woff2"],
       "stack": "\"HocusPocus Wordmark\", ui-serif, Georgia, serif"
+    },
+    {
+      "id": "typewriter",
+      "family": "Courier Prime",
+      "weights": [400],
+      "license": "SIL Open Font License 1.1",
+      "copyright": "Copyright 2015 The Courier Prime Project Authors (https://github.com/quoteunquoteapps/CourierPrime).",
+      "source": "Courier Prime Regular, latin. Document cards (typed, telegram). Not a kinetic face.",
+      "files": ["/fonts/CourierPrime-Regular.ttf"],
+      "stack": "\"Courier Prime\", ui-monospace, monospace"
     }
   ]
 }

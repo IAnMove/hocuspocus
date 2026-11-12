@@ -175,6 +175,7 @@ export function StoryLabLibraryChrome({
         </div>
       </div>
       <select
+        aria-label={t('library.libraryTitle', { workspace: activeWorkspace })}
         className={`${input} w-44`}
         value={project.id}
         disabled={libraryLocked}
@@ -186,6 +187,7 @@ export function StoryLabLibraryChrome({
           .map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
       </select>
       <select
+        aria-label={t('library.projectTypeTitle')}
         className={`${input} w-40`}
         value={project.projectType}
         disabled={libraryLocked}
@@ -236,8 +238,8 @@ export function StoryLabLibraryChrome({
       <button className={button} disabled={libraryLocked} onClick={onDuplicate} title={t('library.duplicateTitle')}>{t('library.duplicate')}</button>
       <button className={button} onClick={() => {
         if (window.confirm(t('library.deleteConfirm', { title: project.title }))) onDelete()
-      }} disabled={libraryLocked} title={t('library.deleteTitle')}><Trash2 size={13} /></button>
-      <input ref={importRef} type="file" accept=".storypack,.zip,.json" className="hidden"
+      }} disabled={libraryLocked} title={t('library.deleteTitle')} aria-label={t('library.deleteTitle')}><Trash2 size={13} /></button>
+      <input ref={importRef} aria-label={t('library.import')} type="file" accept=".storypack,.zip,.json" className="hidden"
         onChange={event => {
           onImport(event.target.files?.[0])
           event.target.value = ''

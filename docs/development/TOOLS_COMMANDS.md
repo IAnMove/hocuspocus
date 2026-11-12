@@ -64,8 +64,9 @@ Real mode selects `_run_tool_upscale`; simulation mode selects the existing
 `_run_generation` harness through the shared operation adapter. No model or
 processor is downloaded by this command contract.
 
-This slice covers upscale only. Revoice, recast, background removal, music,
-audio and model3d require their own explicit contracts and are not advertised
-by this catalog entry. Resource preparation proves identity and media
+This slice covers upscale only. Revoice, recast, music, audio and model3d
+require their own explicit contracts and are not advertised by this catalog
+entry. Still-image background removal is `image.remove_background` (version 1,
+`auto` / `u2net` / `screen`); see [Tools HOWUSEIT](../tools/HOWUSEIT.md). Resource preparation proves identity and media
 inspectability; final output decoding and processor quality remain execution
 QA responsibilities.

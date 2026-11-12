@@ -85,6 +85,26 @@ def canonical_lyrics_language(value: str) -> str:
     return ""
 
 
+_FOLDED_SPANISH = frozenset(_folded(word) for word in SPANISH_MARKERS)
+
+
+def detect_language(text: str) -> str:
+    """``es`` or ``en`` from the guard's own function words; ``""`` when the text cannot tell.
+
+    Distinct words count, so a "la la la" chorus is not Spanish. ``¿ ¡ ñ``
+    count as Spanish evidence. Other languages and scripts are never guessed.
+    """
+    sample = _strip_section_tags(str(text or ""))
+    if any(_script_hits(sample).values()):
+        return ""
+    words = {_folded(word) for word in _latin_words(sample)}
+    spanish = len(words & _FOLDED_SPANISH) + (2 if re.search(r"[¿¡ñÑ]", sample) else 0)
+    english = len(words & ENGLISH_MARKERS)
+    if max(spanish, english) < 2 or spanish == english:
+        return ""
+    return "es" if spanish > english else "en"
+
+
 def _protected_texts(segments: Sequence[Mapping[str, Any]] | None) -> list[str]:
     texts: list[str] = []
     for item in segments or ():

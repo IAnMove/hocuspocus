@@ -102,7 +102,7 @@ export function MiniMaxH3TurboToggle() {
         }`}>
           <div className="flex items-center gap-2">
             <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 select-none">
-              <input
+              <input aria-label={option.label}
                 type="checkbox"
                 checked={enabled}
                 onChange={event => handleChange(event.target.checked)}

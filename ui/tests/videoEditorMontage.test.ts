@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { MontageDocument } from '../src/api/montages.ts'
-import { editorFromMontage, exportLayerFields, montageFromEditor, resolutionFor } from '../src/features/video-editor/montage.ts'
+import { editorFromMontage, exportLayerFields, montageFromEditor, persistOpenMontage, playableUrl, resolutionFor } from '../src/features/video-editor/montage.ts'
 
 const montage: MontageDocument = {
   version: 1, name: 'Bird', width: 1920, height: 1080, fps: 24,
@@ -52,4 +52,56 @@ test('editor saves keep takes, lyric and notes of each clip', () => {
   assert.equal(saved.clips[0].takes?.length, 2)
   assert.equal(saved.clips[0].lyric, 'fly')
   assert.equal(saved.notes, 'rebuilt')
+  assert.equal('comic' in saved.clips[0], false)
+})
+
+test('a lyric and a comic choice survive save and reload', async () => {
+  const probe = async () => ({ duration: 5, width: 1080, height: 1920, fps: 24, has_audio: false, pixel_format: 'yuv420p', has_alpha: false })
+  const withLine = { ...montage, width: 1080, height: 1920, clips: [{ ...montage.clips[0], lyric: ' fly / high ', comic: { frame: 1.25, text: 'bubble' as const } }] }
+  const opened = await editorFromMontage(withLine, probe, async () => ({ duration: 1 }), () => 'thumb')
+  assert.equal(opened.extras.c1.lyric, ' fly / high ')
+  assert.deepEqual(opened.extras.c1.comic, { frame: 1.25, text: 'bubble' })
+  const saved = montageFromEditor({ projectName: 'Bird', resolution: resolutionFor(1080, 1920), fps: 24, clips: opened.clips,
+    soundtrack: null, layers: { overlays: [], audioCues: [], duck: 0 }, origins: opened.origins, extras: opened.extras })
+  assert.equal(saved.clips[0].lyric, ' fly / high ')
+  assert.deepEqual(saved.clips[0].comic, { frame: 1.25, text: 'bubble' })
+  const again = await editorFromMontage(saved, probe, async () => ({ duration: 1 }), () => 'thumb')
+  assert.deepEqual(again.extras.c1, opened.extras.c1)
+  const plain = await editorFromMontage(montage, probe, async () => ({ duration: 171 }), source => `thumb:${source}`)
+  assert.equal(plain.extras.c1, undefined)
+})
+
+test('persistOpenMontage writes the editor order onto the open file', async () => {
+  const seen: Array<{ file?: string; ids: string[] }> = []
+  const ref = await persistOpenMontage({
+    workspace: 'studio',
+    state: {
+      projectName: 'Bird',
+      resolution: resolutionFor(1920, 1080),
+      fps: 24,
+      clips: [
+        { id: 'b', name: 'second', source: 'b.mp4', trimStart: 0, trimEnd: 2, volume: 1, muted: false, fit: 'fit', transition: 'none', transitionDuration: 0.5, transitionText: '', transitionTextSize: 100 } as never,
+        { id: 'a', name: 'first', source: 'a.mp4', trimStart: 0, trimEnd: 3, volume: 1, muted: false, fit: 'fit', transition: 'none', transitionDuration: 0.5, transitionText: '', transitionTextSize: 100 } as never,
+      ],
+      soundtrack: null,
+    },
+    layers: { overlays: [], audioCues: [], duck: 0 },
+    ref: { file: 'song.montage.json', revision: 4, origins: {}, extras: { b: { lyric: 'keep' } } },
+  }, async payload => {
+    seen.push({ file: payload.file, ids: payload.montage.clips.map(clip => clip.id) })
+    assert.equal(payload.workspace, 'studio')
+    assert.equal(payload.expected_revision, 4)
+    assert.equal(payload.montage.clips[0].lyric, 'keep')
+    return { file: 'song.montage.json', revision: 5, url: '/song.montage.json' }
+  })
+  assert.deepEqual(seen, [{ file: 'song.montage.json', ids: ['b', 'a'] }])
+  assert.equal(ref.revision, 5)
+  assert.equal(ref.file, 'song.montage.json')
+})
+
+test('a bare montage source plays from the workspace; URLs and paths stay as they are', () => {
+  assert.equal(playableUrl('ol-o01.mp4', 'orcos libres'), '/api/v1/file/ol-o01.mp4?workspace=orcos%20libres')
+  assert.equal(playableUrl('/api/v1/file/a.mp4?workspace=w', 'w'), '/api/v1/file/a.mp4?workspace=w')
+  assert.equal(playableUrl('https://x/a.mp4', 'w'), 'https://x/a.mp4')
+  assert.equal(playableUrl('a.mp4', ''), 'a.mp4')
 })

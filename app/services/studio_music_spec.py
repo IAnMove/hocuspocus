@@ -47,7 +47,14 @@ from pydantic import (
 )
 
 from services.image_generation_spec import ImageGenerationSpecError
-from services.music_model_contract import ACE_DEFAULT, GUIDE_REVISION, MUSIC3_LOCAL, YUE2_LOCAL
+from services.music_model_contract import (
+    ACE_DEFAULT,
+    GUIDE_REVISION,
+    MUSIC3_LOCAL,
+    YUE2_LOCAL,
+    is_paid_music_model,
+    paid_music_disabled_message,
+)
 from services.studio_image_spec import _validate_reference
 
 
@@ -348,6 +355,8 @@ class StudioMusicParams(_ClosedModel):
         if self.model_type in (MUSIC3_LOCAL, YUE2_LOCAL):
             _non_blank(self.alt_prompt, "input.params.alt_prompt")
         _non_blank(self.model_type, "input.params.model_type")
+        if is_paid_music_model(self.model_type):
+            raise ValueError(paid_music_disabled_message(self.model_type))
         if self.model_type not in STUDIO_MUSIC_MODEL_TYPES:
             raise ValueError("input.params.model_type is not a registered local music model")
         _check_active_tts_metadata(self)

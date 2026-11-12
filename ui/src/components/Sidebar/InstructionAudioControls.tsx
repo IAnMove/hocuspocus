@@ -24,7 +24,7 @@ export function InstructionAudioControls() {
   return <div className="space-y-3">
     <label className="block text-xs text-text-secondary">
       {t('auk.mode')}
-      <select className="mt-1 w-full rounded border border-border bg-bg-tertiary p-2"
+      <select aria-label={t('auk.mode')} className="mt-1 w-full rounded border border-border bg-bg-tertiary p-2"
         value={useSource ? 'A' : ''} onChange={event => {
           setParam('audio_prompt_type', event.target.value)
           if (!event.target.value) { setParam('audio_guide', undefined); setFilename(null) }
@@ -35,12 +35,12 @@ export function InstructionAudioControls() {
     </label>
     {params.model_type === 'auk' && <div className="flex gap-3 text-xs text-text-secondary">
       <label>{t('auk.steps')}
-        <input type="number" min={1} max={100} value={params.num_inference_steps ?? 32}
+        <input aria-label={t('auk.steps')} type="number" min={1} max={100} value={params.num_inference_steps ?? 32}
           className="mt-1 w-full rounded border border-border bg-bg-tertiary p-1"
           onChange={event => setParam('num_inference_steps', Number(event.target.value))} />
       </label>
       <label>{t('auk.guidance')}
-        <input type="number" min={0} max={10} step={0.1} value={params.guidance_scale ?? 2}
+        <input aria-label={t('auk.guidance')} type="number" min={0} max={10} step={0.1} value={params.guidance_scale ?? 2}
           className="mt-1 w-full rounded border border-border bg-bg-tertiary p-1"
           onChange={event => setParam('guidance_scale', Number(event.target.value))} />
       </label>

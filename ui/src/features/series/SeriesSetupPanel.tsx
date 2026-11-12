@@ -1,6 +1,9 @@
+import { controlReason } from '../../i18n/controlLabel'
+import { SeriesWritingGuide } from '../writing-guide/SeriesWritingGuide'
 import { useEffect, useRef, useState } from 'react'
 import { Check, CheckCircle2, ImagePlus, Loader2, Sparkles, Square } from 'lucide-react'
 import * as api from '../../api/client'
+import { useJobAction } from './useJobAction'
 import { generateSeriesReferenceImage, seriesReferencePrompt } from './referenceImages'
 import { useStore } from '../../stores/useStore'
 import { SeriesField, SectionCard, seriesStatusLabel } from './components'
@@ -13,7 +16,8 @@ import {
   applySeriesGlobalProvider,
   seriesProviderFieldsFromProfile,
 } from '../../lib/productionProfile'
-import { SeriesSetupVideoFields } from './SeriesSetupVideoFields'
+import { SeriesSetupVideoFields, SeriesVideoShotResolutionField } from './SeriesSetupVideoFields'
+import { SeriesEpisodeFormatField, SeriesFinishField } from './SeriesSetupLookFields'
 import { SeriesProductionMethods } from './SeriesProductionMethods'
 import type { SeriesReferenceRoom } from './shotReferences'
 
@@ -37,6 +41,7 @@ export function SeriesSetupPanel({
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const jobAction = useJobAction(setError)
   const adoptedKnownSeriesJob = useRef('')
   const patch = (value: Partial<SeriesProject>) => update(current => ({ ...current, ...value }))
   const patchProvider = (value: Partial<SeriesProject['provider']>) => update(current => ({
@@ -169,7 +174,7 @@ export function SeriesSetupPanel({
       {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
 
       <SectionCard title={t('setup.knownTitle')} description={t('setup.knownDescription')}>
-        <textarea
+        <textarea aria-label={t('setup.knownPlaceholder')}
           className={textareaClass}
           value={knownSeriesRequest}
           onChange={event => setKnownSeriesRequest(event.target.value)}
@@ -181,7 +186,7 @@ export function SeriesSetupPanel({
             disabled={knownSeriesRequest.trim().length < 3 || busy || jobBusy}
             onClick={() => void startKnownSeries()}
           ><Sparkles size={13} />{t('setup.knownBuild')}</button>
-          {job?.bootstrapKnownSeries && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesPlanJob(job.jobId).then(setJob)}><Square size={13} />{t('setup.cancelJob')}</button>}
+          {job?.bootstrapKnownSeries && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.cancelSeriesPlanJob(job.jobId), setJob)}><Square size={13} />{t('setup.cancelJob')}</button>}
         </div>
         <p className="mt-2 text-[10px] leading-relaxed text-amber-200">{t('setup.knownDisclaimer')}</p>
         {job?.bootstrapKnownSeries && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3">
@@ -201,49 +206,53 @@ export function SeriesSetupPanel({
             <p className="mt-1 text-[10px] text-text-muted">{t('setup.draftReview')}</p>
             <details className="mt-2 text-[10px] text-text-muted"><summary className="cursor-pointer">{t('setup.inspectGenerated')}</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2">{JSON.stringify(job.seriesResult, null, 2)}</pre></details>
           </div>}
-          {(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} onClick={() => void api.resumeSeriesPlanJob(job.jobId).then(setJob)}>{t('setup.resumeKnown')}</button>}
+          {(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.resumeSeriesPlanJob(job.jobId), setJob)}>{t('setup.resumeKnown')}</button>}
         </div>}
       </SectionCard>
 
       <SectionCard title={t('setup.prepareTitle')} description={t('setup.prepareDescription')}>
-        <textarea className={textareaClass} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder={t('setup.preparePlaceholder')} />
-        <div className="mt-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!complete || busy || jobBusy} onClick={() => void startCanon(false)}><Sparkles size={13} />{t('setup.prepareText')}</button><button className={greenButton} disabled={!complete || busy || (series.provider.imageProvider === 'maestro' && !series.provider.imageModel) || jobBusy} onClick={() => void startCanon(true)}><ImagePlus size={13} />{t('setup.prepareImages')}</button>{job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} onClick={() => void api.cancelSeriesPlanJob(job.jobId).then(setJob)}><Square size={13} />{t('setup.cancelJob')}</button>}</div>
+        <textarea aria-label={t('setup.preparePlaceholder')} className={textareaClass} value={instruction} onChange={event => setInstruction(event.target.value)} placeholder={t('setup.preparePlaceholder')} />
+        <div className="mt-3 flex flex-wrap gap-2"><button className={primaryButton} disabled={!complete || busy || jobBusy} onClick={() => void startCanon(false)}><Sparkles size={13} />{t('setup.prepareText')}</button><button className={greenButton} disabled={!complete || busy || (series.provider.imageProvider === 'maestro' && !series.provider.imageModel) || jobBusy} onClick={() => void startCanon(true)}><ImagePlus size={13} />{t('setup.prepareImages')}</button>{job && ['queued', 'running'].includes(job.status) && <button className={secondaryButton} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.cancelSeriesPlanJob(job.jobId), setJob)}><Square size={13} />{t('setup.cancelJob')}</button>}</div>
         {series.provider.imageProvider === 'maestro' && !series.provider.imageModel && <p className="mt-2 text-[10px] text-amber-300">{t('setup.needImageModel')}</p>}
         {progress && <p className="mt-2 flex items-center gap-2 text-[11px] text-violet-200"><Loader2 size={12} className="animate-spin" />{progress}</p>}
-        {job && !job.bootstrapKnownSeries && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3"><div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<span>{jobLine}</span><span className="ml-auto">{job.current}/{job.total}</span></div>{job.error && <p className="mt-2 text-[10px] text-red-300">{job.error}</p>}{job.status === 'completed' && job.seriesResult && <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/5 p-3"><p className="text-[11px] text-green-200">{t('setup.proposalSummary', { characters: job.seriesResult.characters.length, locations: job.seriesResult.locations.length, rules: job.seriesResult.canon.immutableRules.length })}</p><details className="mt-2 text-[10px] text-text-muted"><summary className="cursor-pointer">{t('setup.inspectProposal')}</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2">{JSON.stringify(job.seriesResult, null, 2)}</pre></details><button className={`mt-3 ${greenButton}`} disabled={busy} onClick={() => void applyCanon()}><Check size={13} />{imageMode ? t('setup.applyCanonImages') : t('setup.applyCanon')}</button></div>}{(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} onClick={() => void api.resumeSeriesPlanJob(job.jobId).then(setJob)}>{t('setup.resumeCanon')}</button>}</div>}
+        {job && !job.bootstrapKnownSeries && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3"><div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<span>{jobLine}</span><span className="ml-auto">{job.current}/{job.total}</span></div>{job.error && <p className="mt-2 text-[10px] text-red-300">{job.error}</p>}{job.status === 'completed' && job.seriesResult && <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/5 p-3"><p className="text-[11px] text-green-200">{t('setup.proposalSummary', { characters: job.seriesResult.characters.length, locations: job.seriesResult.locations.length, rules: job.seriesResult.canon.immutableRules.length })}</p><details className="mt-2 text-[10px] text-text-muted"><summary className="cursor-pointer">{t('setup.inspectProposal')}</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2">{JSON.stringify(job.seriesResult, null, 2)}</pre></details><button className={`mt-3 ${greenButton}`} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void applyCanon()}><Check size={13} />{imageMode ? t('setup.applyCanonImages') : t('setup.applyCanon')}</button></div>}{(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.resumeSeriesPlanJob(job.jobId), setJob)}>{t('setup.resumeCanon')}</button>}</div>}
       </SectionCard>
 
+      <SeriesWritingGuide seriesId={series.id} scope="series" />
+      {series.seasons.map(season => <div key={season.id}><p className="text-xs text-text-muted">{season.title}</p><SeriesWritingGuide seriesId={series.id} scope="season" targetId={season.id} /></div>)}
       <SectionCard title={t('identity.title')} description={t('identity.description')}>
         <div className="grid gap-3 lg:grid-cols-2">
-          <SeriesField label={t('identity.titleField')} required><input className={inputClass} value={series.title} onChange={event => patch({ title: event.target.value })} /></SeriesField>
-          <SeriesField label={t('identity.format')}><select className={selectClass} value={series.format} onChange={event => patch({ format: event.target.value as SeriesProject['format'] })}>
+          <SeriesField label={t('identity.titleField')} required><input aria-label={t('identity.titleField')} className={inputClass} value={series.title} onChange={event => patch({ title: event.target.value })} /></SeriesField>
+          <SeriesField label={t('identity.format')}><select aria-label={t('identity.format')} className={selectClass} value={series.format} onChange={event => patch({ format: event.target.value as SeriesProject['format'] })}>
             <option value="episodic">{t('format.episodic')}</option><option value="serial">{t('format.serial')}</option><option value="hybrid">{t('format.hybrid')}</option>
           </select></SeriesField>
-          <SeriesField label={t('identity.premise')} required><textarea className={textareaClass} value={series.premise} onChange={event => patch({ premise: event.target.value })} /></SeriesField>
-          <SeriesField label={t('identity.logline')}><textarea className={textareaClass} value={series.logline} onChange={event => patch({ logline: event.target.value })} /></SeriesField>
-          <SeriesField label={t('identity.language')}><input className={inputClass} value={series.language} onChange={event => patch(seriesContentLanguagePatch(series, event.target.value))} /></SeriesField>
-          <SeriesField label={t('library.spoken')} hint={t('library.spokenHint')}><select className={selectClass} value={series.spokenLanguage} onChange={event => patch(seriesSpokenLanguagePatch(series, event.target.value))}><SpokenLanguageOptions /></select></SeriesField>
-          <SeriesField label={t('identity.duration')} hint={t('identity.durationHint')}><input className={inputClass} type="number" min={15} max={3600} value={series.defaultEpisodeDurationSeconds} onChange={event => patch({ defaultEpisodeDurationSeconds: Number(event.target.value) })} /></SeriesField>
-          <SeriesField label={t('identity.genre')}><input className={inputClass} value={series.genre} onChange={event => patch({ genre: event.target.value })} /></SeriesField>
-          <SeriesField label={t('identity.tone')}><input className={inputClass} value={series.tone} onChange={event => patch({ tone: event.target.value })} /></SeriesField>
-          <SeriesField label={t('identity.audience')}><input className={inputClass} value={series.audience} onChange={event => patch({ audience: event.target.value })} /></SeriesField>
+          <SeriesField label={t('identity.premise')} required><textarea aria-label={t('identity.premise')} className={textareaClass} value={series.premise} onChange={event => patch({ premise: event.target.value })} /></SeriesField>
+          <SeriesField label={t('identity.logline')}><textarea aria-label={t('identity.logline')} className={textareaClass} value={series.logline} onChange={event => patch({ logline: event.target.value })} /></SeriesField>
+          <SeriesField label={t('identity.language')}><input aria-label={t('identity.language')} className={inputClass} value={series.language} onChange={event => patch(seriesContentLanguagePatch(series, event.target.value))} /></SeriesField>
+          <SeriesField label={t('library.spoken')} hint={t('library.spokenHint')}><select aria-label={t('library.spoken')} className={selectClass} value={series.spokenLanguage} onChange={event => patch(seriesSpokenLanguagePatch(series, event.target.value))}><SpokenLanguageOptions /></select></SeriesField>
+          <SeriesField label={t('identity.duration')} hint={t('identity.durationHint')}><input aria-label={t('identity.duration')} className={inputClass} type="number" min={15} max={3600} value={series.defaultEpisodeDurationSeconds} onChange={event => patch({ defaultEpisodeDurationSeconds: Number(event.target.value) })} /></SeriesField>
+          <SeriesField label={t('identity.genre')}><input aria-label={t('identity.genre')} className={inputClass} value={series.genre} onChange={event => patch({ genre: event.target.value })} /></SeriesField>
+          <SeriesField label={t('identity.tone')}><input aria-label={t('identity.tone')} className={inputClass} value={series.tone} onChange={event => patch({ tone: event.target.value })} /></SeriesField>
+          <SeriesField label={t('identity.audience')}><input aria-label={t('identity.audience')} className={inputClass} value={series.audience} onChange={event => patch({ audience: event.target.value })} /></SeriesField>
+          <div className="lg:col-span-2"><SeriesEpisodeFormatField series={series} t={t} patch={patch} /></div>
         </div>
       </SectionCard>
 
       <SectionCard title={t('visual.title')} description={t('visual.description')}>
         <div className="grid gap-3 lg:grid-cols-2">
-          <SeriesField label={t('visual.visualStyle')} required><textarea className={textareaClass} value={series.visualStyle} onChange={event => patch({ visualStyle: event.target.value })} /></SeriesField>
-          <SeriesField label={t('visual.characterVisualStyle')}><textarea className={textareaClass} value={series.characterVisualStyle} onChange={event => patch({ characterVisualStyle: event.target.value })} /></SeriesField>
-          <SeriesField label={t('visual.cameraLanguage')}><textarea className={textareaClass} value={series.cameraLanguage} onChange={event => patch({ cameraLanguage: event.target.value })} /></SeriesField>
+          <SeriesField label={t('visual.visualStyle')} required><textarea aria-label={t('visual.visualStyle')} className={textareaClass} value={series.visualStyle} onChange={event => patch({ visualStyle: event.target.value })} /></SeriesField>
+          <SeriesField label={t('visual.characterVisualStyle')}><textarea aria-label={t('visual.characterVisualStyle')} className={textareaClass} value={series.characterVisualStyle} onChange={event => patch({ characterVisualStyle: event.target.value })} /></SeriesField>
+          <SeriesField label={t('visual.cameraLanguage')}><textarea aria-label={t('visual.cameraLanguage')} className={textareaClass} value={series.cameraLanguage} onChange={event => patch({ cameraLanguage: event.target.value })} /></SeriesField>
+          <SeriesFinishField series={series} t={t} patch={patch} />
           <SeriesField label={t('visual.textPolicy')} hint={t('visual.textPolicyHint')}>
-            <label className="flex items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={series.allowClipText} onChange={event => patch({ allowClipText: event.target.checked })} />{t('visual.allowText')}</label>
+            <label className="flex items-center gap-2 text-xs text-text-secondary"><input aria-label={t('visual.allowText')} type="checkbox" checked={series.allowClipText} onChange={event => patch({ allowClipText: event.target.checked })} />{t('visual.allowText')}</label>
           </SeriesField>
           <SeriesField label={t('visual.nativeDialogue')} hint={t('visual.nativeDialogueHint')}>
-            <label className="flex items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={series.bestEffortLipSyncAcknowledged} onChange={event => patch({ bestEffortLipSyncAcknowledged: event.target.checked })} />{t('visual.lipSync')}</label>
+            <label className="flex items-center gap-2 text-xs text-text-secondary"><input aria-label={t('visual.lipSync')} type="checkbox" checked={series.bestEffortLipSyncAcknowledged} onChange={event => patch({ bestEffortLipSyncAcknowledged: event.target.checked })} />{t('visual.lipSync')}</label>
           </SeriesField>
           <SeriesField label={t('visual.protagonist')} hint={t('visual.protagonistHint')}>
-            <label className="flex items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={series.protagonistConsistency} onChange={event => patch({ protagonistConsistency: event.target.checked, protagonistCharacterId: event.target.checked ? (series.protagonistCharacterId || series.characters[0]?.id || '') : series.protagonistCharacterId })} />{t('visual.protagonistFirst')}</label>
-            {series.protagonistConsistency && <select className={`${selectClass} mt-2`} value={series.protagonistCharacterId} onChange={event => patch({ protagonistCharacterId: event.target.value })}><option value="">{t('visual.chooseProtagonist')}</option>{series.characters.map(character => <option key={character.id} value={character.id}>{character.name || t('visual.unnamedCharacter')}</option>)}</select>}
+            <label className="flex items-center gap-2 text-xs text-text-secondary"><input aria-label={t('visual.protagonistFirst')} type="checkbox" checked={series.protagonistConsistency} onChange={event => patch({ protagonistConsistency: event.target.checked, protagonistCharacterId: event.target.checked ? (series.protagonistCharacterId || series.characters[0]?.id || '') : series.protagonistCharacterId })} />{t('visual.protagonistFirst')}</label>
+            {series.protagonistConsistency && <select aria-label={t('visual.protagonist')} className={`${selectClass} mt-2`} value={series.protagonistCharacterId} onChange={event => patch({ protagonistCharacterId: event.target.value })}><option value="">{t('visual.chooseProtagonist')}</option>{series.characters.map(character => <option key={character.id} value={character.id}>{character.name || t('visual.unnamedCharacter')}</option>)}</select>}
             {series.protagonistConsistency && <p className={`mt-1 text-[10px] ${protagonistReady ? 'text-emerald-200' : 'text-amber-300'}`}>{protagonistReady ? t('visual.identityReady') : t('visual.identityMissing')}</p>}
           </SeriesField>
         </div>
@@ -251,11 +260,11 @@ export function SeriesSetupPanel({
 
       <SectionCard title={t('source.title')} description={t('source.description')}>
         <div className="grid gap-3 lg:grid-cols-2">
-          <SeriesField label={t('source.mode')}><select className={selectClass} value={series.sourceMode} onChange={event => patch({ sourceMode: event.target.value as SeriesProject['sourceMode'] })}>
+          <SeriesField label={t('source.mode')}><select aria-label={t('source.mode')} className={selectClass} value={series.sourceMode} onChange={event => patch({ sourceMode: event.target.value as SeriesProject['sourceMode'] })}>
             <option value="original">{t('source.original')}</option><option value="known_universe_experimental">{t('source.knownUniverse')}</option><option value="hybrid">{t('source.hybrid')}</option>
           </select></SeriesField>
-          <SeriesField label={t('source.rights')} hint={t('source.rightsHint')}><textarea className={textareaClass} value={series.rightsNote} onChange={event => patch({ rightsNote: event.target.value })} /></SeriesField>
-          {series.sourceMode !== 'original' && <div className="lg:col-span-2"><SeriesField label={t('source.masterPrompt')} required><textarea className={textareaClass} value={series.masterUniversePrompt} onChange={event => patch({ masterUniversePrompt: event.target.value })} /></SeriesField></div>}
+          <SeriesField label={t('source.rights')} hint={t('source.rightsHint')}><textarea aria-label={t('source.rights')} className={textareaClass} value={series.rightsNote} onChange={event => patch({ rightsNote: event.target.value })} /></SeriesField>
+          {series.sourceMode !== 'original' && <div className="lg:col-span-2"><SeriesField label={t('source.masterPrompt')} required><textarea aria-label={t('source.masterPrompt')} className={textareaClass} value={series.masterUniversePrompt} onChange={event => patch({ masterUniversePrompt: event.target.value })} /></SeriesField></div>}
           {series.sourceMode !== 'original' && <p className="lg:col-span-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[10px] leading-relaxed text-amber-200">{t('source.experimentalWarning')}</p>}
         </div>
       </SectionCard>
@@ -267,14 +276,15 @@ export function SeriesSetupPanel({
           <button type="button" className={`${secondaryButton} ${!series.provider.useGlobalProfile ? 'border-violet-400 text-violet-200' : ''}`} onClick={() => patchProvider({ useGlobalProfile: false })}>{t('providers.override')}</button>
         </div>
         {series.provider.useGlobalProfile && <p className="mb-3 text-[10px] text-green-300">{t('providers.globalSummary', { text: productionProfile.text.model, image: productionProfile.image.model, video: productionProfile.video.model })}</p>}
+        <div className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3"><SeriesVideoShotResolutionField series={series} t={t} patch={patch} /></div>
         <fieldset disabled={series.provider.useGlobalProfile} className="disabled:opacity-50">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <SeriesField label={t('providers.writingProvider')}><select className={selectClass} value={series.provider.writingProvider} onChange={event => patchProvider({ writingProvider: event.target.value as SeriesProject['provider']['writingProvider'] })}>
+          <SeriesField label={t('providers.writingProvider')}><select aria-label={t('providers.writingProvider')} className={selectClass} value={series.provider.writingProvider} onChange={event => patchProvider({ writingProvider: event.target.value as SeriesProject['provider']['writingProvider'] })}>
             <option value="maestro">{t('providers.maestro')}</option><option value="deepseek">{t('providers.deepseek')}</option><option value="minimax">{t('providers.minimax')}</option><option value="openai">{t('providers.openai')}</option><option value="openai-compatible">{t('providers.compatible')}</option>
           </select></SeriesField>
-          <SeriesField label={t('providers.writingModel')}><input className={inputClass} value={series.provider.writingModel} onChange={event => patchProvider({ writingModel: event.target.value })} placeholder={t('providers.writingModelPlaceholder')} /></SeriesField>
-          <SeriesField label={t('providers.imageProvider')}><select className={selectClass} value={series.provider.imageProvider} onChange={event => patchProvider({ imageProvider: event.target.value })}><option value="maestro">{t('providers.imageLocal')}</option><option value="minimax">{t('providers.imageMinimax')}</option></select></SeriesField>
-          <SeriesField label={t('providers.imageModel')}><input className={inputClass} value={series.provider.imageModel} disabled={series.provider.imageProvider === 'minimax'} onChange={event => patchProvider({ imageModel: event.target.value })} placeholder={series.provider.imageProvider === 'minimax' ? t('providers.imageModelMinimax') : t('providers.imageModelLocal')} /></SeriesField>
+          <SeriesField label={t('providers.writingModel')}><input aria-label={t('providers.writingModel')} className={inputClass} value={series.provider.writingModel} onChange={event => patchProvider({ writingModel: event.target.value })} placeholder={t('providers.writingModelPlaceholder')} /></SeriesField>
+          <SeriesField label={t('providers.imageProvider')}><select aria-label={t('providers.imageProvider')} className={selectClass} value={series.provider.imageProvider} onChange={event => patchProvider({ imageProvider: event.target.value })}><option value="maestro">{t('providers.imageLocal')}</option><option value="minimax">{t('providers.imageMinimax')}</option></select></SeriesField>
+          <SeriesField label={t('providers.imageModel')}><input aria-label={t('providers.imageModel')} className={inputClass} value={series.provider.imageModel} disabled={series.provider.imageProvider === 'minimax'} onChange={event => patchProvider({ imageModel: event.target.value })} placeholder={series.provider.imageProvider === 'minimax' ? t('providers.imageModelMinimax') : t('providers.imageModelLocal')} /></SeriesField>
           <SeriesSetupVideoFields series={series} t={t} patchProvider={patchProvider} patchVideo={patchVideo} />
         </div>
         </fieldset>

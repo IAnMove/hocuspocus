@@ -3,7 +3,7 @@ import type { RigAnimation, RigCapabilities, RigJob, RigProfile, RigProfileId } 
 const HUMANOID_RECOMMENDED = ['idle', 'walk', 'wave', 'talk']
 const CATEGORY_ORDER = ['Move', 'Gesture', 'Dance', 'Stand', 'Action']
 const REFUSALS = new Set(['hands_stuck', 'arms_raised', 'turned', 'single_leg', 'legs_too_short', 'asymmetry', 'not_upright', 'degenerate'])
-const WARNINGS = new Set(['arms_steep', 'short_legs', 'short_arms', 'neck_not_found', 'facing_back', 'on_a_base'])
+const WARNINGS = new Set(['arms_steep', 'short_legs', 'short_arms', 'neck_not_found', 'facing_back', 'on_a_base', 'covered_arms', 'covered_legs', 'legs_hidden'])
 export const DEFAULT_BPM = 120
 
 export function clipsForEngine(engineId: string, capabilities: RigCapabilities | null, profile: RigProfile | undefined): RigAnimation[] {
@@ -53,16 +53,29 @@ export function previewAsset(engineId: string, animationId: string): string {
   return engineId === 'humanoid' ? `humanoid-${animationId}` : `animation-${animationId}`
 }
 
-export function rigHelpKey(engineId: string): 'rig.proceduralHelp' | 'rig.humanoidHelp' | 'rig.unirigHelp' {
+export function rigHelpKey(engineId: string): 'rig.proceduralHelp' | 'rig.humanoidHelp' | 'rig.unirigHelp' | 'rig.miaHelp' {
   if (engineId === 'procedural') return 'rig.proceduralHelp'
   if (engineId === 'humanoid') return 'rig.humanoidHelp'
+  if (engineId === 'mia') return 'rig.miaHelp'
   return 'rig.unirigHelp'
 }
 
-export function rigFooterKey(engineId: string): 'rig.unirigFooter' | 'rig.humanoidFooter' | 'rig.proceduralFooter' {
+export function rigFooterKey(engineId: string): 'rig.unirigFooter' | 'rig.humanoidFooter' | 'rig.proceduralFooter' | 'rig.miaFooter' {
   if (engineId === 'unirig') return 'rig.unirigFooter'
   if (engineId === 'humanoid') return 'rig.humanoidFooter'
+  if (engineId === 'mia') return 'rig.miaFooter'
   return 'rig.proceduralFooter'
+}
+
+/** Profile used when the user picks an engine. Make-It-Animatable defaults to the humanoid limb profile. */
+export function profileForEngine(engineId: string, current: RigProfileId): RigProfileId {
+  if (engineId === 'mia') return 'humanoid'
+  return current
+}
+
+/** The failed humanoid job names Make-It-Animatable. Selecting it does not start a job. */
+export function showsMiaSuggestion(job: { suggested_engine?: string } | null): boolean {
+  return job?.suggested_engine === 'mia'
 }
 
 /** The i18n key that explains why a mesh was refused, or null when the error is something else. */

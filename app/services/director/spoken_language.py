@@ -21,7 +21,25 @@ __all__ = [
     "infer_h3_spoken_language",
     "normalize_spoken_language",
     "spoken_language_contract",
+    "spoken_language_of",
 ]
+
+_CODE_LABELS = {"es": "Spanish", "en": "English"}
+
+
+def spoken_language_of(text: Any) -> str:
+    """H3 label for untagged spoken words: the shared Spanish/English detector, else the H3 script/word guess.
+
+    Script and French/Portuguese/German/Italian evidence keep the H3 guess. Spanish or English is
+    decided by ``detect_language`` (the lyrics guard's function words), so "la vida es bella y no
+    me importa" is Spanish. English remains only when nothing can tell.
+    """
+    from services.lyrics_language import detect_language
+    guessed = infer_h3_spoken_language(text)
+    if guessed not in _CODE_LABELS.values():
+        return guessed
+    return _CODE_LABELS.get(detect_language(str(text or "")), guessed)
+
 
 _LANGUAGE_CONTRACT_RE = re.compile(
     r"(?:^|\n)SPOKEN LANGUAGE CONTRACT[^\n]*",

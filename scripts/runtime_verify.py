@@ -14,6 +14,45 @@ sys.path.insert(0, str(ROOT / "app"))
 from services.runtime_profiles import FINGERPRINT_SCHEME, dependency_fingerprint, recipe  # noqa: E402
 from services.runtime_sources import sources_current  # noqa: E402
 
+# xFormers treats FlashAttention-3 as usable on every GPU of compute capability
+# 9.0 or newer. The kernel is Hopper (sm_90) only. On Blackwell (sm_100 and
+# sm_120, including the RTX 5090) that launch aborts the process with a CUDA
+# invalid-argument Python cannot catch, so Install never writes a receipt.
+_FLASH3_MAX_CAPABILITY = (9, 0)
+
+
+def xformers_flash_probe_supported(capability: tuple[int, int] | None) -> bool:
+    """The default xFormers attention probe is safe through Hopper only."""
+    if capability is None:
+        return True
+    return (int(capability[0]), int(capability[1])) <= _FLASH3_MAX_CAPABILITY
+
+
+def _device_capability(torch_module) -> tuple[int, int] | None:
+    getter = getattr(getattr(torch_module, "cuda", None), "get_device_capability", None)
+    if getter is None:
+        return None
+    major, minor = getter()
+    return int(major), int(minor)
+
+
+def _verify_xformers_attention(engine: str, torch_module) -> str:
+    capability = _device_capability(torch_module)
+    if capability is not None and not xformers_flash_probe_supported(capability):
+        major, minor = capability
+        print(
+            "[Runtime] Skipping xFormers attention probe on compute capability "
+            f"{major}.{minor}: the pinned xFormers build would launch Hopper "
+            "FlashAttention, which aborts on Blackwell. SageAttention and SDPA "
+            "remain the runtime paths."
+        )
+        return "skipped"
+    query = torch_module.ones((1, 16, 2, 64), device="cuda", dtype=torch_module.float16)
+    attention = importlib.import_module("xformers.ops").memory_efficient_attention(query, query, query)
+    if not torch_module.isfinite(attention).all().item():
+        raise RuntimeError(f"{engine}: xFormers CUDA calculation failed")
+    return "passed"
+
 
 def inspect_environment(engine: str) -> dict:
     spec = recipe(engine, sys.platform)
@@ -47,6 +86,8 @@ def verify(engine: str, *, cuda: bool = True) -> dict:
                 "fingerprint": dependency_fingerprint(engine, sys.platform),
                 "fingerprintScheme": FINGERPRINT_SCHEME}
     torch = importlib.import_module("torch")
+    if engine == "trellis2":
+        sys.path.insert(0, str(ROOT / "app/services/model3d_runtimes/trellis2/vendor/TRELLIS.2"))
     if torch.version.cuda != spec["cuda"]:
         raise RuntimeError(f"{engine}: expected CUDA {spec['cuda']} wheel; got {torch.version.cuda}")
     for name in ("torchvision", "torchaudio"):
@@ -54,22 +95,30 @@ def verify(engine: str, *, cuda: bool = True) -> dict:
             importlib.import_module(name)
     for name in spec.get("verificationImports", []):
         importlib.import_module(name)
+    if engine == "trellis2":
+        getattr(importlib.import_module("trellis2.pipelines"), "Trellis2ImageTo3DPipeline")
+    attention_probe: dict = {}
     if cuda:
         if not torch.cuda.is_available():
             raise RuntimeError(f"{engine}: CUDA is unavailable; check the NVIDIA driver")
         result = (torch.ones(1, device="cuda") + 1).item()
         if result != 2:
             raise RuntimeError(f"{engine}: CUDA calculation failed")
-        if "xformers.ops" in spec.get("verificationImports", []):
+        if engine == "trellis2":
+            props = torch.cuda.get_device_properties(0)
+            if props.total_memory < spec["minimumVramMiB"] * 1024**2 or not 8 <= props.major < 10:
+                raise RuntimeError("TRELLIS.2 needs a supported NVIDIA 24GB GPU")
             query = torch.ones((1, 16, 2, 64), device="cuda", dtype=torch.float16)
-            attention = importlib.import_module("xformers.ops").memory_efficient_attention(query, query, query)
+            attention = importlib.import_module("flash_attn").flash_attn_func(query, query, query)
             if not torch.isfinite(attention).all().item():
-                raise RuntimeError(f"{engine}: xFormers CUDA calculation failed")
+                raise RuntimeError("TRELLIS.2 FlashAttention CUDA calculation failed")
+        if "xformers.ops" in spec.get("verificationImports", []):
+            attention_probe["xformersAttentionProbe"] = _verify_xformers_attention(engine, torch)
     return {"engine": engine, "profile": spec["id"], "python": spec["python"],
             "prefix": str((ROOT / spec["env"]).resolve()), "packages": installed, "cuda": torch.version.cuda,
             "cudaCalculation": cuda, "modelsExecuted": False,
             "fingerprint": dependency_fingerprint(engine, sys.platform),
-            "fingerprintScheme": FINGERPRINT_SCHEME}
+            "fingerprintScheme": FINGERPRINT_SCHEME, **attention_probe}
 
 
 def main() -> None:

@@ -33,7 +33,9 @@
     "undo": "Undo",
     "reexport": "Update the export",
     "openScene": "Open scene",
-    "regenerate": "Regenerate"
+    "regenerate": "Regenerate",
+    "redoLips": "Redo the lips",
+    "lipsEngine": "Lip-sync engine"
   },
   "reasons": {
     "shot_locked": "This shot is locked",

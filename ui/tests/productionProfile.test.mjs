@@ -20,11 +20,11 @@ const options = {
   supports_auto_aspect: false,
 }
 
-test('new production profiles prefer local Qwen Image 2.1', () => {
-  assert.deepEqual(DEFAULT_PRODUCTION_PROFILE.image, { provider: 'local', model: 'qwen_image_21' })
+test('new production profiles prefer local Qwen Image 2.1 Turbo', () => {
+  assert.deepEqual(DEFAULT_PRODUCTION_PROFILE.image, { provider: 'local', model: 'qwen_image_21_turbo' })
   const fields = seriesProviderFieldsFromProfile(DEFAULT_PRODUCTION_PROFILE)
   assert.equal(fields.imageProvider, 'maestro')
-  assert.equal(fields.imageModel, 'qwen_image_21')
+  assert.equal(fields.imageModel, 'qwen_image_21_turbo')
 })
 
 test('keeps an exact H3 Legacy tier and portrait orientation', () => {

@@ -2,8 +2,9 @@
 from __future__ import annotations
 from typing import Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError, field_validator
+from services.agent_activity import trusted_tool as agent_trusted_tool
 from services.image_generation_spec import image_generation_schema
 from services.studio_image_spec import studio_image_schema
 from services.image_generation_commands import command_error
@@ -59,7 +60,7 @@ def image_command_catalog(additional_operations=()):
                      "properties": {"workspace": spec["input"]["properties"]["workspace"],
                                     "intent_id": spec["intent_id"]}, "required": ["workspace", "intent_id"]}
     return [{"name": "generation.image", "version": 2, "supportedVersions": [1, 2], "domain": "studio", "mutation": True,
-             "description": "Admit an image job with an installed model and explicit output workspace. Version 1 is a single text-to-image request; version 2 accepts typed Studio params including image_refs (I/KI), image_guide plus image_mask (VAG local edit), video_guide_outpainting margins, LoRAs and processors. qwen_image_21* is the unified Qwen Image 2.1 generator/editor (native 2K, up to 10 refs, RGBA). Preserve literal prompts and reuse intent_id only for retries. The receipt proves admission; inspect its task for completion.",
+             "description": "Admit an image job with an installed model and explicit output workspace: v1 is text-to-image; v2 accepts Studio params, image_refs (I/KI), image_guide plus image_mask (VAG local edit), video_guide_outpainting margins, LoRAs and processors; qwen_image_21* is the unified Qwen Image 2.1 generator/editor (native 2K, up to 10 refs, RGBA). Preserve literal prompts and reuse intent_id only for identical retries. For a 2.5D prop use props.create; this receipt proves admission, so inspect its task for completion.",
              "inputSchema": envelope},
             {"name": "generation.receipt", "version": 1, "domain": "studio", "mutation": False,
              "description": "Read an immutable generation admission and its current canonical task in the exact original output workspace.",
@@ -69,13 +70,74 @@ def image_command_catalog(additional_operations=()):
                              "required": ["version", "operation", "input"]}}, *additional_operations]
 
 
+def _field_values(arguments, name):
+    values = []
+    if name in arguments:
+        values.append(arguments[name])
+    payload = arguments.get("input")
+    if isinstance(payload, dict):
+        if name in payload:
+            values.append(payload[name])
+        params = payload.get("params")
+        if isinstance(params, dict) and name in params:
+            values.append(params[name])
+    return values
+
+
+def _reject_field_type(name, values):
+    for value in values:
+        if name == "priority" and type(value) is not int:
+            raise command_error(422, "invalid_command", "priority must be an integer")
+        if name == "output_name" and not isinstance(value, str):
+            raise command_error(422, "invalid_command", "output_name must be a string")
+
+
+def _reject_conflict(name, values):
+    if any(item != values[0] for item in values):
+        raise HTTPException(422, {
+            "code": "conflicting_field",
+            "message": f"{name} was supplied more than once with different values",
+            "field": name,
+            "values": list(values),
+            "retryable": False,
+        })
+
+
+def _fold_transport_fields(arguments):
+    """Move top-level priority and output_name into the command input."""
+    payload = arguments.get("input")
+    if not isinstance(payload, dict):
+        raise command_error(422, "invalid_command", "Use version, intent_id and input for the generation tool")
+    for name in ("priority", "output_name"):
+        values = _field_values(arguments, name)
+        if not values:
+            continue
+        _reject_field_type(name, values)
+        _reject_conflict(name, values)
+        if name not in arguments:
+            continue
+        top = arguments.pop(name)
+        if name == "output_name":
+            payload["output_name"] = top
+            continue
+        params = payload.get("params")
+        if params is None:
+            params = {}
+            payload["params"] = params
+        if not isinstance(params, dict):
+            raise command_error(422, "invalid_command", "input.params must be an object")
+        params["priority"] = top
+
+
 def _generation_arguments(arguments):
     if not isinstance(arguments, dict):
         raise command_error(422, "invalid_command", "Use version, intent_id and input for the generation tool")
     if "validate" in arguments and type(arguments.get("validate")) is not bool:
         raise command_error(422, "invalid_command", "validate must be true or false")
-    if set(arguments) - {"validate"} != {"version", "intent_id", "input"}:
+    allowed = {"version", "intent_id", "input", "validate", "priority", "output_name"}
+    if set(arguments) - allowed or set(arguments) & {"version", "intent_id", "input"} != {"version", "intent_id", "input"}:
         raise command_error(422, "invalid_command", "Use version, intent_id and input for the generation tool")
+    _fold_transport_fields(arguments)
     return arguments
 
 
@@ -83,7 +145,8 @@ def image_command_handlers(service):
     def submission_handler(operation):
         async def submit(arguments):
             _generation_arguments(arguments)
-            return await service.submit({**arguments, "operation": operation}, trusted_tool="external_agent")
+            # An MCP client is an external agent; a server job calling the same handler in process is not.
+            return await service.submit({**arguments, "operation": operation}, trusted_tool=agent_trusted_tool(default_external=True))
         return submit
 
     def receipt(arguments):

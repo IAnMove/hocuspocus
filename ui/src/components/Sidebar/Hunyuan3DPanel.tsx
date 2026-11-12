@@ -1,3 +1,5 @@
+import { useFieldIds } from '../common/fieldIds'
+import { hunyuanPresetCopy } from './hunyuanPresetCopy'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Cpu, Loader2, Palette, Play, RefreshCw, Square, X } from 'lucide-react'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
@@ -63,6 +65,8 @@ function HunyuanViewField({
 }
 
 export function Hunyuan3DPanel() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('scene3d')
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const enabledModels = useStore(state => state.enabledModels)
@@ -89,7 +93,7 @@ export function Hunyuan3DPanel() {
   const [guidance, setGuidance] = useState(5)
   const [octree, setOctree] = useState(256)
   const [chunks, setChunks] = useState(12000)
-  const [seed, setSeed] = useState(1234)
+  const [seed, setSeed] = useState(-1)
   const [outputFormat, setOutputFormat] = useState('glb')
   const [textureResolution, setTextureResolution] = useState(512)
   const [cpuOffload, setCpuOffload] = useState(true)
@@ -115,7 +119,7 @@ export function Hunyuan3DPanel() {
 
   const selectedModel = useMemo(() => capabilities?.models.find(model => model.id === modelId), [capabilities, modelId])
   const isRunning = !!job && ACTIVE_3D_JOB_STATUSES.has(job.status)
-  const { external3d, isMultiview, remote3d, installed, canRun } = model3dInputState({
+  const { external3d, isMultiview, remote3d, supportsRetexture, installed, canRun } = model3dInputState({
     model: selectedModel, provider: model3dProvider, operation,
     runtimeInstalled: capabilities?.runtime.installed,
     hasSource: !!sourceModel, hasFront: !!views.front, hasPrompt: !!prompt.trim(), textureMode,
@@ -181,10 +185,9 @@ export function Hunyuan3DPanel() {
   }, [activeWorkspace])
 
   useEffect(() => {
-    if (!external3d) return
-    setOperation('generate')
-    if (!selectedModel?.resolutions?.includes(resolution)) setResolution(1024)
-  }, [external3d, selectedModel, resolution])
+    if (!supportsRetexture) setOperation('generate')
+    if (external3d && !selectedModel?.resolutions?.includes(resolution)) setResolution(1024)
+  }, [supportsRetexture, external3d, selectedModel, resolution])
 
   useEffect(() => {
     if (operation === 'retexture') void loadRetextureSources()
@@ -325,14 +328,14 @@ export function Hunyuan3DPanel() {
     <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-1.5 text-xs font-medium text-text-primary"><Box size={15} className="text-accent-blue" /> {remote3d ? (model3dProvider === 'meshy' ? t('hunyuan.titleMeshy') : t('hunyuan.titleHi3d')) : t('hunyuan.title')}</div>
+          <div className="flex items-center gap-1.5 text-xs font-medium text-text-primary"><Box size={15} className="text-accent-blue" /> {remote3d ? (model3dProvider === 'meshy' ? t('hunyuan.titleMeshy') : t('hunyuan.titleHi3d')) : external3d ? selectedModel?.label : t('hunyuan.title')}</div>
           <p className="text-[10px] text-text-muted mt-1">{remote3d ? t('hunyuan.subtitleRemote') : t('hunyuan.subtitle')}</p>
         </div>
         <div className="flex items-center gap-1 text-[9px] text-accent-green bg-accent-green/10 border border-accent-green/20 rounded-full px-2 py-1 whitespace-nowrap"><Cpu size={10} /> {t('hunyuan.vramBadge')}</div>
       </div>
       <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-primary p-1">
         <button type="button" disabled={isRunning} onClick={() => setOperation('generate')} className={`rounded-md px-2 py-1.5 text-[10px] transition-colors disabled:opacity-50 ${operation === 'generate' ? 'bg-accent-blue/15 text-accent-blue' : 'text-text-muted hover:text-text-primary'}`}><span className="flex items-center justify-center gap-1"><Box size={11} /> {t('hunyuan.generateModel')}</span></button>
-        <button type="button" disabled={isRunning || external3d} title={external3d ? t('engines.nativePbr') : undefined} onClick={() => setOperation('retexture')} className={`rounded-md px-2 py-1.5 text-[10px] transition-colors disabled:opacity-50 ${operation === 'retexture' ? 'bg-purple-500/15 text-purple-300' : 'text-text-muted hover:text-text-primary'}`}><span className="flex items-center justify-center gap-1"><Palette size={11} /> {t('hunyuan.retextureGlb')}</span></button>
+        <button type="button" disabled={isRunning || !supportsRetexture} title={!supportsRetexture ? (remote3d ? t('engines.remoteNoRetexture') : t('engines.nativePbr')) : undefined} onClick={() => setOperation('retexture')} className={`rounded-md px-2 py-1.5 text-[10px] transition-colors disabled:opacity-50 ${operation === 'retexture' ? 'bg-purple-500/15 text-purple-300' : 'text-text-muted hover:text-text-primary'}`}><span className="flex items-center justify-center gap-1"><Palette size={11} /> {t('hunyuan.retextureGlb')}</span></button>
       </div>
 
       {!remote3d && <ModelSelector />}
@@ -340,7 +343,7 @@ export function Hunyuan3DPanel() {
       {external3d && selectedModel && <>
         <p className="text-xs text-text-muted">✕ {t('engines.imageOnly')} {t('engines.hunyuanOnly')}</p>
         <Model3DEngineInputs model={selectedModel} resolution={resolution} onResolution={setResolution} lowVram={lowVram} onLowVram={setLowVram} fov={cameraFov} onFov={setCameraFov} />
-        <label className="text-xs">{t('hunyuan.seed')}<input type="number" min={0} max={4294967295} value={seed} onChange={event => setSeed(Number(event.target.value))} className="ml-2 w-28 bg-bg-primary" /></label>
+        <label className="text-xs">{t('hunyuan.seed')}<input aria-label={t('hunyuan.seed')} type="number" min={-1} max={4294967295} value={seed} title={t('hunyuan.seedRandom')} onChange={event => setSeed(Number(event.target.value))} className="ml-2 w-28 bg-bg-primary" /></label>
       </>}
       {!remote3d && !capabilities ? (
         <div className="flex items-center justify-center py-8 text-xs text-text-muted"><Loader2 size={15} className="animate-spin mr-2" /> {t('hunyuan.loadingModels')}</div>
@@ -349,7 +352,7 @@ export function Hunyuan3DPanel() {
           {operation === 'retexture' && <div className="space-y-2 rounded-lg border border-purple-400/30 bg-purple-500/[.06] p-3">
             <div className="flex items-center justify-between gap-2">
               <div><div className="text-[10px] font-medium uppercase tracking-wider text-purple-200">{t('hunyuan.sourceGlb')}</div><p className="mt-0.5 text-[9px] text-text-muted">{t('hunyuan.sourceGlbHelp')}</p></div>
-              <button type="button" onClick={() => void loadRetextureSources()} title={t('hunyuan.refreshGallery')} className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary"><RefreshCw size={11} className={sourcesLoading ? 'animate-spin' : ''} /></button>
+              <button type="button" onClick={() => void loadRetextureSources()} title={t('hunyuan.refreshGallery')} aria-label={t('hunyuan.refreshGallery')} className="rounded border border-border p-1.5 text-text-muted hover:text-text-primary"><RefreshCw size={11} className={sourcesLoading ? 'animate-spin' : ''} /></button>
             </div>
             <AssetInput
               label={t('hunyuan.sourceGlb')}
@@ -375,12 +378,15 @@ export function Hunyuan3DPanel() {
           <div>
             <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('hunyuan.performance')}</label>
             <div className="grid grid-cols-2 gap-1.5">
-              {(capabilities?.presets || []).map(item => (
+              {(capabilities?.presets || []).map(item => {
+                const copy = hunyuanPresetCopy(t, item)
+                return (
                 <button key={item.id} disabled={external3d} title={external3d ? t('engines.hunyuanOnly') : undefined} onClick={() => applyPreset(item.id)} className={`text-left rounded-lg border px-2.5 py-2 transition-colors ${preset === item.id ? 'border-accent-blue bg-accent-blue/10' : 'border-border bg-bg-tertiary hover:border-border-light'}`}>
-                  <div className="text-[11px] font-medium text-text-primary">{item.label}</div>
-                  <div className="text-[9px] text-text-muted mt-0.5 line-clamp-2">{item.description}</div>
+                  <div className="text-[11px] font-medium text-text-primary">{copy.label}</div>
+                  <div className="text-[9px] text-text-muted mt-0.5 line-clamp-2">{copy.description}</div>
                 </button>
-              ))}
+                )
+              })}
             </div>
           </div>
 
@@ -390,8 +396,8 @@ export function Hunyuan3DPanel() {
 
           {!isMultiview && (
             <div>
-              <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">{operation === 'retexture' ? t('hunyuan.promptRetexture') : t('hunyuan.promptGenerate')}</label>
-              <textarea disabled={external3d} title={external3d ? t('engines.imageOnly') : undefined} value={prompt} onChange={event => setParam('prompt', event.target.value)} rows={3} placeholder={operation === 'retexture' ? t('hunyuan.placeholderRetexture') : t('hunyuan.placeholderGenerate')} className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-xs text-text-primary resize-none focus:outline-none focus:border-accent-blue" />
+              <label htmlFor={fieldIds('f0')} className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">{operation === 'retexture' ? t('hunyuan.promptRetexture') : t('hunyuan.promptGenerate')}</label>
+              <textarea aria-label={operation === 'retexture' ? t('hunyuan.promptRetexture') : t('hunyuan.promptGenerate')} id={fieldIds('f0')} disabled={external3d} title={external3d ? t('engines.imageOnly') : undefined} value={prompt} onChange={event => setParam('prompt', event.target.value)} rows={3} placeholder={operation === 'retexture' ? t('hunyuan.placeholderRetexture') : t('hunyuan.placeholderGenerate')} className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-xs text-text-primary resize-none focus:outline-none focus:border-accent-blue" />
             </div>
           )}
 

@@ -1,0 +1,59 @@
+import { useSyncExternalStore } from 'react'
+import { Info, X } from 'lucide-react'
+import { useUiTranslation } from '../i18n'
+import { useStore } from '../stores/useStore'
+import type { ProductionProfile } from '../types'
+import {
+  dismissProfileNotice,
+  isProfileNoticeVisible,
+  profileNoticeRevision,
+  profileNoticeSignature,
+  subscribeProfileNotice,
+} from '../features/notices/profileNoticeState'
+
+function describe(choice: { provider: string; model: string }, local: string): string {
+  return `${choice.model} (${choice.provider === 'local' ? local : choice.provider})`
+}
+
+/** Says which providers text and pictures use until the user saves a profile. It never blocks the app. */
+export function ProductionProfileNotice() {
+  const { t } = useUiTranslation('shell')
+  const loaded = useStore(s => s.productionProfileLoaded)
+  const configured = useStore(s => s.productionProfileConfigured)
+  const invalidReason = useStore(s => s.productionProfileInvalidReason)
+  const profile: ProductionProfile = useStore(s => s.productionProfile)
+  const setSettingsOpen = useStore(s => s.setSettingsOpen)
+  const revision = useSyncExternalStore(subscribeProfileNotice, profileNoticeRevision, profileNoticeRevision)
+  void revision
+  const signature = profileNoticeSignature(invalidReason, profile)
+
+  if (!isProfileNoticeVisible(loaded, configured, signature)) return null
+  const local = t('profileNotice.local')
+  const message = invalidReason
+    ? t('profileNotice.invalid', { reason: invalidReason })
+    : t('profileNotice.defaults', { text: describe(profile.text, local), image: describe(profile.image, local) })
+  const close = () => dismissProfileNotice(signature)
+
+  return (
+    <div
+      role="status"
+      data-testid="production-profile-notice"
+      className="flex items-start gap-2 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs text-text-secondary"
+    >
+      <Info size={14} className="mt-0.5 shrink-0 text-accent-blue" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <p>{message}</p>
+        <button
+          type="button"
+          onClick={() => { setSettingsOpen(true); close() }}
+          className="rounded-md bg-accent-blue px-2 py-1 text-[11px] text-white"
+        >
+          {t('profileNotice.choose')}
+        </button>
+      </div>
+      <button type="button" onClick={close} aria-label={t('profileNotice.dismiss')} title={t('profileNotice.dismiss')} className="shrink-0 p-0.5 text-text-muted hover:text-text-primary">
+        <X size={14} />
+      </button>
+    </div>
+  )
+}

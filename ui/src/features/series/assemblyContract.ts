@@ -9,6 +9,7 @@ export interface SeriesAssemblyStartRequest {
   workspace?: string | null
   burnSubtitles?: boolean
   language?: string | null
+  force?: boolean
 }
 
 export interface SeriesAssemblyActionRequest {

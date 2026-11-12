@@ -23,6 +23,26 @@ _STORE_LOCK = threading.RLock()
 _ACTIVE_JOB_IDS: set[str] = set()
 
 
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Director v2 planners that are running now (``services.workspace_busy`` probe).
+
+    The claim set is the proof of life and is released in the planner's ``finally``. It holds ids
+    only, so a claim belongs to this workspace when its checkpoint file is in this folder.
+    """
+    store = DirectorPlanJobStore(workspace_dir)
+    with _STORE_LOCK:
+        claimed = sorted(_ACTIVE_JOB_IDS)
+    found = []
+    for job_id in claimed:
+        try:
+            here = os.path.isfile(store.path(job_id))
+        except ValueError:  # not a file name, so not a checkpoint of any folder
+            here = False
+        if here:
+            found.append({"jobId": job_id, "status": "running", "workspace": workspace})
+    return found
+
+
 def claim_director_plan_job(job_id: str) -> bool:
     """Atomically claim one in-process worker while allowing restart recovery."""
     token = str(job_id or "").strip()

@@ -75,6 +75,12 @@ from .fused_turbo import (
     FUSED_H3_MAX_EVALUATIONS,
     FUSED_H3_MIN_EVALUATIONS,
 )
+from .fasth3 import (
+    count_dit_blocks,
+    drop_unused_vsa_tensors,
+    h3_shifts,
+    transformer_depth_kwargs,
+)
 from .transformer import (
     MiniMaxH3Transformer,
     _activation_chunk_tokens,
@@ -646,7 +652,11 @@ def _strip_transformer_wrappers(
             normalized[key] = value
         return normalized
 
-    return strip(state_dict), strip(quantization_map), strip(tied_weights_map)
+    stripped = strip(state_dict)
+    # FastVideo FastH3 files carry Video Sparse Attention gate tensors that
+    # dense/SLA attention cannot use; drop them before quantization routing.
+    drop_unused_vsa_tensors(stripped)
+    return stripped, strip(quantization_map), strip(tied_weights_map)
 
 
 def _normalize_conditioner_checkpoint_namespaces(
@@ -710,6 +720,7 @@ def probe_h3_checkpoint(filename: str) -> dict[str, int | bool | None]:
         (metadata or {}).get("quantization_format", "")
     ).lower()
     convrot = "convrot" in quantization_format or has_convrot_layout(state_dict)
+    num_layers = count_dit_blocks(state_dict)
     table = None
     for key, tensor in state_dict.items():
         for prefix in ("model.diffusion_model.", "diffusion_model."):
@@ -725,6 +736,7 @@ def probe_h3_checkpoint(filename: str) -> dict[str, int | bool | None]:
             "adaln_curve_grid": None,
             "time_embed_dim": 2688,
             "convrot": convrot,
+            "num_layers": num_layers,
         }
     if len(table.shape) != 2 or int(table.shape[0]) < 2:
         raise ValueError(f"Invalid H3 AdaLN curve table shape: {tuple(table.shape)}")
@@ -733,6 +745,7 @@ def probe_h3_checkpoint(filename: str) -> dict[str, int | bool | None]:
         "adaln_curve_grid": int(table.shape[0]),
         "time_embed_dim": int(table.shape[1]),
         "convrot": convrot,
+        "num_layers": num_layers,
     }
 
 
@@ -753,6 +766,7 @@ def _load_transformer(
             curve_dim=int(checkpoint["time_embed_dim"]),
             dtype=dtype,
             sla_config=sla_config,
+            **transformer_depth_kwargs(checkpoint),
         )
     inner_size = 56 * 128
     # Comfy's scaled-FP8 pruned checkpoint already stores grouped [Q, K, V]
@@ -789,7 +803,7 @@ def _load_transformer(
     print(
         "[MiniMax H3] Loaded "
         f"{'pruned 20B curve' if checkpoint['compressed_modulation'] else 'full 33B'} "
-        f"transformer ({qkv_layout} QKV, "
+        f"transformer ({len(transformer.blocks)} blocks, {qkv_layout} QKV, "
         f"{'independent split projections' if split_map is not None else 'fused projection'})."
     )
     return transformer.eval().requires_grad_(False)
@@ -997,11 +1011,12 @@ class MiniMaxH3Model:
         )
         self.vae = _load_video_vae(video_vae_path)
         self.audio_vae = _load_audio_vae(audio_vae_path)
+        video_shift, audio_shift = h3_shifts(model_def)
         self.scheduler = MiniMaxH3Scheduler(
-            shift=12.0,
+            shift=video_shift,
             solver=self.sample_solver,
         )
-        self.audio_scheduler = MiniMaxH3Scheduler(shift=3.0)
+        self.audio_scheduler = MiniMaxH3Scheduler(shift=audio_shift)
         self._turbo_lora_active = False
         self._turbo_lora_paths: tuple[str, ...] = ()
         self._pdd_lora_active = False

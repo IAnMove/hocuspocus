@@ -13,6 +13,9 @@
   "search": "Search prompts, names or tags…",
   "allCollections": "All collections",
   "allGroups": "All groups",
+  "collection": "Collection",
+  "group": "Group",
+  "sortBy": "Sort",
   "sort": {
     "source": "Source order",
     "newest": "Newest",

@@ -20,6 +20,8 @@ Series Lab, con personajes, voces, render, versión en otro idioma y montaje, si
   vez: escenas, planos, reparto con pose y posición, frases con pausas, carteles, música, efectos de sonido y de pantalla
   con su momento, atrezo, ritmo y planos 3D con diálogo. Antes de escribir nada lo comprueba contra la biblia y devuelve
   todos los errores juntos (`check: true` solo comprueba). Pone los ids del episodio y crea las versiones de idioma.
+  El guion escrito se guarda como una revisión del episodio: `series.episode.script.get` lo devuelve tal como llegó, y
+  la pestaña Episodio de Series Lab lo enseña, lo descarga y reescribe el capítulo desde él.
 - **`series.episode.produce`:** una llamada lo hace todo en el servidor. Renderiza el original y cada idioma, aprueba las
   tomas, reintenta una vez los planos que fallan y monta cada capítulo con subtítulos. Se consulta con
   `series.episode.produce.status`, que lista los ficheros finales; se puede parar y reanudar.

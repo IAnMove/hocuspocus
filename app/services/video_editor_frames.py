@@ -23,6 +23,10 @@ AbortCallback = Callable[[], bool]
 MIN_TRIM_SECONDS = 0.05
 SUPPORTED_FPS = (24, 25, 30, 50, 60)
 _AUDIO_PAD_TOLERANCE_SECONDS = 0.25
+# Counting frames decodes the whole file, so its time grows with the file: a grainy 6-minute 1080x1920 delivery at
+# crf 14 weighs 2 GB and takes about 140 s to decode, past a fixed 120 s, and the export failed at 98 %.
+_COUNT_SECONDS = 120
+_COUNT_SECONDS_PER_GB = 180
 
 
 class VideoEditorError(RuntimeError):
@@ -120,8 +124,17 @@ def plan_transition_frames(
     return max(1, min(overlap, max_overlap))
 
 
-def count_decoded_video_frames(path: str, *, timeout: int = 120) -> int:
-    """Count decoded video frames; container duration is not used."""
+def count_timeout(path: str) -> float:
+    """Seconds allowed to decode-count ``path``: 120 s plus 180 s per GB of file."""
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        size = 0
+    return _COUNT_SECONDS + _COUNT_SECONDS_PER_GB * size / 1e9
+
+
+def count_decoded_video_frames(path: str, *, timeout: float | None = None) -> int:
+    """Count decoded video frames; container duration is not used. The default timeout grows with the file."""
     result = subprocess.run(
         [
             "ffprobe",
@@ -139,7 +152,7 @@ def count_decoded_video_frames(path: str, *, timeout: int = 120) -> int:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        timeout=timeout,
+        timeout=count_timeout(path) if timeout is None else timeout,
         check=False,
     )
     if result.returncode != 0:

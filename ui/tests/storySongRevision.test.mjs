@@ -457,7 +457,7 @@ test('a missing cue id throws instead of picking another cue', { concurrency: fa
       cueId: 'cue-missing',
       confirm: true,
     }),
-    /No existe el cue con ID/,
+    /No cue with ID/,
   )
 })
 

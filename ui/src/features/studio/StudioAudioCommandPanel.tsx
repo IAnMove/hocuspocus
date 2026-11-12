@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { GenerationReceiptLike } from '../../api/generationCommandClient'
 import i18n, { useUiTranslation } from '../../i18n'
@@ -143,7 +144,7 @@ export function StudioAudioCommandPanel<C extends AudioCommand, R extends Genera
     {pending.filter(command => !busy || command.intent_id !== shown?.intent_id).map(command => <section key={command.intent_id} className="border border-border rounded-lg p-2 space-y-2">
       <strong className="text-xs">{t(`${messagePrefix}.pending`)}</strong>
       {renderSummary(command)}
-      <button type="button" disabled={busy} onClick={() => void recover(command)}
+      <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void recover(command)}
         className="text-xs border border-border rounded px-2 py-1 disabled:opacity-50">{t(`${messagePrefix}.recover`)}</button>
     </section>)}
     {error && <p role="alert" className="text-xs text-indicator-error break-words">{error}</p>}

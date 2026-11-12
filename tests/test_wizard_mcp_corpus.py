@@ -21,10 +21,10 @@ from routers.image_generation_commands import (
     image_command_catalog,
     image_command_handlers,
 )
-from routers.studio_music_commands import music_command_catalog
-from routers.studio_sfx_commands import sfx_command_catalog
-from routers.studio_speech_commands import speech_command_catalog
-from routers.tools_upscale_commands import tools_upscale_command_catalog
+from services.studio_music_commands import music_command_catalog
+from services.studio_sfx_commands import sfx_command_catalog
+from services.studio_speech_commands import speech_command_catalog
+from services.tools_upscale_commands import tools_upscale_command_catalog
 from routers.wangp_mcp import create_wangp_mcp_router
 from services.native_generation_operation import NativeGenerationOperation
 from services.studio_music_spec import freeze_studio_music_spec

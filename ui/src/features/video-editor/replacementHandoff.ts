@@ -57,6 +57,8 @@ export function clearVideoEditorReplacementResult(): void {
 }
 
 export function outputNameFromEditorClip(source: string, fallbackName: string): string {
+  // A montage written by a production names its clips by bare workspace file name.
+  if (/^[^/\\:?#]+\.[A-Za-z0-9]+$/.test(source)) return source
   try {
     const parsed = new URL(source, window.location.origin)
     const marker = '/api/v1/file/'

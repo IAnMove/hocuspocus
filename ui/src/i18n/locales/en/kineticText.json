@@ -49,16 +49,14 @@
   "lyricsPaste": "Paste LRC, SRT or plain lyrics",
   "lyricsImport": "Import lyrics",
   "finishTitle": "Finish",
-  "finishWarm": "Warm cinema",
-  "finishDoc": "Old documentary",
-  "finishNeon": "Night neon",
-  "finishPaper": "Paper / comic",
-  "finishRiso": "Riso press",
+  "finishes": { "warmCinema": "Warm cinema", "oldDoc": "Old documentary", "nightNeon": "Night neon", "paperComic": "Paper / comic", "risoPress": "Riso press", "natural": "Natural", "teal_orange": "Teal and orange", "bleach": "Bleach bypass", "noir": "Noir", "sepia": "Sepia", "flashback": "Flashback", "dream": "Dream", "giallo": "Giallo", "cold": "Cold", "warm": "Warm", "vhs": "VHS", "film": "Film" },
   "finishClear": "Clear finish",
   "finalPreview": "Final preview",
   "pathTitle": "Path",
   "pathAdd": "Add a curve",
   "pathOrient": "Face the tangent",
   "sequenceSources": "Frame sources, one URL per line",
-  "rhythmLive": "Store the beat on the scene"
+  "rhythmLive": "Store the beat on the scene",
+  "templates": { "lower-third-date": "Date lower third", "chorus-banner": "Chorus banner", "title-card": "Title card", "end-card": "End card", "year-counter": "Year counter", "quote": "Quote", "trailer-slam": "Trailer slam", "chapter": "Chapter title", "social-caption": "Social caption", "ransom": "Ransom note", "dymo": "Dymo label", "card": "Card", "desktop": "Desktop" },
+  "fields": { "date": "Date", "caption": "Caption", "line": "Line", "title": "Title", "subtitle": "Subtitle", "cta": "Call to action", "from": "From", "to": "To", "label": "Label", "quote": "Quote", "author": "Author", "lines": "Words (separated by |)", "kicker": "Kicker", "background": "Tape (paper or dark)", "theme": "Theme", "layout": "Layout", "apps": "Apps", "focus": "Active window", "workspace": "Workspace", "switch": "Workspace switch" }
 }

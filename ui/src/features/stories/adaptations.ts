@@ -502,8 +502,13 @@ export function buildShortFilmAdaptation(
     renderStyleLock,
     hasStyleLock,
   )
+  // A story with no style of its own is staged with no style, so the Director adds no
+  // VISUAL STYLE LOCK. The reference-artwork sentence stays for a story that has a style
+  // it does not enforce.
   const visualStyle = enforcedVisualStyle || project.world.visualLanguage.trim()
-    || 'Match the approved Story reference artwork exactly, preserving its authored visual medium and character design; if it is anime, comic or illustration, keep it illustrated and never reinterpret it as live action.'
+    || (storyRenderStyle(project)
+      ? 'Match the approved Story reference artwork exactly, preserving its authored visual medium and character design; if it is anime, comic or illustration, keep it illustrated and never reinterpret it as live action.'
+      : '')
   const characterReferences = protagonistFirst(project, project.characters.flatMap(character =>
     approvedCharacterReferenceIds(project, character).map((assetId, index) => ({
       assetId,

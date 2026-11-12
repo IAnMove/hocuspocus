@@ -41,9 +41,15 @@ def _validate_source(source, mask, refs, margins, definition):
         raise ValueError("input.params.video_guide_outpainting: this model does not support outpainting")
 
 
+def _edit_model_mode(params, definition):
+    """The inpainting method asked for, or the model's own default when the request leaves it out (the schema advertises 0)."""
+    mode = params.get("model_mode")
+    return (definition.get("model_modes") or {}).get("default") if mode is None else mode
+
+
 def _validate_edit_method(params, definition, editing):
     choices = (definition.get("model_modes") or {}).get("choices") or []
-    if editing and choices and params.get("model_mode") not in [choice[1] for choice in choices]:
+    if editing and choices and _edit_model_mode(params, definition) not in [choice[1] for choice in choices]:
         raise ValueError("input.params.model_mode: choose an inpainting method supported by this model")
     layers = definition.get("image_layer_count")
     if layers and not layers["min"] <= params.get("batch_size", layers["default"]) <= layers["max"]:
@@ -64,4 +70,6 @@ def native_image_edit_params(params, definition):
         result.get("video_guide_outpainting") and 2 in outpaint_modes and 1 not in outpaint_modes)
     if editing and needs_legacy_mode:
         result["image_mode"] = 2
+    if editing and result.get("model_mode") is None and (definition.get("model_modes") or {}).get("choices"):
+        result["model_mode"] = _edit_model_mode(result, definition)
     return result

@@ -20,7 +20,7 @@ from app.services.music_submission import (
     verify_story_destination,
 )
 from app.services.story_library import write_story_library
-from app.services.task_manager import TaskRegistry
+from app.services.task_manager import TaskRegistry, get_task_registry
 
 
 def _request(**overrides):
@@ -78,6 +78,13 @@ def test_same_key_and_spec_replays_without_a_second_task(tmp_path: Path):
     assert second["candidate_id"] == first["candidate_id"]
     registry = TaskRegistry(str(tmp_path), interrupt_stale=False)
     assert registry.get(first["task_id"])["id"] == first["task_id"]
+
+
+def test_reserved_song_stays_queued_when_the_shared_registry_is_built_afterwards(tmp_path: Path):
+    """The reservation used a private registry; the first get_task_registry() of the folder then interrupted it."""
+    reserved = submit_music_generation(workspace_dir=str(tmp_path), request=_request())
+    shared = get_task_registry(str(tmp_path))
+    assert shared.get(reserved["task_id"])["status"] == "queued"
 
 
 def test_same_key_different_spec_conflicts(tmp_path: Path):

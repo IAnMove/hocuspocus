@@ -47,7 +47,7 @@ def verdict(face_conf: float, best_r: float, lag_s: float) -> str:
 class _Pose:
     def __init__(self) -> None:
         import onnxruntime as ort
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        providers = ["CPUExecutionProvider"]
         self.det = ort.InferenceSession(str(POSE / "yolox_l.onnx"), providers=providers)
         self.pose = ort.InferenceSession(str(POSE / "dw-ll_ucoco_384.onnx"), providers=providers)
 
@@ -163,7 +163,8 @@ def command_catalog() -> list[dict[str, Any]]:
                 "workspace": {"type": "string", "minLength": 1, "maxLength": 120},
                 "clip": {"type": "string", "minLength": 1, "maxLength": 300},
                 "audio": {"type": "string", "minLength": 1, "maxLength": 300},
-                "offset": {"type": "number", "minimum": 0, "maximum": 3600},
+                "offset": {"type": "number", "minimum": 0, "maximum": 3600,
+                           "description": "Seconds into the audio where frame 0 of the clip starts. A take cut from a later span uses the span start, not 0."},
                 "span": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"},
                          "description": "Song seconds [t0, t1] to score. Omit to score the whole clip."},
             }},

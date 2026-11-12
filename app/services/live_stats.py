@@ -143,3 +143,10 @@ def get_live_stats(ui_dist_dir: str | Path | None = None) -> dict:
     if ui_dist_dir is not None:
         result["runtime"] = get_runtime_identity(ui_dist_dir)
     return result
+
+
+def snapshot_system_stats(ui_dist_dir: str | Path | None, current_model) -> dict:
+    """Live CPU / RAM / GPU numbers plus the caller's resident-model lookup."""
+    stats = get_live_stats(ui_dist_dir)
+    stats["model"] = current_model()
+    return stats

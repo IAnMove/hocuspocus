@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { Mic } from 'lucide-react'
 import { useWangpProcessors } from './useWangpProcessors'
 import { WangpProcessorOptions } from './WangpProcessorOptions'
@@ -39,13 +40,15 @@ export function ToolsParamsPanel(props: ParamsProps) {
 }
 
 function UpscaleParams({ method, setMethod, flashvsrOff }: ParamsProps) {
+  const fieldIds = useFieldIds()
+
   const processors = useWangpProcessors()
   const kind = useStore(s => s.toolsSourceKind)
   const { t } = useUiTranslation('studio')
   return (
     <div>
-      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('tools.upscaleMethod')}</label>
-      <select
+      <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('tools.upscaleMethod')}</label>
+      <select aria-label={t('tools.upscaleMethod')} id={fieldIds('f0')}
         value={method}
         onChange={event => setMethod(event.target.value)}
         className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -118,11 +121,13 @@ function VoiceReferenceInput({ index, ...props }: ParamsProps & { index: number 
 }
 
 function RemoveBackgroundParams({ removeBackgroundInstruction, setRemoveBackgroundInstruction }: ParamsProps) {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   return (
     <div className="space-y-2">
-      <label className="text-[11px] text-text-muted uppercase tracking-wider block">{t('tools.removeBackgroundInstruction')}</label>
-      <textarea
+      <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider block">{t('tools.removeBackgroundInstruction')}</label>
+      <textarea aria-label={t('tools.removeBackgroundInstruction')} id={fieldIds('f0')}
         value={removeBackgroundInstruction}
         onChange={event => setRemoveBackgroundInstruction(event.target.value)}
         placeholder={t('tools.removeBackgroundInstructionPlaceholder')}

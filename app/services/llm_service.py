@@ -19,6 +19,7 @@ from functools import wraps
 from typing import Optional
 from . import debug_trace
 from .debug_trace import trace_llm_call
+from .minors_rule import with_minors_rule
 
 logger = logging.getLogger(__name__)
 
@@ -665,7 +666,7 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
     )
 
     # Query remote OpenAI-compatible server (LM Studio, Ollama, etc.)
-    if provider in ("remote", "openai", "ollama", "grok") and remote_url:
+    if provider in ("remote", "openai", "ollama", "grok", "deepseek") and remote_url:
         try:
             headers = {}
             if api_key:
@@ -694,6 +695,7 @@ def get_available_models(provider: str = "local", remote_url: str = "", api_key:
                 "ollama": "Ollama",
                 "openai": "OpenAI",
                 "grok": "Grok",
+                "deepseek": "DeepSeek",
             }.get(provider, "Remote")
             for mid in listed:
                 remote_models.append({
@@ -767,7 +769,7 @@ def get_model_dir() -> str:
 
 def _server_url() -> str:
     from .provider_profile import canonicalize_remote_url
-    if _provider in ("remote", "ollama", "openai", "minimax", "grok") and _remote_url:
+    if _provider in ("remote", "ollama", "openai", "minimax", "grok", "deepseek") and _remote_url:
         return canonicalize_remote_url(_remote_url)
     if _provider == "minimax":
         return "https://api.minimax.io"
@@ -796,7 +798,7 @@ def _is_deepseek_remote() -> bool:
 def _api_headers() -> dict:
     """Build headers for API calls (adds auth for remote providers)."""
     headers = {"Content-Type": "application/json"}
-    if _provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok") and _api_key:
+    if _provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok", "deepseek") and _api_key:
         if _provider == "anthropic":
             headers["x-api-key"] = _api_key
             headers["anthropic-version"] = "2023-06-01"
@@ -1013,7 +1015,7 @@ def _prepare_thinking(system_prompt: str, enable_thinking: Optional[bool], think
 
 
 def is_loaded() -> bool:
-    if _provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok"):
+    if _provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok", "deepseek"):
         return bool(_model_id)
     return _process is not None and _process.poll() is None
 
@@ -1028,7 +1030,7 @@ def get_status() -> dict:
         "model_id": _model_id or None,
         "device": _device if is_loaded() else None,
         "provider": _provider,
-        "remote_url": _remote_url if _provider in ("remote", "ollama", "openai", "minimax", "grok") else "",
+        "remote_url": _remote_url if _provider in ("remote", "ollama", "openai", "minimax", "grok", "deepseek") else "",
     }
 
 
@@ -1458,7 +1460,7 @@ def load_model(
     remote_url = canonicalize_remote_url(remote_url)
 
     # Handle remote/API providers — no subprocess needed
-    if provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok"):
+    if provider in ("remote", "ollama", "openai", "anthropic", "minimax", "grok", "deepseek"):
         with _lock:
             if is_loaded() and _model_id == model_id and _provider == provider and not force_reload:
                 return
@@ -1891,6 +1893,91 @@ def _current_task_cancel_callback():
     return cancelled
 
 
+class LLMTruncatedResponse(RuntimeError):
+    """The model stopped at max_tokens: the text is cut, and a caller that asked for JSON cannot use it."""
+
+    def __init__(self, provider: str, text: str) -> None:
+        super().__init__(f"{provider} stopped at max_tokens: the response is truncated ({len(text)} chars). "
+                         "Raise max_new_tokens or shorten the prompt.")
+        self.provider, self.partial = provider, text
+
+
+TRUNCATED_FINISH = frozenset({"length", "max_tokens"})
+RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+RETRY_ATTEMPTS = 3
+
+
+def _warn_if_truncated(finish_reason, provider: str, text: str, *, json_expected: bool) -> None:
+    """A truncated reply used to be returned as if complete; planners then parsed half a JSON and filled the rest with fallbacks."""
+    if str(finish_reason or "").lower() not in TRUNCATED_FINISH:
+        return
+    print(f"[LLM] WARNING: {provider} stopped at max_tokens ({len(text or '')} chars): the response is truncated")
+    if json_expected:
+        raise LLMTruncatedResponse(provider, text or "")
+
+
+def _retry_after_seconds(response) -> float | None:
+    try:
+        value = float(str(response.headers.get("Retry-After", "")).strip())
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return min(30.0, max(0.0, value))
+
+
+def _sleep_unless_cancelled(seconds: float, cancellation_token, provider: str) -> None:
+    deadline = time.monotonic() + seconds
+    while True:
+        _raise_if_token_cancelled(cancellation_token, provider)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(0.25, remaining))
+
+
+def _post_with_backoff(url: str, *, provider: str, cancellation_token=None, attempts: int = RETRY_ATTEMPTS, **kwargs):
+    """``requests.post`` that tries again after 429/5xx or a dropped connection, waiting 1, 2, 4 s (or Retry-After).
+
+    A transient rate limit used to kill a pipeline of dozens of calls. The last attempt's response is
+    returned as is, so the caller's ``raise_for_status`` still reports the final error.
+    """
+    for attempt in range(max(1, attempts)):
+        try:
+            response = requests.post(url, **kwargs)
+        except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError) as error:
+            if attempt + 1 >= attempts:
+                raise
+            delay, reason = min(8.0, 2.0 ** attempt), type(error).__name__
+        else:
+            if response.status_code not in RETRY_STATUSES or attempt + 1 >= attempts:
+                return response
+            delay = _retry_after_seconds(response)
+            delay = min(8.0, 2.0 ** attempt) if delay is None else delay
+            reason = f"HTTP {response.status_code}"
+            try:
+                response.close()
+            except Exception:
+                pass
+        print(f"[LLM] {provider}: {reason}; trying again in {delay:.0f} s ({attempt + 2}/{attempts})")
+        _sleep_unless_cancelled(delay, cancellation_token, provider)
+    raise RuntimeError(f"{provider}: no attempts left")
+
+
+class LLMProviderError(RuntimeError):
+    """A provider call failed: it answered with an error (``status`` is its HTTP status) or not at all.
+
+    A ``RuntimeError`` subclass, so callers that already catch ``RuntimeError`` keep working;
+    the HTTP routes use ``code`` to tell a rejected key from any other provider failure.
+    """
+
+    def __init__(self, message: str, *, status: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+    @property
+    def code(self) -> str:
+        return "provider_auth_failed" if self.status in (401, 403) else "provider_failed"
+
+
 class LLMRequestCancelled(InterruptedError):
     """Raised when one job's active provider request is cancelled."""
 
@@ -2111,6 +2198,9 @@ def generate(
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
 
+    # Every request carries the hard rule about minors, in every mode.
+    system_prompt = with_minors_rule(system_prompt)
+
     # Routing is locked by _scheduled_llm_request here, after acquiring its lane.
     if require_vision and not supports_vision():
         raise ValueError("Select a vision-capable LLM before attaching visual evidence")
@@ -2121,13 +2211,13 @@ def generate(
     # reasoning, returning an empty content field. Reuse the hardened
     # compatible-provider path, which also retries one confirmed empty
     # response with a larger bounded budget.
-    if _provider in ("minimax", "grok"):
+    if _provider in ("minimax", "grok", "deepseek"):
         return generate_openai_compatible(
             prompt=prompt,
             system_prompt=system_prompt,
             model_id=_model_id,
             base_url=_remote_url or (
-                "https://api.minimax.io" if _provider == "minimax" else "https://api.x.ai"
+                {"minimax": "https://api.minimax.io", "grok": "https://api.x.ai", "deepseek": "https://api.deepseek.com"}[_provider]
             ),
             api_key=_api_key,
             max_new_tokens=max_new_tokens,
@@ -2187,7 +2277,7 @@ def generate(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and (_vision_available or _provider in ("remote", "ollama", "openai", "minimax", "grok")):
+    if image_paths and (_vision_available or _provider in ("remote", "ollama", "openai", "minimax", "grok", "deepseek")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -2209,7 +2299,7 @@ def generate(
     # llama-server hosts one model and does not require this field, while
     # OpenAI-compatible remote servers such as Ollama require the selected
     # model name on every chat completion request.
-    if _provider in ("remote", "ollama", "openai", "minimax", "grok"):
+    if _provider in ("remote", "ollama", "openai", "minimax", "grok", "deepseek"):
         payload["model"] = _model_id
     # Per-model sampling defaults (e.g. Gemma 4 wants temp=1.0, top_k=64)
     temperature, top_p = _apply_model_defaults(temperature, top_p, payload)
@@ -2327,6 +2417,7 @@ def generate(
 
     raw_content = data["choices"][0]["message"]["content"] or ""
     finish_reason = data["choices"][0].get("finish_reason", "unknown")
+    _warn_if_truncated(finish_reason, "llama-server", raw_content, json_expected="response_format" in payload)
     usage = data.get("usage", {})
     _record_activity_usage(usage)
     prompt_tokens = usage.get("prompt_tokens", "?")
@@ -2410,6 +2501,8 @@ def generate_openai_compatible(
     application's normal internal LLM active.
     """
     cancellation_token = _resolve_cancellation_token(cancellation_token)
+    # Every request carries the hard rule about minors, in every mode.
+    system_prompt = with_minors_rule(system_prompt)
     model_id = (model_id or "").strip()
     base_url = (base_url or "").strip().rstrip("/")
     if not model_id:
@@ -2602,8 +2695,8 @@ def generate_openai_compatible(
                         event_type="operation.started", force=True,
                     )
                 _raise_if_token_cancelled(cancellation_token, provider_name)
-                response = requests.post(
-                    endpoint,
+                response = _post_with_backoff(
+                    endpoint, provider=provider_name, cancellation_token=cancellation_token,
                     json=request_payload,
                     headers=headers,
                     timeout=(10, 600),
@@ -2629,8 +2722,8 @@ def generate_openai_compatible(
                         pass
                     fallback_payload = dict(request_payload)
                     fallback_payload.pop("response_format", None)
-                    response = requests.post(
-                        endpoint,
+                    response = _post_with_backoff(
+                        endpoint, provider=provider_name, cancellation_token=cancellation_token,
                         json=fallback_payload,
                         headers=headers,
                         timeout=(10, 600),
@@ -2668,11 +2761,13 @@ def generate_openai_compatible(
                     abort_supported=abort_supported,
                 ) from exc
             detail = ""
+            status = None
             if getattr(exc, "response", None) is not None:
                 detail = str(exc.response.text or "")[:500]
+                status = exc.response.status_code
             suffix = f": {detail}" if detail else ""
             finish_operation("failed", "Provider request failed", error=f"OpenAI-compatible request failed{suffix}")
-            raise RuntimeError(f"OpenAI-compatible request failed{suffix}") from exc
+            raise LLMProviderError(f"OpenAI-compatible request failed{suffix}", status=status) from exc
 
         try:
             _raise_if_token_cancelled(
@@ -2689,6 +2784,9 @@ def generate_openai_compatible(
             choice = response_data["choices"][0]
             message = choice["message"]
             content = _strip_thinking_tags(str(message.get("content") or "")).strip()
+            if content:
+                _warn_if_truncated(choice.get("finish_reason"), provider_name, content,
+                                   json_expected=json_schema is not None or "response_format" in request_payload)
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             abort_supported = bool(
                 response_watcher and response_watcher[2].get("abort_supported")
@@ -2778,11 +2876,14 @@ def generate_streaming(
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
 
+    # Every request carries the hard rule about minors, in every mode.
+    system_prompt = with_minors_rule(system_prompt)
+
     # MiniMax/Grok streaming used the generic max_tokens payload and could
     # return empty content. Reuse the hardened non-streaming path and publish
     # the finished text into the stream buffer so the Director dashboard still
     # sees a response.
-    if _provider in ("minimax", "grok"):
+    if _provider in ("minimax", "grok", "deepseek"):
         with _stream_lock:
             _stream_buffer = ""
             _stream_done = False
@@ -2792,7 +2893,7 @@ def generate_streaming(
                 system_prompt=system_prompt,
                 model_id=_model_id,
                 base_url=_remote_url or (
-                    "https://api.minimax.io" if _provider == "minimax" else "https://api.x.ai"
+                    {"minimax": "https://api.minimax.io", "grok": "https://api.x.ai", "deepseek": "https://api.deepseek.com"}[_provider]
                 ),
                 api_key=_api_key,
                 max_new_tokens=max_new_tokens,
@@ -2846,7 +2947,7 @@ def generate_streaming(
         messages.append({"role": "system", "content": system_prompt})
 
     # Build user message — multimodal if images provided and vision is available
-    if image_paths and (_vision_available or _provider in ("remote", "ollama", "openai", "minimax", "grok")):
+    if image_paths and (_vision_available or _provider in ("remote", "ollama", "openai", "minimax", "grok", "deepseek")):
         content_parts = []
         for img_path in image_paths:
             data_url = _image_to_data_url(img_path)
@@ -2866,7 +2967,7 @@ def generate_streaming(
         "stream": True,
         "cache_prompt": False,  # Disable prompt caching — system prompt changes between calls
     }
-    if _provider in ("remote", "ollama", "openai", "minimax", "grok"):
+    if _provider in ("remote", "ollama", "openai", "minimax", "grok", "deepseek"):
         payload["model"] = _model_id
     # Apply caller's penalty values FIRST so they're in the payload
     # before _apply_model_defaults runs. The registry-defaults pass below
@@ -3125,8 +3226,8 @@ def _generate_anthropic(
     _raise_if_token_cancelled(cancellation_token, "Anthropic")
     response_watcher = None
     try:
-        resp = requests.post(
-            "https://api.anthropic.com/v1/messages",
+        resp = _post_with_backoff(
+            "https://api.anthropic.com/v1/messages", provider="Anthropic", cancellation_token=cancellation_token,
             json=payload,
             headers=_api_headers(),
             timeout=600,
@@ -3164,6 +3265,7 @@ def _generate_anthropic(
     usage = data.get("usage", {})
     _record_activity_usage(usage)
     print(f"[LLM/Anthropic] Response: {usage.get('output_tokens', '?')} tokens (prompt={usage.get('input_tokens', '?')})")
+    _warn_if_truncated(data.get("stop_reason"), "Anthropic", raw_content, json_expected=False)
 
     content = _strip_thinking_tags(raw_content)
     _reset_idle_timer()
@@ -3207,8 +3309,8 @@ def _generate_streaming_anthropic(
     _raise_if_token_cancelled(cancellation_token, "Anthropic")
     response_watcher = None
     try:
-        resp = requests.post(
-            "https://api.anthropic.com/v1/messages",
+        resp = _post_with_backoff(
+            "https://api.anthropic.com/v1/messages", provider="Anthropic", cancellation_token=cancellation_token,
             json=payload,
             headers=_api_headers(),
             timeout=600,
@@ -6259,8 +6361,12 @@ def plan_short_film_from_story(
     preserve_visual_style: bool = False,
     character_visual_style: str = "",
     allow_clip_text: bool = False,
+    raw_prompts: bool = False,
 ) -> dict:
     """Plan a short film scene structure from a story description.
+
+    ``raw_prompts`` (Settings › Services › Raw prompts) returns the prompts as
+    the LLM wrote them, with no style, character-style or no-text lock.
 
     Unlike ``plan_dialogue_scenes`` which analyses uploaded audio, this uses
     the LLM to create scenes from scratch — deciding how many scenes there
@@ -6300,6 +6406,7 @@ def plan_short_film_from_story(
         build_visible_text_contract,
         build_visual_style_contract,
         enforce_visual_style_on_clip_plans,
+        no_visible_text_lock_applies,
     )
     style_contract = build_visual_style_contract(
         visual_style,
@@ -6741,12 +6848,18 @@ def plan_short_film_from_story(
 
         current_time += scene_dur
 
+    if raw_prompts:
+        return {"clips": clips, "clip_plans": clip_plans}
+    # The planner above follows the story's Allow-text switch. The final
+    # no-visible-text lock is for sung projects only, and a story is not sung.
     clip_plans = enforce_visual_style_on_clip_plans(
         clip_plans,
         visual_style,
         preserve=preserve_visual_style,
         has_reference=has_image,
         character_visual_style=character_visual_style,
-        allow_clip_text=allow_clip_text,
+        allow_clip_text=not no_visible_text_lock_applies(
+            {"pipeline_type": "short_film_story", "allow_clip_text": allow_clip_text},
+        ),
     )
     return {"clips": clips, "clip_plans": clip_plans}

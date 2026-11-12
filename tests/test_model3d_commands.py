@@ -6,12 +6,18 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 
-from routers.model3d_commands import command_catalog, command_handlers
+from services.model3d_commands import command_catalog, command_handlers
 from routers.wangp_mcp import create_wangp_mcp_router
 
 
 def arguments(**patch):
     return {"version": 1, "intent_id": "mesh-1", "input": {"workspace": "test", **patch}}
+
+
+def test_catalog_sends_public_meshy_models_to_the_website():
+    generate = next(item for item in command_catalog() if item["name"] == "model3d.generate")
+    assert "https://www.meshy.ai/discover" in generate["description"]
+    assert "Enterprise-only" in generate["description"]
 
 
 def adapters(tmp_path, generate, status=lambda _: {}):

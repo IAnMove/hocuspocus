@@ -26,11 +26,16 @@ def _valid_dispatch_owner(owner):
     return owner is None or (isinstance(owner, str) and 1 <= len(owner) <= 160 and bool(owner.strip()))
 
 
+# 1: legacy receipts without a content fingerprint. 2 and later: the receipt carries the spec's content
+# fingerprint and its version (typed H3/LTX video, generation.video v3, uses 3).
+FINGERPRINT_VERSIONS = (1, 2, 3)
+
+
 def _valid_fingerprint(row, values):
     receipt = values["receipt"]
     if row["fingerprint_version"] == 1:
         return "fingerprintVersion" not in receipt
-    return (row["fingerprint_version"] == 2 and receipt.get("fingerprintVersion") == 2
+    return (row["fingerprint_version"] in FINGERPRINT_VERSIONS and receipt.get("fingerprintVersion") == row["fingerprint_version"]
             and receipt.get("contentFingerprint") == row["digest"]
             and receipt.get("commandVersion") == values["original"].get("version"))
 
@@ -54,13 +59,17 @@ def _decode_admission(row):
         raise OSError("Command admission storage is corrupt") from error
 
 
-def _receipt(intent_id: str, operation: str, task: dict) -> dict:
-    return {
+def _receipt(intent_id: str, operation: str, task: dict, notes: list | None = None) -> dict:
+    receipt = {
         "version": 1, "commandId": intent_id, "operation": operation, "status": "queued",
         "entities": [], "artifacts": [], "taskIds": [task["id"]], "pipelineIds": [],
         "result": {"job_id": task["backend_job_id"], "task_id": task["id"],
                    "root_task_id": task["root_id"], "workspace": task["workspace"], "status": "queued"},
     }
+    if notes:
+        # What the runtime did not apply of the request (a reference a remote model cannot take). Stored with the receipt.
+        receipt["notes"] = [str(note) for note in notes]
+    return receipt
 
 
 class TaskCommandAdmission:
@@ -121,7 +130,8 @@ class TaskCommandAdmission:
         return [self.command_admission(row["intent_id"]) for row in rows]
 
     def admit_command_task(self, *, intent_id: str, operation: str, digest: str,
-                           original: dict, effective: dict, task_fields: dict, fingerprint_version: int = 1) -> dict:
+                           original: dict, effective: dict, task_fields: dict, fingerprint_version: int = 1,
+                           notes: list | None = None) -> dict:
         """Commit one task/event and its recoverable receipt, or replay it.
 
         The caller validates the domain specification and supplies trusted task
@@ -130,7 +140,7 @@ class TaskCommandAdmission:
         """
         if not all(isinstance(value, str) and value for value in (intent_id, operation, digest)):
             raise ValueError("Command identity, operation and fingerprint are required")
-        if type(fingerprint_version) is not int or fingerprint_version not in (1, 2):
+        if type(fingerprint_version) is not int or fingerprint_version not in FINGERPRINT_VERSIONS:
             raise ValueError("Unsupported command fingerprint version")
         # Validate serialization before opening a write transaction. Do not apply
         # the public task metadata truncation rules to literal command inputs.
@@ -138,9 +148,9 @@ class TaskCommandAdmission:
         task = self._build_task(task_fields)
         if task["status"] != "queued" or not task["backend_job_id"]:
             raise ValueError("Command admission requires a queued task and exact backend job ID")
-        receipt = _receipt(intent_id, operation, task)
-        if fingerprint_version == 2:
-            receipt.update(commandVersion=original["version"], contentFingerprint=digest, fingerprintVersion=2)
+        receipt = _receipt(intent_id, operation, task, notes)
+        if fingerprint_version >= 2:
+            receipt.update(commandVersion=original["version"], contentFingerprint=digest, fingerprintVersion=fingerprint_version)
         with self._write_lock, self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             previous = connection.execute(

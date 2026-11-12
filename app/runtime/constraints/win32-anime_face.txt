@@ -1,0 +1,3 @@
+# ABI contract from app/runtime/profiles.json
+torch==2.7.0+cpu
+torchvision==0.22.0+cpu

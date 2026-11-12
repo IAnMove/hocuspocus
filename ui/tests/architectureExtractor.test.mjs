@@ -177,3 +177,74 @@ test('produces deterministic fragments and explicit limitations', () => {
   assert.equal(JSON.stringify(first), JSON.stringify(second))
   assert.ok(first.limitations.some(item => item.includes('type or module resolution')))
 })
+
+const STORE_ACTION_IDS = [
+  'directorAdoptAndAnalyze',
+  'directorUploadAndAnalyze',
+  'directorLoadAudioSource',
+  'directorAnalyzeAndPlan',
+]
+const MUSIC_SOURCE_SLICE = 'ui/src/features/director/store/directorMusicSourceSlice.ts'
+
+function sliceLayoutSources() {
+  const base = sources()
+  base[MUSIC_SOURCE_SLICE] = base['ui/src/stores/useStore.ts'].replace(
+    'export const useStore = create(() => ({',
+    'export const createDirectorMusicSourceSlice = (set, get) => ({',
+  ).replace('}))', '})')
+  base['ui/src/stores/useStore.ts'] = `
+    export const useStore = create(() => ({}))
+  `
+  return base
+}
+
+function assertStoreActions(graph, file) {
+  for (const action of STORE_ACTION_IDS) {
+    const node = graph.nodes.find(item => item.id === `store.${action}`)
+    assert.equal(node?.layer, 'store')
+    assert.equal(node?.label, `${action}()`)
+    assert.ok(node?.evidence.every(item => item.file === file))
+  }
+  const upload = graph.edges.find(item => (
+    item.source === 'store.directorAdoptAndAnalyze'
+    && item.target === 'api.uploadAudio'
+    && item.kind === 'call'
+  ))
+  assert.equal(upload?.weight, 2)
+  assert.ok(upload?.evidence.every(item => item.file === file))
+  assert.ok(graph.edges.some(item => (
+    item.source === 'store.directorUploadAndAnalyze'
+    && item.target === 'store.directorLoadAudioSource'
+    && item.kind === 'call'
+  )))
+  assert.ok(graph.edges.some(item => (
+    item.source === 'store.directorLoadAudioSource'
+    && item.target === 'store.directorAnalyzeAndPlan'
+    && item.kind === 'call'
+  )))
+}
+
+test('finds the four director actions when they still live in useStore.ts', () => {
+  assertStoreActions(extractTypeScriptGraphFromSources(sources()), 'ui/src/stores/useStore.ts')
+})
+
+test('finds the four director actions when they live in the music-source slice', () => {
+  const graph = extractTypeScriptGraphFromSources(sliceLayoutSources())
+  assertStoreActions(graph, MUSIC_SOURCE_SLICE)
+  const write = graph.edges.find(item => (
+    item.source === 'store.directorAdoptAndAnalyze'
+    && item.target === 'store.slice'
+    && item.kind === 'write'
+  ))
+  assert.equal(write?.weight, 0)
+  assert.ok(write?.evidence.every(item => item.file === MUSIC_SOURCE_SLICE))
+})
+
+test('fails closed when a director action is declared in both useStore and the slice', () => {
+  const both = sliceLayoutSources()
+  both['ui/src/stores/useStore.ts'] = sources()['ui/src/stores/useStore.ts']
+  assert.throws(
+    () => extractTypeScriptGraphFromSources(both),
+    /Ambiguous required TypeScript function directorAdoptAndAnalyze/,
+  )
+})

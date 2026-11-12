@@ -58,7 +58,10 @@ test('Series Lab mounts a mobile-first selector while retaining its desktop rail
     assert.ok(episodeControls.classList.contains('flex-wrap'))
     assert.ok(screen.getByRole('button', { name: t('library.new') }))
     assert.ok(screen.getByRole('button', { name: t('library.story') }))
-    assert.ok(workspaceRegion.querySelector('.min-h-0.min-w-0.flex-1'))
+    // A phone scrolls the whole lab (library, header, then the tab: a review of 200 shots needs the screen);
+    // from md up each column scrolls on its own.
+    assert.ok(workspaceRegion.classList.contains('overflow-y-auto') && workspaceRegion.classList.contains('md:overflow-hidden'))
+    assert.ok(workspaceRegion.querySelector('.min-w-0.md\\:min-h-0.md\\:flex-1'))
   } finally {
     cleanup()
   }

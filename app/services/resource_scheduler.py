@@ -42,6 +42,7 @@ def gpu_waiter_max_wait_seconds() -> float:
     return value if 0 <= value < float("inf") else DEFAULT_GPU_WAITER_MAX_WAIT_SECONDS
 
 
+GPU_ENGINE_CREATION = "creation"
 GPU_ENGINE_H3_LEGACY = "h3-legacy"
 GPU_ENGINE_LOCAL_LLM = "local-llm"
 GPU_ENGINE_WGP = "wgp"
@@ -52,6 +53,7 @@ def gpu_engine_description(engine: str, label: str) -> str:
     """Attach a stable engine identity to an observable task description."""
     normalized = str(engine or "").strip().lower()
     if normalized not in {
+        GPU_ENGINE_CREATION,
         GPU_ENGINE_H3_LEGACY,
         GPU_ENGINE_LOCAL_LLM,
         GPU_ENGINE_WGP,

@@ -1,0 +1,84 @@
+import { BASE } from './http'
+import type { CustomView } from '../lib/characterAnimations'
+
+/** The server job that makes one animation of a saved character (services/character_animation_job.py): the Character Creator
+ * panel, the characters.animation.* MCP tools and the Wizard all start it. */
+export type AnimationTakeStatus = 'waiting' | 'reused' | 'generating' | 'keying' | 'ready' | 'failed'
+export type AnimationTake = { id: string; status: AnimationTakeStatus; seed: number; raw?: string; keyed?: string; error?: string }
+export type AnimationJobStatus = 'queued' | 'running' | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+export type AnimationJob = {
+  jobId: string; workspace: string; kitId: string; animationId: string; title: string; model: string
+  status: AnimationJobStatus; stage: 'poses' | 'sheet'; takes: AnimationTake[]
+  /** The pose being made again alone, when there is one. */
+  remake?: string | null
+  /** The words of an animation the author described: the job keeps them, so it can be shown and tried again from any page load. */
+  custom?: CustomAnimationRequest
+  error?: string; errorCode?: string; createdAt: number; updatedAt: number; finishedAt?: number
+  /** What a finished job says of its own sheet, in every approval mode: the checks and their verdict, how the poses of a walk measured against
+   * their guide, and warnings with the way out (services/character_animation_verdict.py). */
+  result?: {
+    animation: string; reviewState: string; sheet: string; count: number; frames: string[]; scaleBy: string; autoApproved?: boolean; checks?: AnimationCheck[]
+    verdict?: { ok: boolean; failed: string[] }; gait?: { checked: number; missed: string[] }; warnings?: AnimationWarning[]
+    autoRemake?: AnimationRemake
+    /** `torso` when every pose of a walk was scaled by its torso instead of one scale for all (services/walk_scale.py). */
+    normalised?: 'torso'
+  }
+  /** The poses of a walk the job drew again after the first pass, with every drawing it tried (services/character_animation_remake.py). */
+  autoRemake?: AnimationRemake
+  /** «Modo un solo disparo»: autoApprove was asked for and counts (false, with the note, when the mode is review), whether the job approved it
+   * and the automatic checks it ran on the sheet (the failed ones are why it stayed pending). */
+  autoApprove?: boolean; autoApproveNote?: string; autoApproved?: boolean; checks?: AnimationCheck[]; reviewNote?: string
+}
+export type AnimationCheck = { id: string; ok: boolean; value: number | string; limit: number | string; detail: string }
+export type AnimationRemake = {
+  rounds: number; max: number; failing: string[]; error?: string
+  poses: { id: string; attempts: { round: number; seed: number; raw: string; keyed: string; score: number; kept: boolean }[] }[]
+}
+export type AnimationWarning = { code: string; message: string; hint?: string }
+export type AnimationReview = { kitId: string; animation: string; reviewState: 'approved' | 'rejected'; reviewedBy: 'agent'; reviewedAt: string; reviewNote: string; revision: number }
+/** An animation of the author's own: a name, a framing (a bust, or the whole figure from one of the five directions) and the words of each pose (up to twelve). */
+export type CustomAnimationRequest = { title: string; view: CustomView; poses: string[] }
+
+export const ACTIVE_STATUSES: AnimationJobStatus[] = ['queued', 'running', 'cancelling']
+export const isActiveJob = (job: Pick<AnimationJob, 'status'>): boolean => ACTIVE_STATUSES.includes(job.status)
+
+/** One call to the animation routes; the animation set routes (characterAnimationSets.ts) use it too. */
+export async function animationRequest<T>(path: string, init: RequestInit | undefined, fallback: string): Promise<T> {
+  const response = await fetch(`${BASE}/api/v1/character-kits/animations${path}`, init)
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: fallback }))
+    const detail = error.detail
+    throw new Error(typeof detail === 'string' ? detail : typeof detail?.message === 'string' ? detail.message : fallback)
+  }
+  return response.json()
+}
+
+export const postBody = (body: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+
+export async function startAnimationJob(details: {
+  workspace: string; kitId: string; animation: string; model?: string; pose?: string; custom?: CustomAnimationRequest; autoApprove?: boolean
+  /** poses is the default and is omitted. video asks for one pose-guided clip. puppet cuts one drawing. Both are catalog walks. */
+  method?: 'poses' | 'video' | 'puppet'
+}): Promise<AnimationJob> {
+  return (await animationRequest<{ job: AnimationJob }>('/make', postBody(details), 'Could not start the animation')).job
+}
+
+/** The workspace's animation jobs, newest first. */
+export async function fetchAnimationJobs(workspace: string, kitId?: string): Promise<AnimationJob[]> {
+  const query = new URLSearchParams({ workspace, ...(kitId ? { kitId } : {}) })
+  return (await animationRequest<{ jobs: AnimationJob[] }>(`/jobs?${query}`, undefined, 'Could not read the animation jobs')).jobs
+}
+
+export async function fetchAnimationJob(workspace: string, jobId: string): Promise<AnimationJob> {
+  return (await animationRequest<{ job: AnimationJob }>(`/jobs/${encodeURIComponent(jobId)}?${new URLSearchParams({ workspace })}`, undefined, 'Could not read the animation job')).job
+}
+
+export async function cancelAnimationJob(workspace: string, jobId: string): Promise<AnimationJob> {
+  return (await animationRequest<{ job: AnimationJob }>(`/jobs/${encodeURIComponent(jobId)}/cancel`, postBody({ workspace }), 'Could not cancel the animation')).job
+}
+
+/** An agent's review of a made animation (the Wizard's review_character_animation, like characters.animation.review over MCP). The server
+ * refuses it unless the owner turned on «Modo un solo disparo»; a person reviews in the panel instead, which edits the character. */
+export async function reviewAnimation(details: { workspace: string; kitId: string; animation: string; decision: 'approve' | 'reject'; note?: string }): Promise<AnimationReview> {
+  return (await animationRequest<{ review: AnimationReview }>('/review', postBody(details), 'Could not review the animation')).review
+}

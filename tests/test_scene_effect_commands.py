@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from routers.scene_commands import create_scene_commands_router
 from routers.wangp_mcp import create_wangp_mcp_router
-from services.scene_commands import SceneCommands, command_catalog
+from services.scene_commands import CATALOG, PRESETS, SceneCommands, command_catalog
 
 
 @pytest.fixture
@@ -23,8 +23,8 @@ def showcase(service, dimension='3d'):
 def test_both_templates_use_all_catalog_effects_and_are_replayable(service):
     for dimension in ('2d', '3d'):
         doc = showcase(service, dimension)
-        assert doc['duration'] == 138
-        assert len(doc['sfx']) == 46
+        assert doc['duration'] == 168
+        assert len(doc['sfx']) == 56
         assert all(cue['sound'] and cue['label'] for cue in doc['sfx'])
         assert doc == showcase(service, dimension)
         assert ('slots' in doc) == (dimension == '3d')
@@ -39,7 +39,7 @@ def test_apply_replaces_exact_cue_preserving_scene_and_caller(service):
     assert original == before
     assert first == service.execute(command)
     actual = first['result']['document']
-    assert len(actual['sfx']) == 46
+    assert len(actual['sfx']) == 56
     assert actual['sfx'][3] == cue
     assert actual['slots'] == original['slots']
     assert not first['result']['saved'] and not first['result']['exported']
@@ -138,7 +138,39 @@ def test_speech_rejects_paths_and_unknown_character_before_analysis(service):
 
 def test_shared_catalog_remains_a_packaged_resource():
     path = Path(__file__).parents[1] / 'app/shared/scene_effects.json'
-    assert len(json.loads(path.read_text())) == 46
+    assert len(json.loads(path.read_text())) == 56
+
+
+def test_code_rain_takes_its_own_default_size_and_keeps_a_given_one(service):
+    original = showcase(service)
+    rain = next(cue for cue in original['sfx'] if cue['kind'] == 'code_rain')
+    assert rain['size'] == 3 and rain['color'] == '#39ff6a', 'the showcase uses the glyph height, not a burst size'
+    assert all(cue['size'] == 95 for cue in original['sfx'] if 'size' not in PRESETS[cue['kind']])
+    cues = [{'id': 'rain', 'kind': 'code_rain', 'start': 0, 'end': 6}, {'id': 'big', 'kind': 'code_rain', 'start': 0, 'end': 6, 'size': 8},
+            {'id': 'burst', 'kind': 'sparks', 'start': 0, 'end': 1}]
+    applied = service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                               'input': {'document': original, 'cues': cues, 'replace': True}})['result']['document']
+    sizes = {cue['id']: cue['size'] for cue in applied['sfx']}
+    assert (sizes['rain'], sizes['big'], sizes['burst']) == (3, 8, 65)
+
+
+def test_cinematic_effects_take_their_catalog_size_and_placement_and_keep_given_ones(service):
+    pack = [item['id'] for item in CATALOG if item['collection'] == 'cinematic']
+    assert pack == ['candlelight', 'vignette', 'film_grain', 'light_rays', 'glitch', 'canvas']
+    showcase_cues = {cue['kind']: cue for cue in showcase(service)['sfx']}
+    assert {kind: showcase_cues[kind]['size'] for kind in pack} == {'candlelight': 45, 'vignette': 60, 'film_grain': 100,
+                                                                    'light_rays': 120, 'glitch': 6, 'canvas': 100}
+    rays = showcase_cues['light_rays']
+    assert (rays['x'], rays['y'], rays['rotation'], rays['color']) == (28, 0, 62, '#ffd27a')
+    cues = [{'id': 'rays', 'kind': 'light_rays', 'start': 0, 'end': 6},
+            {'id': 'aimed', 'kind': 'light_rays', 'start': 0, 'end': 6, 'x': 80, 'y': 5, 'rotation': 120, 'size': 90},
+            {'id': 'candle', 'kind': 'candlelight', 'start': 0, 'end': 6, 'x': 30, 'y': 40},
+            {'id': 'edges', 'kind': 'vignette', 'start': 0, 'end': 6, 'intensity': 1.4}]
+    applied = service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                               'input': {'document': showcase(service), 'cues': cues, 'replace': True}})['result']['document']
+    placed = {cue['id']: (cue['x'], cue['y'], cue['size'], cue['rotation'], cue['intensity'], cue['color']) for cue in applied['sfx']}
+    assert placed == {'rays': (28, 0, 120, 62, 1, '#ffd27a'), 'aimed': (80, 5, 90, 120, 1, '#ffd27a'),
+                      'candle': (30, 40, 45, 0, 1, '#ffb35c'), 'edges': (50, 50, 60, 0, 1.4, '#000000')}
 
 
 def test_speech_append_preserves_previous_voice_and_rejects_overlap():
@@ -164,16 +196,16 @@ def test_retro_showcase_is_screen_only_and_thirty_seconds(service):
     assert any(item['id'] == 'psx' for item in catalog['effects'])
 
 
-def test_anime_showcase_uses_36_seconds_and_preserves_longer_authored_scenes(service):
+def test_anime_showcase_uses_42_seconds_and_preserves_longer_authored_scenes(service):
     command = {'version': 1, 'operation': 'scenes.effects.showcase', 'input': {'collection': 'anime'}}
     scene = service.execute(command)['result']['document']
-    assert scene['duration'] == 36 and len(scene['sfx']) == 12
+    assert scene['duration'] == 42 and len(scene['sfx']) == 14
     scene['duration'] = 72
     command['input']['document'] = scene
     assert service.execute(command)['result']['document']['duration'] == 72
 
 
-@pytest.mark.parametrize('collection,seconds', [('anime', 36), ('retro', 30), ('all', 138)])
+@pytest.mark.parametrize('collection,seconds', [('anime', 42), ('retro', 30), ('all', 168)])
 def test_default_2d_showcase_has_no_longer_background_tail(service, collection, seconds):
     scene = service.execute({'version': 1, 'operation': 'scenes.effects.showcase',
                              'input': {'dimension': '2d', 'collection': collection}})['result']['document']
@@ -240,3 +272,23 @@ def test_world_portal_media_strips_transient_urls(service, url):
                               'input': {'document': doc, 'worldCues': [cue]}})['result']['document']
     assert result['worldSfx'][0]['kind'] == 'media_portal'
     assert not result['worldSfx'][0].get('sourceUrl')
+
+
+def test_a_laser_cue_starts_at_its_origin_and_other_kinds_refuse_one(service):
+    doc = showcase(service, '2d')
+    laser = {'id': 'shot', 'kind': 'laser', 'start': 0, 'end': 1, 'x': 90, 'y': 20,
+             'from': {'x': 95, 'y': 46, 'layerId': 'kit-guard-pose-base'}}
+    apply = lambda document, cues: service.execute({'version': 1, 'operation': 'scenes.effects.apply',
+                                                    'input': {'document': document, 'cues': cues}})['result']['document']
+    applied = apply(doc, [laser])
+    assert next(cue for cue in applied['sfx'] if cue['id'] == 'shot')['from'] == {'x': 95.0, 'y': 46.0, 'layerId': 'kit-guard-pose-base'}
+    assert all('from' not in cue for cue in applied['sfx'] if cue['id'] != 'shot'), 'no empty from on the other cues'
+    again = apply(applied, [{'id': 'bolt', 'kind': 'lightning', 'start': 1, 'end': 2, 'from': {'x': 10, 'y': -20}}])
+    kept = {cue['id']: cue.get('from') for cue in again['sfx'] if cue['id'] in ('shot', 'bolt')}
+    assert kept == {'shot': {'x': 95.0, 'y': 46.0, 'layerId': 'kit-guard-pose-base'}, 'bolt': {'x': 10.0, 'y': -20.0}}, 'an additive apply keeps it'
+    for bad in ({'id': 'x', 'kind': 'sparks', 'start': 0, 'end': 1, 'from': {'x': 10, 'y': 20}},
+                {'id': 'x', 'kind': 'laser', 'start': 0, 'end': 1, 'from': {'x': 10, 'y': 900}}):
+        with pytest.raises(ValueError):
+            apply(doc, [bad])
+    schema = next(item for item in command_catalog() if item['name'] == 'scenes.effects.apply')['inputSchema']
+    assert 'from' in json.dumps(schema)

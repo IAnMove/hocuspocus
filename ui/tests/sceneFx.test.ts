@@ -44,8 +44,8 @@ test('every sound has repeatable finite PCM, a non-silent body and silent edges'
 test('anime showcase preserves the scene and supports oriented energy beams', () => {
   const source = createDefaultScene3DDocument()
   const next = withFxShowcase(source, 'anime')
-  assert.equal(next.duration, 36)
-  assert.equal(next.sfx.length, 12)
+  assert.equal(next.duration, 42)
+  assert.equal(next.sfx.length, 14)
   assert.equal(next.slots, source.slots)
   assert.ok(next.sfx.some(cue => cue.kind === 'energy_beam'))
   const rotated = parseSceneFx([{ ...next.sfx[0], rotation: -45 }])
@@ -93,7 +93,7 @@ test('world SFX stay in meters and do not rewrite screen overlays', () => {
 })
 
 test('2D showcase background matches the requested collection after reopening', () => {
-  for (const [collection, seconds] of [['anime', 36], ['retro', 30], ['all', FX_CATALOG.length * 3]] as const) {
+  for (const [collection, seconds] of [['anime', 42], ['retro', 30], ['all', FX_CATALOG.length * 3]] as const) {
     const next = withFxShowcase({ version: 1 as const, name: 'FX', layers: [], width: 640, height: 360, duration: 3 }, collection)
     const reopened = parseSceneFile(serializeSceneFile(next))
     assert.equal(reopened.duration, seconds)
@@ -128,8 +128,8 @@ test('Wizard showcase without a document keeps an authored 2D scene and its loca
   assert.equal(adopted.document.layers, current.layers)
   assert.equal(adopted.document.layers[0].source, 'blob:http://localhost/user-cutout')
   assert.equal(adopted.document.name, 'Hero shot')
-  assert.equal(adopted.document.duration, 36)
-  assert.equal(adopted.document.sfx.length, 12)
+  assert.equal(adopted.document.duration, 42)
+  assert.equal(adopted.document.sfx.length, 14)
 })
 
 test('Wizard showcase without a document keeps placed 3D speakers', () => {
@@ -153,7 +153,7 @@ test('Wizard showcase without a document keeps authored world SFX on an empty Vi
   assert.equal(adopted.document.slots, current.slots)
   assert.equal(adopted.document.worldSfx, current.worldSfx)
   assert.equal(adopted.document.worldSfx?.[0].id, 'portal-1')
-  assert.equal(adopted.document.sfx.length, 12)
+  assert.equal(adopted.document.sfx.length, 14)
 })
 
 test('Wizard showcase without a document keeps authored screen media on a monitor-only stage', () => {
@@ -182,4 +182,46 @@ test('an empty editor still opens the stock showcase, and apply/speech documents
   const preparedApply = { ...createDefaultScene3DDocument(), duration: 6, sfx: [{ id: 'spark-1', kind: 'sparks', start: 0, end: 1 }] }
   assert.equal(isFxShowcaseDocument(preparedApply), false)
   assert.equal(adoptPreparedSceneDocument(current, preparedApply as typeof current).mode, 'replace')
+})
+
+test('an effect speed runs its own time slower or faster, identically in 2D and 3D exports', async () => {
+  const { paintSceneFx } = await import('../src/features/sceneFx/paint')
+  const [slow] = parseSceneFx([{ id: 'slow', kind: 'speedlines', start: 0, end: 4, speed: 0.5 }])
+  assert.equal(slow.speed, 0.5)
+  assert.equal(parseSceneFx([{ kind: 'rain', speed: 1 }])[0].speed, undefined, 'normal speed is not stored')
+  assert.equal(parseSceneFx([{ kind: 'rain', speed: 0 }])[0].speed, 0.02)
+  assert.equal(parseSceneFx([{ kind: 'rain', speed: 99 }])[0].speed, 4)
+  const draw = (seconds: number, cue: typeof slow) => {
+    const log: string[] = []
+    const ctx = new Proxy({}, {
+      get: (_target, key) => (...args: unknown[]) => { log.push(`${String(key)}(${args.map(arg => typeof arg === 'number' ? arg.toFixed(4) : typeof arg).join(',')})`) },
+      set: (_target, key, value) => { log.push(`${String(key)}=${typeof value === 'number' ? value.toFixed(4) : String(value)}`); return true },
+    }) as unknown as CanvasRenderingContext2D
+    paintSceneFx(ctx, 640, 360, seconds, [cue])
+    return log
+  }
+  const normal = { ...slow, speed: undefined }
+  assert.deepEqual(draw(1, slow), draw(0.5, normal))
+  assert.notDeepEqual(draw(1, slow), draw(1, normal))
+})
+
+test('a fast one-shot effect ends early instead of painting NaN, and the schema keeps speed', async () => {
+  const { paintSceneFx } = await import('../src/features/sceneFx/paint')
+  const { SCENE_FX_SCHEMA } = await import('../src/features/sceneFx/types')
+  const values: number[] = []
+  // A canvas that keeps what is set on it (globalAlpha, lineWidth...) and records every number it is given.
+  const state: Record<string, unknown> = { globalAlpha: 1, lineWidth: 1 }
+  const ctx = new Proxy(state, {
+    get: (target, key) => key in target ? target[key as string] : (...args: unknown[]) => {
+      for (const arg of args) if (typeof arg === 'number') values.push(arg)
+      return String(key).endsWith('Gradient') ? { addColorStop: (offset: number) => { values.push(offset) } } : undefined
+    },
+    set: (target, key, value) => { if (typeof value === 'number') values.push(value); target[key as string] = value; return true },
+  }) as unknown as CanvasRenderingContext2D
+  for (const kind of ['confetti', 'sparks', 'explosion', 'fireworks']) {
+    const [cue] = parseSceneFx([{ id: kind, kind, start: 0, end: 2, speed: 4 }])
+    for (const seconds of [0.3, 1.0, 1.9]) paintSceneFx(ctx, 640, 360, seconds, [cue])
+  }
+  assert.ok(values.length > 0 && values.every(Number.isFinite), 'every painted number is finite')
+  assert.deepEqual(SCENE_FX_SCHEMA.items.properties.speed, { type: 'number', minimum: 0.02, maximum: 4 })
 })

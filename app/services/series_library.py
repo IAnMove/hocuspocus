@@ -10,12 +10,16 @@ from __future__ import annotations
 import copy
 from datetime import datetime, timezone
 import json
+import math
 import os
 import re
 import uuid
 from typing import Any
 
-from .language_intent import normalize_language_intent
+from .character_speech_definition import PLACEHOLDER_DELIVERY, PLACEHOLDER_EMOTION
+from .document_origin import created_by, keep_record_author, restore_created_by
+from .language_intent import labels_for_request_language, normalize_language_intent, saved_language_labels
+from .series_episode_numbers import EpisodeNumberTaken, assign_episode_number, guard_episode_number  # noqa: F401 (re-exported)
 
 
 SERIES_LIBRARY_FILENAME = ".series-library-v1.json"
@@ -28,7 +32,8 @@ _ASSET_PATH = re.compile(r"^(assets|outputs)/[A-Za-z0-9._/-]+$")
 EPISODE_EDITOR_FIELDS = frozenset({
     "seasonId", "number", "title", "premise", "logline",
     "targetDurationSeconds", "outline", "script", "shots",
-    "continuityIssues", "proposedCanonDelta", "languageVersions",
+    "continuityIssues", "proposedCanonDelta", "languageVersions", "score", "videoBudget",
+    "kitPins",
 })
 SHOT_EDITOR_FIELDS = frozenset({
     "sceneId", "order", "durationSeconds", "framing", "camera", "action",
@@ -36,9 +41,15 @@ SHOT_EDITOR_FIELDS = frozenset({
     "primarySpeakerId", "locationId", "locationVariantId",
     "wardrobeByCharacterId", "propIds", "emotionalStateByCharacterId",
     "continuityFromShotId", "renderStrategy", "productionMethod", "referencePolicy", "prompt",
-    "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d",
+    "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d", "foley", "video",
+    "transitionIn", "resolution",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
+# A take is a render of what the audience sees and hears; when these change under a shot id, its takes are stale.
+SHOT_CONTENT_FIELDS = frozenset({
+    "dialogueBeats", "visibleCharacterIds", "locationId", "locationVariantId", "productionMethod",
+    "framing", "camera", "layout2d", "scene3d", "wardrobeByCharacterId", "propIds", "video",
+})
 SERIES_CANON_INPUT_FIELDS = (
     "title", "premise", "logline", "format", "language", "spokenLanguage",
     "protagonistConsistency", "protagonistCharacterId", "genre", "tone", "audience",
@@ -136,6 +147,9 @@ def _canon_input(series: dict, key: str) -> Any:
 
 def series_canon_inputs_changed(current: dict, updated: dict) -> bool:
     """Compare durable production inputs without coupling canon to chat language."""
+    from services.writing_guide import canon_guidance
+    if canon_guidance(current) != canon_guidance(updated):
+        return True
     current_canon = copy.deepcopy(current.get("canon") or {})
     updated_canon = copy.deepcopy(updated.get("canon") or {})
     for value in (current_canon, updated_canon):
@@ -166,21 +180,23 @@ def create_series_project(
     workspace_id: str = "default",
     *,
     title: str = "Untitled series",
+    language: str | None = None,
 ) -> dict:
     workspace_id = validate_workspace_id(workspace_id)
     now = _now()
     suffix = uuid.uuid4().hex
     series_id = f"series_{suffix}"
+    content_language, spoken_language = labels_for_request_language(language)
     value = {
         "version": 1, "id": series_id, "revision": 1,
         "title": title.strip() or "Untitled series", "logline": "", "premise": "",
         "format": "episodic", "defaultEpisodeDurationSeconds": 75,
-        "language": "Español", "spokenLanguage": "Español de España",
+        "language": content_language, "spokenLanguage": spoken_language,
         "languageIntent": normalize_language_intent(
-            None, content_language="Español", spoken_language="Español de España"
+            None, content_language=content_language, spoken_language=spoken_language
         ),
         "protagonistConsistency": False, "protagonistCharacterId": "",
-        "genre": "", "tone": "Cinematic", "audience": "General",
+        "genre": "", "tone": "", "audience": "General",
         "visualStyle": "", "characterVisualStyle": "", "cameraLanguage": "",
         "allowClipText": False, "sourceMode": "original", "masterUniversePrompt": "",
         "rightsNote": "", "bestEffortLipSyncAcknowledged": False,
@@ -207,7 +223,7 @@ def create_series_project(
             "writingProvider": "maestro", "writingModel": "", "writingBaseUrl": "",
             "imageProvider": "maestro", "imageModel": "", "videoModel": "minimax_h3_legacy",
             "videoSettings": {
-                "renderStrategy": "auto", "resolution": "540p",
+                "renderStrategy": "auto", "resolution": "480p",
                 "orientation": "landscape", "numInferenceSteps": 20,
                 "flowShift": 12, "audioShift": 3, "modelProfile": "quality",
             },
@@ -215,6 +231,7 @@ def create_series_project(
         },
         "createdAt": now, "updatedAt": now,
     }
+    value["createdBy"] = created_by("series.create")
     return normalize_series_project(value, series_id, workspace_id)
 
 
@@ -293,9 +310,15 @@ def _normalize_dialogue_beat(value: dict, fallback_id: str) -> dict:
         "id": _id(beat.get("id"), fallback_id),
         "characterId": _id(beat.get("characterId"), "character_unknown"),
         "text": _text(beat.get("text")),
-        "emotion": _text(beat.get("emotion"), "natural"),
-        "delivery": _text(beat.get("delivery"), "natural delivery"),
+        "emotion": _text(beat.get("emotion"), PLACEHOLDER_EMOTION),
+        "delivery": _text(beat.get("delivery"), PLACEHOLDER_DELIVERY),
     })
+    # The room this one line is heard in (series_voice_rooms.line_rooms); null clears it, an unknown one is refused.
+    if beat.get("voiceRoom") is None:
+        beat.pop("voiceRoom", None)
+    else:
+        from services.series_voice_rooms import check_room
+        check_room(beat["voiceRoom"], "dialogueBeats.voiceRoom")
     return beat
 
 
@@ -329,7 +352,47 @@ def _normalize_attempt(value: dict, shot_id: str, index: int) -> dict:
     })
     if attempt.get("reviewDecision") not in {"approved", "rejected"}:
         attempt.pop("reviewDecision", None)
+    # How the server render made it for a staged review (series_review): a cheap preview or the final take.
+    if attempt.get("reviewStage") not in {"preview", "final"}:
+        attempt.pop("reviewStage", None)
     return attempt
+
+
+def _store_resolution(record: dict, key: str, label: str) -> None:
+    """Keep a Series tier under ``key`` by its name (``720`` and ``1280x704`` are ``720p``). An empty value is removed,
+    so a record that never chose one stays as it was; anything else is refused."""
+    from .series_render import SERIES_RESOLUTIONS, series_resolution_preset
+    raw = record.get(key)
+    if raw is None or raw == "":
+        record.pop(key, None)
+        return
+    preset = series_resolution_preset(raw)
+    if preset is None:
+        raise ValueError(f"{label} must be one of {', '.join(SERIES_RESOLUTIONS)}")
+    record[key] = preset
+
+
+def _store_shot_resolution(shot: dict) -> None:
+    """A video shot's own H3 tier. Other shots make no H3 clip, so theirs is dropped, as ``store_video`` drops ``video``."""
+    _store_resolution(shot, "resolution", "Shot resolution")
+    if shot.get("productionMethod") not in {"generated_video", "imported_video"}:
+        shot.pop("resolution", None)
+
+
+EPISODE_FORMAT_LIMIT = 2000
+
+
+def _store_episode_format(project: dict) -> None:
+    """``episodeFormat``: how the series builds each episode (parts, lengths, number of shots), in words. Empty is
+    removed, so a series that never wrote one stays as it was; agents then follow the guide's default shape."""
+    raw = project.get("episodeFormat")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        project.pop("episodeFormat", None)
+        return
+    if not isinstance(raw, str):
+        raise ValueError("episodeFormat must be text")
+    if len(raw) > EPISODE_FORMAT_LIMIT:
+        raise ValueError(f"episodeFormat is at most {EPISODE_FORMAT_LIMIT} characters")
 
 
 def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -> dict:
@@ -378,6 +441,10 @@ def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -
         "negativePrompt": _text(shot.get("negativePrompt")),
         "attempts": attempts,
     })
+    # A scripted H3 request is checked the same way from the script and from the editor.
+    from .series_video_shots import store_video
+    store_video(shot)
+    _store_shot_resolution(shot)
     from .series_shot_plan import normalize_layout2d
     layout = normalize_layout2d(shot.get("layout2d"))
     if layout:
@@ -390,6 +457,19 @@ def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -
         shot["scene3d"] = scene3d
     else:
         shot.pop("scene3d", None)
+    from .series_shot_foley import normalize_foley
+    foley = normalize_foley(shot.get("foley"))
+    if foley:
+        shot["foley"] = foley
+    else:
+        shot.pop("foley", None)
+    from .series_transitions import normalize_transition
+    if "transitionIn" in shot:
+        transition = normalize_transition(shot.get("transitionIn"))
+        if transition:
+            shot["transitionIn"] = transition
+        else:
+            shot.pop("transitionIn", None)
     policy = shot["referencePolicy"]
     policy["mode"] = "manual" if policy.get("mode") == "manual" else "automatic"
     policy["manualIncludeAssetIds"] = _unique_ids(policy.get("manualIncludeAssetIds"))
@@ -542,8 +622,26 @@ def _normalize_episode(value: dict, key: str, index: int, season_id: str, canon:
         "createdAt": _text(episode.get("createdAt"), now),
         "updatedAt": _text(episode.get("updatedAt"), now),
     })
+    # The episode's music, laid by the assembly (series_score): cues over runs of these shots, never overlapping.
+    from .series_score import normalize_score
+    score = normalize_score(episode.get("score"), shots)
+    if score:
+        episode["score"] = score
+    else:
+        episode.pop("score", None)
+    # The staged review (series_review): mode, per-shot decisions on the current content, notes.
+    from .series_review import normalize_episode_review
+    normalize_episode_review(episode)
+    from .series_kit_pins import normalize_kit_pins
+    pins = normalize_kit_pins(episode.get("kitPins"))
+    if pins:
+        episode["kitPins"] = pins
+    else:
+        episode.pop("kitPins", None)
     from .series_shot_dialogue import annotate_episode_shot_dialogue
-    return annotate_episode_shot_dialogue(episode)
+    episode = annotate_episode_shot_dialogue(episode)
+    keep_record_author(episode)
+    return episode
 
 
 def _normalize_episode_languages(episode: dict, project: dict) -> None:
@@ -767,10 +865,28 @@ def _validate_project_graph_ids(project: dict) -> None:
                     )
 
 
+def series_put_payload(current: dict, sent: dict) -> dict:
+    """The project a ``PUT /api/v1/series/{id}`` stores: what was sent, and the current value of every top-level field
+    that was not. An agent that sent only ``allowedProductionMethods`` emptied the episodes, characters, locations
+    and assets of a finished series. To clear a field, send it empty. Each episode keeps its stored review."""
+    from .series_review import keep_stored_review
+    payload = {**copy.deepcopy(current), **copy.deepcopy(sent)}
+    keep_stored_review(current, payload)
+    restore_created_by(current, payload)
+    return payload
+
+
 def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
+    from services.series_ambience import check_sound_design
+    from services.series_finish import store_look
+    from services.series_layers import normalize_location
+    from services.series_stage import normalize_location_stage
     from services.series_production import normalize_production_methods
+    from services.series_voice_rooms import check_voice_rooms
     if not isinstance(value, dict):
         raise ValueError("Every Series Lab project must be a JSON object")
+    check_sound_design(value.get("soundDesign"))
+    check_voice_rooms(value.get("soundDesign"))
     project = copy.deepcopy(value)
     series_id = _id(project.get("id"), key)
     now = _now()
@@ -786,10 +902,10 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         }) for index, item in enumerate(_objects(project.get("characters")))
     ]
     locations = [
-        _normalize_entity(item, "location", index, {
+        normalize_location_stage(normalize_location(_normalize_entity(item, "location", index, {
             "name": f"Location {index + 1}", "purpose": "", "description": "",
             "referenceAssetIds": [], "variants": [], "currentState": {}, "approval": "draft",
-        }) for index, item in enumerate(_objects(project.get("locations")))
+        }), f"locations[{index}].layout2d"), f"locations[{index}].layout2d") for index, item in enumerate(_objects(project.get("locations")))
     ]
     props = [
         _normalize_entity(item, "prop", index, {
@@ -848,7 +964,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     provider = copy.deepcopy(project.get("provider")) if isinstance(project.get("provider"), dict) else {}
     video_settings = copy.deepcopy(provider.get("videoSettings")) \
         if isinstance(provider.get("videoSettings"), dict) else {}
-    raw_resolution = str(video_settings.get("resolution") or "540p").strip().lower()
+    raw_resolution = str(video_settings.get("resolution") or "480p").strip().lower()
     provider_was_present = isinstance(project.get("provider"), dict)
     video_settings.update({
         "renderStrategy": video_settings.get("renderStrategy")
@@ -889,6 +1005,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "historicalProductionIds": _unique_ids(import_source.get("historicalProductionIds")),
         "migrationNotes": _text(import_source.get("migrationNotes")),
     })
+    saved_language, saved_spoken_language = saved_language_labels(project)
     project.update({
         "version": 1,
         "id": series_id,
@@ -901,16 +1018,12 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "defaultEpisodeDurationSeconds": max(15, min(3600, _integer(
             project.get("defaultEpisodeDurationSeconds"), 75, 15
         ))),
-        "language": _text(project.get("language"), "Español"),
-        "spokenLanguage": _text(
-            project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
-        ),
+        "language": saved_language,
+        "spokenLanguage": saved_spoken_language,
         "languageIntent": normalize_language_intent(
             project.get("languageIntent"),
-            content_language=_text(project.get("language"), "Español"),
-            spoken_language=_text(
-                project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
-            ),
+            content_language=saved_language,
+            spoken_language=saved_spoken_language,
         ),
         "protagonistConsistency": project.get("protagonistConsistency") is True,
         "protagonistCharacterId": (
@@ -944,8 +1057,14 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "createdAt": _text(project.get("createdAt"), now),
         "updatedAt": _text(project.get("updatedAt"), now),
     })
+    # The H3 tier of the script's video shots (series_video_shots); absent is 480p.
+    _store_resolution(project, "videoShotResolution", "videoShotResolution")
+    # The finish over its 2D shots (series_finish; absent is paper) and its own episode shape (absent: the guide's).
+    store_look(project)
+    _store_episode_format(project)
     synchronize_series_project_durations(project)
     _validate_project_graph_ids(project)
+    keep_record_author(project)
     return project
 
 
@@ -1009,17 +1128,35 @@ def series_library_path(workspace_dir: str) -> str:
     return os.path.join(workspace_dir, SERIES_LIBRARY_FILENAME)
 
 
+def without_non_finite(value: Any) -> Any:
+    """``value`` with every ``inf`` / ``nan`` replaced by None. JSON cannot carry them, and Starlette answers 500 for
+    a response that holds one, so a single ``-Infinity`` in the library file broke every Series read of the workspace."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: without_non_finite(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [without_non_finite(item) for item in value]
+    return value
+
+
 def read_series_library(workspace_dir: str, workspace_id: str = "default") -> dict[str, Any]:
     path = series_library_path(workspace_dir)
     if not os.path.isfile(path):
         return empty_series_library(workspace_id)
     with open(path, "r", encoding="utf-8") as handle:
-        return normalize_series_library(json.load(handle), workspace_id)
+        # A file written before non-finite numbers were repaired may hold -Infinity / Infinity / NaN: read them as null.
+        return normalize_series_library(json.load(handle, parse_constant=lambda _name: None), workspace_id)
 
 
 def write_series_library(workspace_dir: str, value: Any, workspace_id: str = "default") -> dict[str, Any]:
     library = normalize_series_library(value, workspace_id)
-    encoded = json.dumps(library, ensure_ascii=False, separators=(",", ":"))
+    try:
+        encoded = json.dumps(library, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    except ValueError:
+        # Repair rather than refuse: the work a caller is saving (a finished cut) is worth more than a metadata number.
+        library = without_non_finite(library)
+        encoded = json.dumps(library, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     if len(encoded.encode("utf-8")) > MAX_SERIES_LIBRARY_BYTES:
         raise ValueError("Series library is too large to save")
     os.makedirs(workspace_dir, exist_ok=True)
@@ -1041,131 +1178,13 @@ def write_series_library(workspace_dir: str, value: Any, workspace_id: str = "de
 
 
 def create_episode_canon_snapshot(series: dict) -> dict:
-    canon = _normalize_canon(series.get("canon"))
-    provider = copy.deepcopy(series.get("provider")) if isinstance(series.get("provider"), dict) else {}
-    capability = copy.deepcopy(provider.get("videoCapabilities")) \
-        if isinstance(provider.get("videoCapabilities"), dict) else {
-            "model": _text(provider.get("videoModel"), "minimax_h3").replace("minimax-h3", "minimax_h3"),
-            "family": "minimax_h3", "version": "unknown",
-            "limits": {"image": 9, "video": 3, "audio": 3, "total": 12},
-            "supportsFirstFrame": True, "supportsFirstLast": False,
-            "supportsContinuation": True, "supportsNativeAudio": True,
-        }
-    raw_assets = series.get("assets") if isinstance(series.get("assets"), dict) else {}
-    frozen_characters = [
-        copy.deepcopy(item) for item in _objects(series.get("characters"))
-        if item.get("approval") == "approved"
-    ]
-    frozen_locations = [
-        copy.deepcopy(item) for item in _objects(series.get("locations"))
-        if item.get("approval") == "approved"
-    ]
-    frozen_props = [
-        copy.deepcopy(item) for item in _objects(series.get("props"))
-        if item.get("approval") == "approved"
-    ]
-    approved_asset_ids: set[str] = set()
-    for entity in [*frozen_characters, *frozen_locations, *frozen_props]:
-        approved_asset_ids.update(_unique_ids(entity.get("referenceAssetIds")))
-        primary = entity.get("primaryReferenceAssetId")
-        if isinstance(primary, str) and primary:
-            approved_asset_ids.add(primary)
-        for variant in [*_objects(entity.get("wardrobeVariants")), *_objects(entity.get("variants"))]:
-            approved_asset_ids.update(_unique_ids(variant.get("referenceAssetIds")))
-    approved_assets = sorted(
-        asset_id for asset_id in approved_asset_ids
-        if isinstance(raw_assets.get(asset_id), dict) and not raw_assets[asset_id].get("isDerivedThumbnail")
-    )
-    return {
-        "revision": canon["revision"],
-        "worldSummary": canon["worldSummary"],
-        "immutableRules": copy.deepcopy(canon["immutableRules"]),
-        "currentFacts": copy.deepcopy(canon["currentFacts"]),
-        "characters": frozen_characters,
-        "relationships": copy.deepcopy(_objects(series.get("relationships"))),
-        "locations": frozen_locations,
-        "props": frozen_props,
-        "characterStates": {
-            item["id"]: copy.deepcopy(item.get("currentState") or {})
-            for item in _objects(series.get("characters")) if item.get("id")
-        },
-        "relationshipStates": {
-            item["id"]: _text(item.get("currentState"), _text(item.get("dynamic")))
-            for item in _objects(series.get("relationships")) if item.get("id")
-        },
-        "locationStates": {
-            item["id"]: copy.deepcopy(item.get("currentState") or {})
-            for item in _objects(series.get("locations")) if item.get("id")
-        },
-        "propStates": {
-            item["id"]: copy.deepcopy(item.get("currentState") or {})
-            for item in _objects(series.get("props")) if item.get("id")
-        },
-        "sourceMode": series.get("sourceMode", "original"),
-        "masterUniversePrompt": _text(series.get("masterUniversePrompt")),
-        "rightsNote": _text(series.get("rightsNote")),
-        "visualStyle": _text(series.get("visualStyle")),
-        "characterVisualStyle": _text(series.get("characterVisualStyle")),
-        "cameraLanguage": _text(series.get("cameraLanguage")),
-        "spokenLanguage": _text(series.get("spokenLanguage"), _text(series.get("language"))),
-        "protagonistConsistency": series.get("protagonistConsistency") is True,
-        "protagonistCharacterId": _text(series.get("protagonistCharacterId")),
-        "allowClipText": series.get("allowClipText") is True,
-        "provider": provider,
-        "capabilitySnapshot": capability,
-        "approvedReferenceAssetIds": approved_assets,
-        "assets": {
-            asset_id: copy.deepcopy(raw_assets[asset_id]) for asset_id in approved_assets
-        },
-    }
+    from .series_canon_snapshot import create_snapshot
+    return create_snapshot(series, normalize_canon=_normalize_canon, objects=_objects, text=_text, unique_ids=_unique_ids)
 
 
 def series_for_episode_snapshot(series: dict, episode: dict) -> dict:
-    """Overlay immutable episode canon onto live storage while retaining new shot outputs."""
-    result = copy.deepcopy(series)
-    snapshot = episode.get("canonSnapshot") if isinstance(episode.get("canonSnapshot"), dict) else {}
-    for key in (
-        "sourceMode", "masterUniversePrompt", "rightsNote", "visualStyle",
-        "characterVisualStyle", "cameraLanguage", "allowClipText", "provider",
-        "characters", "relationships", "locations", "props",
-    ):
-        if key in snapshot:
-            result[key] = copy.deepcopy(snapshot[key])
-    frozen_assets = snapshot.get("assets") if isinstance(snapshot.get("assets"), dict) else None
-    live_assets = series.get("assets") if isinstance(series.get("assets"), dict) else {}
-    if frozen_assets is None:
-        approved_ids = set(_unique_ids(snapshot.get("approvedReferenceAssetIds")))
-        frozen_assets = {
-            asset_id: copy.deepcopy(asset) for asset_id, asset in live_assets.items()
-            if asset_id in approved_ids and isinstance(asset, dict)
-        }
-    assets = copy.deepcopy(frozen_assets)
-    episode_attempt_ids = {
-        str(attempt.get("id"))
-        for shot in _objects(episode.get("shots"))
-        for attempt in _objects(shot.get("attempts")) if attempt.get("id")
-    }
-    episode_shot_ids = {
-        str(shot.get("id")) for shot in _objects(episode.get("shots")) if shot.get("id")
-    }
-    for asset_id, asset in live_assets.items():
-        if not isinstance(asset, dict):
-            continue
-        if (
-            asset.get("ownerType") == "shot" and str(asset.get("ownerId")) in episode_shot_ids
-        ) or (
-            asset.get("ownerType") == "attempt" and str(asset.get("ownerId")) in episode_attempt_ids
-        ):
-            assets[asset_id] = copy.deepcopy(asset)
-    result["assets"] = assets
-    result["canon"] = {
-        **copy.deepcopy(result.get("canon") or {}),
-        "worldSummary": copy.deepcopy(snapshot.get("worldSummary", result.get("canon", {}).get("worldSummary", ""))),
-        "immutableRules": copy.deepcopy(snapshot.get("immutableRules", result.get("canon", {}).get("immutableRules", []))),
-        "currentFacts": copy.deepcopy(snapshot.get("currentFacts", result.get("canon", {}).get("currentFacts", []))),
-        "revision": int(snapshot.get("revision") or episode.get("canonRevisionAtCreation") or 1),
-    }
-    return result
+    from .series_canon_snapshot import overlay_snapshot
+    return overlay_snapshot(series, episode, objects=_objects, unique_ids=_unique_ids)
 
 
 def create_series_episode(series: dict, season_id: str | None = None, **overrides: Any) -> dict:
@@ -1175,6 +1194,7 @@ def create_series_episode(series: dict, season_id: str | None = None, **override
         raise ValueError("Create a season before adding an episode")
     season = next((item for item in seasons if item.get("id") == season_id), seasons[0])
     episodes = series.get("episodesById") if isinstance(series.get("episodesById"), dict) else {}
+    guard_episode_number(episodes, season.get("id"), overrides)
     season_episodes = [
         item for item in episodes.values()
         if isinstance(item, dict) and item.get("seasonId") == season.get("id")
@@ -1199,15 +1219,18 @@ def create_series_episode(series: dict, season_id: str | None = None, **override
         if key not in {"id", "seasonId", "canonRevisionAtCreation", "canonSnapshot", "createdAt"}:
             episode[key] = copy.deepcopy(value)
     from services.series_production import normalize_production_methods
-    return _normalize_episode(
+    episode = _normalize_episode(
         episode, episode_id, len(season_episodes), str(season["id"]),
         _normalize_canon(series.get("canon")),
         normalize_production_methods(series.get("allowedProductionMethods")),
     )
+    episode["createdBy"] = created_by("series.episode.create")
+    return episode
 
 
 def import_story_project(story: dict, workspace_id: str = "default") -> dict:
     """Create a new draft series without mutating its Story Lab source."""
+    from services.writing_guide import import_guidance
     if not isinstance(story, dict):
         raise ValueError("Story import requires one Story Lab project")
     now = _now()
@@ -1281,6 +1304,7 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
     ]
     series = {
         "version": 1, "id": series_id, "revision": 1,
+        "writingGuide": import_guidance(story),
         "title": _text(story.get("title"), "Imported series"),
         "logline": _text(story.get("logline")), "premise": _text(story.get("premise")),
         "format": "episodic",
@@ -1288,7 +1312,12 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
             (story.get("creativeBrief") or {}).get("durationSeconds")
             if isinstance(story.get("creativeBrief"), dict) else None, 75
         ))),
-        "language": _text(story.get("language"), "Español"),
+        # A story that kept its language only in languageIntent keeps it here too. The labels and the whole
+        # contract travel together: labels alone dropped ``verbatimSegments``, so quoted lyrics or dialogue
+        # the story had locked were no longer protected.
+        "language": saved_language_labels(story)[0],
+        "spokenLanguage": saved_language_labels(story)[1],
+        "languageIntent": story.get("languageIntent"),
         "genre": _text(story.get("genre")), "tone": _text(story.get("tone")),
         "audience": _text(story.get("audience"), "General"),
         "visualStyle": _text(story.get("visualStyle")),
@@ -1333,13 +1362,14 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
             "imageModel": _text((story.get("provider") or {}).get("imageModel"))
             if isinstance(story.get("provider"), dict) else "",
             "videoModel": "minimax_h3_legacy", "videoSettings": {
-                "renderStrategy": "auto", "resolution": "540p",
+                "renderStrategy": "auto", "resolution": "480p",
                 "orientation": "landscape", "numInferenceSteps": 20,
                 "flowShift": 12, "audioShift": 3, "modelProfile": "quality",
             },
         },
         "createdAt": now, "updatedAt": now,
     }
+    series["createdBy"] = created_by("series.import")
     return normalize_series_project(series, series_id, workspace_id)
 
 
@@ -1377,6 +1407,7 @@ def duplicate_series_project(series: dict) -> dict:
         "importedAt": now, "historicalProductionIds": [],
         "migrationNotes": f"Duplicated from Series Lab project {old_id}; episodes and attempts were not copied.",
     }
+    duplicate["createdBy"] = created_by("series.duplicate")
     return duplicate
 
 
@@ -1388,8 +1419,46 @@ def _approved_take_seconds(shot: dict) -> float | None:
     return float(seconds) if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds > 0 else None
 
 
-def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[dict]:
-    """Merge editable shot fields while retaining server-owned render history."""
+def _beat_content(beats: Any) -> list[tuple[str, str]]:
+    return [(str(beat.get("characterId") or ""), str(beat.get("text") or "").strip())
+            for beat in beats if isinstance(beat, dict)] if isinstance(beats, list) else []
+
+
+# A generated or imported take gets these at the cut (services/series_take_sound.py): changing them keeps the take.
+CUT_APPLIED_LAYOUT = frozenset({"sfx", "music", "clipAudio", "clipVolume", "clipFit"})
+VIDEO_TAKE_METHODS = frozenset({"generated_video", "imported_video"})
+
+
+def _take_layout(shot: dict) -> Any:
+    layout = shot.get("layout2d")
+    if shot.get("productionMethod") not in VIDEO_TAKE_METHODS or not isinstance(layout, dict):
+        return layout
+    return {key: value for key, value in layout.items() if key not in CUT_APPLIED_LAYOUT} or None
+
+
+def same_shot_content(stored: dict, incoming: dict) -> bool:
+    """True when the incoming shot shows and says what the stored one does (its takes still fit)."""
+    for key in SHOT_CONTENT_FIELDS:
+        if key not in incoming and key not in stored:
+            continue
+        before, after = stored.get(key), incoming.get(key)
+        if key == "layout2d":
+            before, after = _take_layout(stored), _take_layout(incoming)
+        if key == "dialogueBeats":
+            if _beat_content(before) != _beat_content(after):
+                return False
+        elif (before or None) != (after or None):
+            return False
+    return True
+
+
+def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any, *, replace: bool = False) -> list[dict]:
+    """Merge editable shot fields while retaining server-owned render history.
+
+    With ``replace`` the incoming list is the whole episode: shots it does not
+    name are removed, and a shot whose content changed starts without takes
+    (a rewritten script must not inherit takes that show other lines).
+    """
     if not isinstance(incoming_shots, list):
         raise ValueError("Episode shots patch must be an array")
     current = _objects(current_shots)
@@ -1409,6 +1478,8 @@ def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[d
 
     def merge_one(shot_id: str, raw_shot: dict) -> dict:
         stored = current_by_id.get(shot_id)
+        if replace and stored is not None and not same_shot_content(stored, raw_shot):
+            stored = None
         merged = copy.deepcopy(stored) if stored is not None else {"id": shot_id, "attempts": []}
         for key in SHOT_EDITOR_FIELDS:
             if key in raw_shot:
@@ -1432,7 +1503,7 @@ def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[d
 
     # A full collection can express ordering. A sparse patch updates shots in
     # place and cannot accidentally delete another shot (or its attempts).
-    if set(current_by_id).issubset(incoming_by_id):
+    if replace or set(current_by_id).issubset(incoming_by_id):
         return [merge_one(shot_id, incoming_by_id[shot_id]) for shot_id in incoming_order]
     result: list[dict] = []
     for stored in current:
@@ -1446,6 +1517,21 @@ def _merge_episode_shot_patch(current_shots: Any, incoming_shots: Any) -> list[d
         for shot_id in incoming_order if shot_id not in current_by_id
     )
     return result
+
+
+def _keep_dropped_take_files(series: dict, episode_id: str, before: Any, after: Any) -> None:
+    """A rewrite that drops shots or takes (``replaceShots``) leaves the files they owned: those assets go to the
+    episode, so they stay listed and the project still validates (an asset owned by a removed take failed it)."""
+    def owners(shots: Any) -> tuple[set[str], set[str]]:
+        shots = _objects(shots)
+        return ({str(shot.get("id")) for shot in shots},
+                {str(attempt.get("id")) for shot in shots for attempt in _objects(shot.get("attempts"))})
+    shots_before, attempts_before = owners(before)
+    shots_after, attempts_after = owners(after)
+    dropped = {"shot": shots_before - shots_after, "attempt": attempts_before - attempts_after}
+    for asset in (series.get("assets") or {}).values():
+        if isinstance(asset, dict) and str(asset.get("ownerId")) in dropped.get(str(asset.get("ownerType")), ()):
+            asset["ownerType"], asset["ownerId"] = "episode", episode_id
 
 
 def update_series_episode(
@@ -1468,6 +1554,7 @@ def update_series_episode(
     current = episodes.get(episode_id) if isinstance(episodes, dict) else None
     if not isinstance(current, dict):
         raise ValueError("Series episode not found")
+    guard_episode_number(episodes, patch.get("seasonId") or current.get("seasonId"), patch, episode_id)
     current_revision = _integer(updated.get("revision"), 1, 1)
     if base_series_revision is not None:
         try:
@@ -1493,7 +1580,12 @@ def update_series_episode(
         if key in patch:
             merged[key] = copy.deepcopy(patch[key])
     if "shots" in patch:
-        merged["shots"] = _merge_episode_shot_patch(current.get("shots"), patch["shots"])
+        merged["shots"] = _merge_episode_shot_patch(current.get("shots"), patch["shots"], replace=patch.get("replaceShots") is True)
+        _keep_dropped_take_files(updated, episode_id, current.get("shots"), merged["shots"])
+    if "score" in patch:
+        # A cue just written must name shots the episode has; one left behind by a rewrite is only skipped at assembly.
+        from .series_score import normalize_score
+        normalize_score(merged.get("score"), merged.get("shots"), strict=True, kept=_objects(current.get("score")))
 
     from .series_shot_dialogue import annotate_episode_shot_dialogue, sync_episode_shot_dialogue
     if patch.get("syncShotDialogueFromScript") is True:
@@ -1624,7 +1716,16 @@ def update_shot_render_attempt(shot: dict, attempt_id: str, **patch: Any) -> dic
     return updated
 
 
-def approve_shot_render_attempt(shot: dict, attempt_id: str) -> dict:
+# Who decided on a take (``approvedBy`` / ``reviewedBy``): a person in Series Lab, an MCP agent, Ask to the Wizard,
+# or the server's own render approving what it made (``approve: true``, ``series.episode.produce``).
+REVIEWERS = ("user", "agent", "wizard", "server")
+
+
+def _reviewer(value: Any) -> str:
+    return value if value in REVIEWERS else "user"
+
+
+def approve_shot_render_attempt(shot: dict, attempt_id: str, approved_by: str = "user") -> dict:
     updated = copy.deepcopy(shot)
     attempt = next((
         item for item in _objects(updated.get("attempts")) if item.get("id") == attempt_id
@@ -1634,13 +1735,15 @@ def approve_shot_render_attempt(shot: dict, attempt_id: str) -> dict:
     if attempt.get("status") != "completed" or not attempt.get("outputAssetIds"):
         raise ValueError("Only a completed Series shot attempt with output can be approved")
     updated["approvedAttemptId"] = attempt_id
+    now, reviewer = _now(), _reviewer(approved_by)
     updated = update_shot_render_attempt(
-        updated, attempt_id, reviewDecision="approved", reviewedAt=_now(),
+        updated, attempt_id, reviewDecision="approved", reviewedAt=now, reviewedBy=reviewer,
+        approvedBy=reviewer, approvedAt=now,
     )
     return updated
 
 
-def approve_episode_render_attempts(episode: dict, selections: Any) -> dict:
+def approve_episode_render_attempts(episode: dict, selections: Any, approved_by: str = "user") -> dict:
     """Approve a reviewed episode selection atomically on a detached copy."""
     if not isinstance(selections, list) or not selections:
         raise ValueError("Select at least one completed Series shot attempt")
@@ -1663,12 +1766,12 @@ def approve_episode_render_attempts(episode: dict, selections: Any) -> dict:
         shot_index = shot_indexes.get(shot_id)
         if shot_index is None:
             raise ValueError(f"Series shot {shot_id} not found")
-        shots[shot_index] = approve_shot_render_attempt(shots[shot_index], attempt_id)
+        shots[shot_index] = approve_shot_render_attempt(shots[shot_index], attempt_id, approved_by)
     updated["shots"] = shots
     return updated
 
 
-def reject_shot_render_attempt(shot: dict, attempt_id: str) -> dict:
+def reject_shot_render_attempt(shot: dict, attempt_id: str, rejected_by: str = "user") -> dict:
     updated = copy.deepcopy(shot)
     attempt = next((
         item for item in _objects(updated.get("attempts")) if item.get("id") == attempt_id
@@ -1676,7 +1779,7 @@ def reject_shot_render_attempt(shot: dict, attempt_id: str) -> dict:
     if not attempt:
         raise ValueError("Series shot render attempt not found")
     updated = update_shot_render_attempt(
-        updated, attempt_id, reviewDecision="rejected", reviewedAt=_now(),
+        updated, attempt_id, reviewDecision="rejected", reviewedAt=_now(), reviewedBy=_reviewer(rejected_by),
     )
     if updated.get("approvedAttemptId") == attempt_id:
         updated.pop("approvedAttemptId", None)
