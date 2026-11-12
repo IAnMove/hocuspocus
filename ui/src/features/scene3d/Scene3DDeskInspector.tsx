@@ -14,6 +14,7 @@ import { Scene3DDocumentControls } from './Scene3DDocumentControls'
 import { Scene3DFramingControls } from './Scene3DFramingControls'
 import { Scene3DGeometryReview } from './Scene3DGeometryReview.tsx'
 import { Scene3DMotionControls } from './Scene3DMotionControls'
+import { Scene3DRestControls } from './Scene3DRestControls'
 import { Scene3DRoomCameraPicker } from './Scene3DRoomCameraPicker'
 import { Scene3DSlotCard } from './Scene3DSlotCard'
 import { Scene3DTransformPanel } from './Scene3DTransformPanel'
@@ -119,6 +120,8 @@ function Scene3DDeskObject({ model, slot }: { model: Scene3DDeskModel; slot: Sce
         onBumpGeneration={model.bumpGeneration}
         liveSource={() => ({ ...model.liveSource(), slotId: slot.id })}
       />
+      <Scene3DRestControls slot={slot} document={model.sceneDoc} workspace={model.workspace} locked={model.editingLocked}
+        onArranged={next => model.applyScene(next)} />
       <SlotMotion model={model} slot={slot} />
       {model.speechVisible && <div id="world3d-speech-inspector" className="min-w-0">
         <Scene3DSpeakerControls

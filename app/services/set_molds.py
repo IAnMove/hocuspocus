@@ -70,16 +70,32 @@ def _openings(mold, dims):
             raise ValueError("opening: unknown surface")
 
 
+def _turned_half(rot, half) -> tuple[float, float, float]:
+    """The half-size of the axis box that holds a block turned by Euler XYZ (radians) about its own centre."""
+    ax, ay, az = rot
+    sx, sy, sz = (math.sin(a) for a in rot)
+    cx, cy, cz = (math.cos(a) for a in rot)
+    matrix = ((cy * cz, -cy * sz, sy), (cx * sz + sx * sy * cz, cx * cz - sx * sy * sz, -sx * cy), (sx * sz - cx * sy * cz, sx * cz + cx * sy * sz, cx * cy))
+    return tuple(sum(abs(row[i]) * half[i] for i in range(3)) for row in matrix)
+
+
 def _blocks(mold, dims):
     for block in _entries(mold, "blocks"):
         box = block.get("box")
         if not _vector(box, 6) or not all(n > 0 for n in box[3:]):
             raise ValueError("block: invalid box")
         x, y, z, w, h, d = box
-        if not all(_inside(point, dims) for point in ([x-w/2, y, z-d/2], [x+w/2, y+h, z+d/2])):
+        if "rot" in block and _vector(block["rot"], 3):
+            hx, hy, hz = _turned_half(block["rot"], (w / 2, h / 2, d / 2))
+            low, high = [x - hx, y + h / 2 - hy, z - hz], [x + hx, y + h / 2 + hy, z + hz]
+        else:
+            low, high = [x-w/2, y, z-d/2], [x+w/2, y+h, z+d/2]
+        if not all(_inside(point, dims) for point in (low, high)):
             raise ValueError("block outside room")
         if not set(block.get("surfaces", [])) <= set(mold["surfaces"]):
             raise ValueError("block: unknown surface")
+        if "rot" in block and not _vector(block["rot"], 3):        # a turned block: Euler XYZ in radians about its own centre
+            raise ValueError("block: rot must be three numbers")
 
 
 def _places(mold, dims, surfaces):
@@ -169,6 +185,38 @@ def resolve_mold(id_: str, size: str = "medium") -> dict:
             if field in opening:
                 opening[field] *= scale[1]
     return {**mold, "size": size, "dimensions": [w, d, h]}
+
+
+SOFT_BLOCKS = frozenset({"trim", "curtain", "art", "lamp", "rug"})      # frames, curtains and wall hangings belong in front of a window
+
+
+def mold_problems(mold: dict) -> list[str]:
+    """What is wrong with a resolved mold that validation cannot see: ``hidden_opening: <block> covers <share> of the <wall> <kind>`` for furniture within a metre of
+    a wall that blocks at least 85 percent of an opening's height and 30 percent of its width (a wardrobe in front of the window). Empty: nothing found."""
+    width, depth, _height = mold["dimensions"]
+    problems = []
+    for opening in mold.get("openings", []):
+        wall = opening["wall"]
+        span = depth if wall in ("left", "right") else width
+        start, end = opening["x"] * span - opening["width"] / 2, opening["x"] * span + opening["width"] / 2
+        low, high = opening.get("sill", 0), opening.get("sill", 0) + opening["height"]
+        for block in mold["blocks"]:
+            if block.get("kind") in SOFT_BLOCKS:
+                continue
+            x, y, z, w, h, d = block["box"]
+            if wall in ("left", "right"):
+                gap = (x - w / 2 + width / 2) if wall == "left" else (width / 2 - x - w / 2)
+                along = (z - d / 2 + depth / 2, z + d / 2 + depth / 2)
+            else:
+                gap = (z - d / 2 + depth / 2) if wall == "back" else (depth / 2 - z - d / 2)
+                along = (x - w / 2 + width / 2, x + w / 2 + width / 2)
+            if not -1e-6 <= gap <= 1.0:
+                continue
+            across = max(0.0, min(end, along[1]) - max(start, along[0])) / (end - start)
+            up = max(0.0, min(high, y + h) - max(low, y)) / (high - low)
+            if across >= 0.3 and up >= 0.85:
+                problems.append(f"hidden_opening: {block['id']} covers {across:.0%} of the width of the {wall} {opening['kind']} (and all its height)")
+    return problems
 
 
 def catalog() -> list[dict]:

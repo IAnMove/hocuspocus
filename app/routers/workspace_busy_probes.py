@@ -11,7 +11,7 @@ core never loads ``model3d_service`` or the Series render queue just to be asked
 
 Families whose state lives in an object the server builds (the game and Series produce,
 native render and voice services, the World3D and Video 2D export services, the character
-animation job service, and the tables the Series assembly and Quick Video batch routers keep)
+animation and realistic character job services, and the tables the Series assembly and Quick Video batch routers keep)
 cannot be named here.
 The router factory that receives the object registers its probe itself, which is why
 those kinds are in :data:`REGISTERED_BY_THE_ROUTER` and not in a profile.
@@ -63,6 +63,7 @@ REGISTERED_BY_THE_ROUTER: dict[str, str] = {
     "world3d-export": "routers.world3d_export",
     "scene2d-export": "routers.scene2d_export",
     "character-animation": "routers.character_animation_jobs",
+    "real-character": "routers.model3d_real",
 }
 
 

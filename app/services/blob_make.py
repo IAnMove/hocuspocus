@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 
 from services.agent_activity import trusted_tool as agent_trusted_tool
 from services.asset_manifest import publish_generation_sidecar
-from services.blob_builder import PRESETS, BlobTraitsError, _copy, blob_pieces
+from services.blob_builder import PRESETS, BlobTraitsError, _copy, _layout, blob_pieces
 from services.humanoid_rig.errors import NotHumanoid
 from services.humanoid_rig.names import CLIP_IDS
 from services.humanoid_rig.rig import rig_humanoid
@@ -52,17 +52,37 @@ def resolve_request(payload: dict) -> tuple[dict, list[str]]:
     return merged, _clips(payload.get("clips"))
 
 
-def rig_glb(source: bytes, clip_ids: list[str]) -> tuple[bytes, dict]:
-    """Rig bytes on CPU. A refusal keeps the rig's reason."""
+def rig_glb(source: bytes, clip_ids: list[str], hints: dict | None = None) -> tuple[bytes, dict]:
+    """Rig bytes on CPU. A refusal keeps the rig's reason. ``hints``: the mould's leg layout (``leg_hints``)."""
     try:
-        return rig_humanoid(source, list(clip_ids))
+        return rig_humanoid(source, list(clip_ids), hints=hints)
     except NotHumanoid as exc:
         raise BlobRigError(exc.reason) from exc
+
+
+def leg_hints(layout: dict | None) -> dict | None:
+    """Where the mould put the legs, in the GLB's metres, for the rig to use when a skirt hides them (``layout_hints``)."""
+    if not layout or not all(isinstance(layout.get(key), (int, float)) for key in ("leg_top", "knee", "leg_bottom")):
+        return None
+    return {key: float(layout[key]) for key in ("leg_top", "knee", "leg_bottom", "leg_d", "torso_bottom") if isinstance(layout.get(key), (int, float))}
+
+
+def body_hints(built: dict) -> dict | None:
+    """The leg hints of a ``blob_pieces`` result: its layout, or the layout of its pieces (a blocky body has no legs layout)."""
+    if built["traits"].get("mesh") == "blocky":
+        return None
+    return leg_hints(built.get("layout") or _layout(built["traits"]))
+
+
+def rerig_body(glb: bytes, traits: dict, clip_ids: list[str]) -> tuple[bytes, dict]:
+    """Rig a body the mould made earlier from its recorded ``traits`` (the layout is rebuilt from them, nothing else)."""
+    return rig_glb(glb, clip_ids, body_hints(blob_pieces(traits)))
 
 
 def build_body(traits: dict, clip_ids: list[str], face_fit=None, relief=None) -> dict:
     """Pieces, both GLBs and the humanoid sidecar. Nothing is written. ``face_fit`` is the face picture's skull box for a loft."""
     built = blob_pieces(traits)
+    hints = body_hints(built)
     if built["traits"].get("mesh") == "blocky":
         from services.blob_blocky import blocky_glb
         built.pop("layout", None)
@@ -72,7 +92,7 @@ def build_body(traits: dict, clip_ids: list[str], face_fit=None, relief=None) ->
         glb = loft_glb(built["traits"], built.pop("layout"), "blob", fit=face_fit, relief=relief)
     else:
         glb = compose_glb(built["pieces"], "blob")
-    rigged, sidecar = rig_glb(glb, clip_ids)
+    rigged, sidecar = rig_glb(glb, clip_ids, hints)
     return {**built, "glb": glb, "rigged": rigged, "sidecar": sidecar}
 
 

@@ -13,6 +13,7 @@ from services.blob_builder import BlobTraitsError
 from services.blob_make import build_body, resolve_request, write_body
 from services.character_3d_styles import PLANNED_LIMIT, STYLES as REGISTRY
 from services.make_gates import humanoid_report, picture_notes, pictures_gate, relief_gate, with_gates
+from services.real_character_recipe import INPUT_FIELDS as REAL_FIELDS, resolve_input
 
 
 def _painted(size):
@@ -151,6 +152,10 @@ def test_every_style_that_is_not_planned_names_a_make_recipe_the_operation_accep
         if style["operation"] == "model3d.anime.make":
             assert recipe["style"] in STYLES, key
             assert resolve_traits({"style": recipe["style"]})["style"] == recipe["style"], key
+        elif style["operation"] == "model3d.real.make":
+            assert {"outfit_prompt", "face_prompt"} <= set(recipe) <= set(REAL_FIELDS), key
+            concrete = {field: value.split("|")[0] if "|" in value else "Plain clothes." for field, value in recipe.items()}
+            assert resolve_input(concrete, None)["gender"] == "man", key   # the recipe as written is accepted by its own operation
         else:
             assert resolve_request({"traits": {"family": recipe["family"]}})[0]["family"] == recipe["family"], key
         checked += 1

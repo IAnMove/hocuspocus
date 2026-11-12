@@ -56,6 +56,7 @@ import { registerVoiceBandCapabilities } from './voiceBandCapabilities'
 import { registerMediaToolCapabilities } from './mediaToolCapabilities'
 import { registerLipsyncRedoCapabilities } from './lipsyncRedoCapabilities'
 import { registerWorld3DTemplateCapabilities } from './world3dTemplateCapabilities'
+import { registerWorld3DTemplatePlanCapabilities } from './world3dTemplatePlanCapability'
 import { registerRoomSetCapabilities } from './roomSetsCapabilities'
 import { registerVideo2DTemplateCapabilities } from './video2dTemplateCapabilities'
 import { registerStudioCapabilities } from './studioCapabilities'
@@ -67,6 +68,7 @@ import { registerProgrammaticVideoCapability } from './programmaticVideo'
 import { registerSpeechAnalysisCapability } from './speechAnalysisCapability'
 import { registerBlobBodyCapability } from './blobBodyCapability'
 import { registerAnimeCharacterCapability } from './animeCharacterCapability'
+import { registerRealCharacterCapability } from './realCharacterCapability'
 export { reconcileProgrammaticVideoRequest, type AgentPrepareProgrammaticVideoAction } from './programmaticVideo'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import {
@@ -1218,6 +1220,7 @@ defineSceneControlCapability<AgentExport3dSceneAction>('export_3d_scene', 'Expor
 
 registerLipsCreatorCapabilities(defineCapability)
 registerWorld3DTemplateCapabilities(defineCapability)
+registerWorld3DTemplatePlanCapabilities(defineCapability)
 registerRoomSetCapabilities(defineCapability)
 registerVideo2DTemplateCapabilities(defineCapability)
 registerProductionWorkCapabilities(defineCapability)
@@ -1237,6 +1240,7 @@ registerProgrammaticVideoCapability(defineCapability)
 registerSpeechAnalysisCapability(defineCapability)
 registerBlobBodyCapability(defineCapability)
 registerAnimeCharacterCapability(defineCapability)
+registerRealCharacterCapability(defineCapability)
 
 export function getCapability(name: string): CapabilityDefinition | undefined {
   return definitions.get(name)

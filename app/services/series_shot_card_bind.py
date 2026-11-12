@@ -62,7 +62,10 @@ def sheet_controls(animation: dict[str, Any], card: str) -> dict[str, Any]:
     if card in ("walk-cycle-sheet", "walk-two-pose"):
         steps = 2 if card == "walk-cycle-sheet" else 1
         fps = max(1.0, float(animation.get("fps") or 4))
-        return {**base, "facing": "left" if animation.get("facing") == "left" else "right", "step": min(1.0, max(0.3, round(frames / (steps * fps), 2)))}
+        facing = "left" if animation.get("facing") == "left" else "right"
+        stride = animation.get("stride")  # the ground a cycle of the feet covers, in heights of the figure: the card moves the figure by it
+        return {**base, "facing": facing, "sheetFacing": facing, **({"stride": stride} if isinstance(stride, (int, float)) and not isinstance(stride, bool) and stride > 0 else {}),
+                "step": min(1.0, max(0.3, round(frames / (steps * fps), 2)))}
     return {**base, "fps": animation.get("fps") or 4, "loop": animation.get("loop") or "once"}
 
 

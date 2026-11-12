@@ -25,7 +25,7 @@ def kit(**extra):
 
 
 LINES = [{"start": 1.0, "cues": [{"start": 0, "end": 0.2, "value": "D"}, {"start": 0.2, "end": 0.4, "value": "E"},
-                                 {"start": 0.4, "end": 0.6, "value": "X"}, {"start": 0.6, "end": 0.5, "value": "D"}],
+                                 {"start": 0.4, "end": 0.6, "value": "X"}, {"start": 0.6, "end": 0.6, "value": "D"}],
           "audio": "/api/v1/file/voices/lola-0.wav?workspace=studio"},
          {"start": 3.5, "cues": [{"start": 0, "end": 0.3, "value": "B"}]}]
 
@@ -43,8 +43,11 @@ def test_the_talk_block_uses_approved_art_anchors_and_shifted_cues():
     assert talk["cues"] == [{"start": 1.0, "end": 1.2, "state": "wide"}, {"start": 1.2, "end": 1.4, "state": "round"},
                             {"start": 1.4, "end": 1.6, "state": "closed"}], "times move by the line start; no drawing for B"
     assert talk["rest"] == "closed" and talk["mouth"]["scale"] == 0.06 and talk["mouthAnchors"] == {"round": kit()["anchors"]["base"]["mouthStates"]["round"]}
-    assert talk["blink"]["anchor"]["offsetY"] == -27 and talk["blinks"] == blink_times("lola", 8) and talk["blinks"][0] == 0.9
+    assert talk["blink"]["anchor"]["offsetY"] == -27 and talk["blinks"] == blink_times("lola", 8) and 0.9 <= talk["blinks"][0] <= 2.5
     assert all(2.6 <= b - a <= 4.6 for a, b in zip(talk["blinks"], talk["blinks"][1:]))
+    firsts = {blink_times(f"kit-{n}", 30)[0] for n in range(6)}
+    assert len(firsts) > 1, "faces of one scene must not all blink at the same frame"
+    assert blink_times("lola", 30) == blink_times("lola", 30), "still deterministic per seed"
     assert "blink" not in talk_block(kit(), LINES, blink=False)
     own = kit(); own["anchors"]["base"]["blinkSource"] = "/api/v1/file/kit-lola-base-blink-1.png?workspace=cast"
     assert talk_block(own, LINES)["blink"]["source"] == own["anchors"]["base"]["blinkSource"], "the pose's own closed eyes"
@@ -92,7 +95,7 @@ def test_the_mcp_operation_talks_by_object_id_with_a_revision(tmp_path):
     reply = execute_command("world3d.scene.talk", arguments, root)
     scene = reply["result"]["scene"]
     assert scene["revision"] == 2 and scene["talk"] == {"objectId": "hero", "cues": 3, "mouths": ["closed", "round", "wide"],
-                                                        "blinks": 2, "tracks": ["talk-hero-0"]}
+                                                        "blinks": len(blink_times("lola", 6)), "tracks": ["talk-hero-0"]}
     stored = inspect_scene("studio", "w3d-talk00000000", root)
     assert stored["document"]["slots"][0]["screen"]["talk"]["cues"][0]["state"] == "wide"
     assert execute_command("world3d.scene.talk", arguments, root)["replayed"] is True
@@ -116,3 +119,13 @@ def test_a_talk_with_no_cues_says_so(tmp_path):
                                                                     "object_id": "hero", "kit_id": "lola", "lines": [{"start": 0, "cues": []}]}}
     scene = execute_command("world3d.scene.talk", arguments, root)["result"]["scene"]
     assert scene["talk"]["cues"] == 0 and "talk_no_cues" in scene["warnings"]
+
+
+def test_a_cue_that_is_not_start_end_value_with_a_mouth_sound_is_refused():
+    for bad, words in (({"start": 0, "end": 0.2, "value": "Z"}, "'Z' is not a mouth sound"), ("D", "is not an object"),
+                       ({"start": 0.3, "end": 0.1, "value": "D"}, "ends (0.1 s) before it starts")):
+        with pytest.raises(TalkError) as refused:
+            talk_block(kit(), [{"start": 0, "cues": [bad]}])
+        assert refused.value.code == "invalid_cue" and words in str(refused.value) and "Rhubarb letter" in str(refused.value)
+    assert talk_block(kit(), [{"start": 0, "cues": [{"start": 0, "end": 0.2, "value": "rest"}]}])["cues"][0]["state"] == "closed", \
+        "a phonetic name is a sound too"

@@ -32,7 +32,7 @@ those ids and file names, never invent one.
      front, columns behind the cast) listed in its `layout2d.layers` (below).
      Paint the plate empty of anything that must move (boats, waves, crowds, rain): a frozen wave reads as broken.
      Animate that motion afterwards, as an H3 loop (`image_start` and `image_end` the same image) or a Video 3D scene;
-   - 3D background: `world3d.templates.suggest` (below) → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
+   - 3D background: `world3d.templates.plan` or `world3d.templates.suggest` (below) → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
    After changing characters or locations, `series.canon.approve`.
 3. **Write the episode:** `series.episode.from_script` with the whole script (format below), every language in the
    same lines. Send it with `check: true` first: it lists every unknown character, pose, location, file or effect. It assigns the ids, writes the shots and a language version for every other language.
@@ -352,13 +352,17 @@ With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GL
 
 `model3d.blob.make` builds one round-headed person and rigs it in the same call (Wizard `blob_make`, the Studio 3D panel, or `POST /api/v1/model3d/blob`). Pass a `preset` (`sailor`, `cashier`, `boss`, `kid`, `big`, `lanky`, `blob_chef`, `blob_pirate`, `blob_scout`, `anime_girl`, `anime_boy`, `anime_senpai`, `chibi_kid`, `chibi_mage`, `chibi_knight`) and optional `traits`. `family` is `blob`, `anime` or `chibi`. Hair: `none`, `short`, `bangs`, `spiky`, `long`, `ponytail`, `twin_tails`, `bun`. The default clips are `idle`, `walk`, `talk`, `nod`, `wave`, `shrug`, `point` and `run`. `model3d.blob.presets` lists the limits. A moustache, glasses and the 2D face are not this body. Put the rigged file on `subject_1` (not `add: true`) and play `Wave`.
 
+## A realistic person (PS2 style)
+
+`model3d.real.make` makes one realistic 3D person as a server job (Wizard `make_real_character`, Studio 3D › Realista (PS2), or `POST /api/v1/model3d/real`): `name`, `gender` (`man`|`woman`), `outfit_prompt` (the clothes) and `face_prompt` (the face and hair), both in English; `seed`, `skin`, `height`, `body`, `bottom` optional. It takes minutes: follow it with `model3d.real.status`. The result is the rigged GLB, `faceAnchor`, the photo face kit `kit_id` and `warnings` (read them). To dress the same person again, call it with the same `name` and only the new `outfit_prompt`: the face and its kit are kept. `model3d.real.get` and `model3d.real.list` read the stored recipes; `model3d.real.presets` has ready outfits and faces. In a scene: `world3d.scene.face {kit_id, shape: "mesh", center, radii}` without `skin`, then `world3d.scene.talk` with `blink: false`.
+
 ## 3D sets: molds, skins and props
 
 1. Read `scene3d.sets.catalog` to choose a mold, size, camera, character marks and prop anchors.
 2. Call `series.location.set3d` with a version 1 envelope and a new `intent_id`:
    `input: {workspace, series_id, location_id, mold: "despacho", size: "medium", skin, props: []}`.
    `skin = {wall_back: {image: "straight-on shelves and framed plans"}, floor: {texture: "oak parquet", tile_m: 1}, wall_left: {color: "#b9aa94"}}`.
-   `light` (optional) relights the mold with another preset of its kind: interiors `office_day`, `bar_warm`, `studio`,
+   `light` (optional) relights the mold with another preset of its kind: interiors `office_day`, `bar_warm`, `studio`, `cabin`,
    `clinical`; exteriors `daylight`, `dusk`, `night_sky` (a night street gets a night key light and a dark sky).
    `wall_back: {image: "location"}` reuses the approved location picture. Asset skins: `{image: {asset: "wall.png"}}`,
    `{texture: {asset: "tile.png"}}` or `{video: {asset: "screen.mp4"}}`. Poll `series.location.set3d.status` until
@@ -390,8 +394,11 @@ With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GL
 
 Cards are chosen on axes: `uses` (dialogue, talk, reaction, figure, establishing, action, speed, impact, reveal,
 product, music, drive, transition, title, look, plate), `kind`, `place`, `shot`, `moves`, `still`, `subjects`,
-`travel`. `world3d.templates.suggest` first (`line`, `speakers`, `place`, `mood`, `beat`…): up to three cards with
-a `reason`, the filters it derived and `unknown_words` (words no card knows). Then `world3d.templates.list` with
+`travel`. `world3d.templates.plan` first, once for all the 3D shots (`shots: [{key, text, speakers, place}]`, `format: "portrait"`
+for a vertical series, which gives people talking the `vertical-dialogue-*` and `vertical-talk-*` cards): a primary and two alternates per shot with variety (no card twice in a row, one place keeps one stage with
+another `roomCamera` each time) and the `scene3d` keys to copy; a Series shot reads `template` and `roomCamera`. To replace one shot,
+`world3d.templates.suggest` (`line`, `speakers`, `place`, `mood`, `beat`…): up to three cards with a `reason`, the filters it derived
+and `unknown_words`; `compact: true` shortens its cards and `world3d.templates.catalog`'s. Then `world3d.templates.list` with
 those filters or words in either language; `match: partial` means no card had every known word: pick an id from the reply. A stage is
 `stage-<mold>` (28, `stage-sala`, `stage-cocina`…): two speaking marks and the cameras `two_shot`, `ots_a`, `ots_b`,
 `wide`, `close_1`, `close_2`, `entrance` (`roomCamera`); five are `far` from `two_shot`: shoot their lines from a
@@ -405,8 +412,22 @@ size and place in metres); a model is drawn 1.7 m × `scale` tall whatever its l
 (`{"heightM"|"widthM"|"depthM"|"longestM": metres}` or `"native"`) instead of guessing `scale`. A scene from nothing starts from a blank
 personal template (`docs/3d-video-compositor/HOWUSEIT.md`, "Agent-built scenes"). Time a move with `motion.start`/`motion.end` (scene seconds); `world3d.scene.beats` (`beats: [{t, who, verb}]`, verbs `appear`, `go`, `face`, `do`, `fx`) says who does what when and resolves into the object's own fields, a patch's `worldFx` places 3D effects (explosion, shockwave, sparks, smoke, fire) at a point, on an object or at a collision, and the replies list `layout.collisions` where a moving model passes through another (`collide: false` exempts a ghost). What the production dry run warns ruins a series shot too: `template_still` (a `still` card
 with no clip, motion, camera or world), `stage_unskinned` (a stage in its mold colours: give the location a set
-skin), `looks_samey` (one template and place in more than four shots in a row), `template_reused` (one card in
-more than four shots).
+skin), `looks_samey` (one template, place and camera in more than four shots in a row), `template_repeated` (one template with
+one camera in two shots in a row), `template_reused` (one card in more than four shots) and `template_format` (a card drawn
+portrait for a landscape frame, or the reverse). Name only template ids that `world3d.templates.list` or `world3d.templates.suggest`
+returned: an unknown id fails the shot at render time.
+
+## People seated at a table or on a bed (Video 3D)
+
+Never compute coordinates for sitting (every model is 1.7 m × `scale` tall). In `world3d.scene.patch` bindings declare:
+`{object_id: "table", add: true, furniture: {kind: "table"}}` (or any GLB with `height` in metres), chairs
+`{object_id: "chair_1", add: true, furniture: {kind: "chair"}, beside: {object: "table", side: "left"}}`, and each rigged
+character `{object_id: "ana", rest: {pose: "sit", on: "chair_1", at: "table"}}` (a `model3d.*.make` character keeps its
+recorded height, `recordedHeightM`; a bed: `on: "bed"`, also a stage's own bed). New objects need `add: true`. A bed's
+sides are `head`, `foot`, `left`, `right` (as lying in it); a nightstand `beside: {object: "bed"}` stands by the head.
+Then apply the `fix` bindings of `layout.contacts` until no contact warning is left, and check with
+`world3d.scene.preview {still: true}` (a real frame). No card needed: `world3d.scene.instantiate {template_id: "blank"}`.
+A `go`, `face` or `do` beat stands a sitter up (`rest_released`); lying down is not made yet.
 
 ## Edit one shot ("the fifth shot")
 

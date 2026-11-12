@@ -115,8 +115,13 @@ def _pictures(mold,skin,style,root,workspace,call,tag,provided):
     return requests,sources
 
 
+def _painted_by_the_room(value):
+    """A colour, a tile the room paints, or a moving window: nothing to generate."""
+    return 'color' in value or 'pattern' in value or 'view' in value
+
+
 def _surface(name,value,mold,requests,sources,root,workspace,call,tag,location_image):
-    if 'color' in value: return dict(value)
+    if _painted_by_the_room(value): return dict(value)
     kind=next(k for k in ('texture','image','video') if k in value); source=value[kind]
     raw=location_image if source=='location' else source.get('asset') if isinstance(source,dict) else sources.get(name)
     if not raw: raise ValueError(f'{name}: location image must be approved')
@@ -156,6 +161,7 @@ def _hex(rgb):
 def _auto_color(resolved,requested,mold_defaults,root,workspace):
     """Walls the request leaves alone follow the back wall's mean tone; the floor keeps the mold's colour, else a darker tone."""
     back=resolved.get('wall_back',{})
+    if back.get('pattern'): return      # a patterned room keeps the patterns it was authored with: there is no picture whose tone the other walls could follow
     source=back.get('image',{}).get('asset') or back.get('texture',{}).get('asset')
     if source:
         with Image.open(asset_path(source,root,workspace)) as image: tone=np.asarray(image.convert('RGB')).mean(axis=(0,1))

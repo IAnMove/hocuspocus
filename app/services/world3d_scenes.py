@@ -25,10 +25,17 @@ from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
 from services.world3d_blank_scene import editor_warnings
+from services.procedural_3d.glb_clips import glb_clips, idle_clip
+from services.world3d_scene_bounds import resolve_workspace_glb
 from services.world3d_scene_fit import apply_fit
 from services.world3d_scene_collisions import scene_collisions
+from services.world3d_scene_contacts import scene_contacts
+from services.world3d_scene_placement import placement_warnings
 from services.world3d_scene_layout import scene_layout
 from services.world3d_scene_motion import bind_motion, retime as retime_motion
+from services.world3d_rest_fields import bind_declared, check_removable
+from services.world3d_rest_place import resolve_placing
+from services.world3d_scene_frame import set_frame
 from services.world3d_world_fx import set_world_fx, world_fx_view
 from services.world3d_stage_cards import is_stage
 from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
@@ -196,11 +203,8 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     document = record["document"]
     warnings = []
     _set_duration(document, changes)
-    bindings = _bindings(changes)
-    stand_ins: set[str] = set()
-    for binding in bindings:
-        warnings.extend(_bind(document, binding, stand_ins, workspace, workspace_dir))
-    _check_carriers(document["slots"], bindings)
+    set_frame(document, changes)
+    stand_ins = apply_bindings(document, changes, warnings, workspace, workspace_dir)
     if "camera_template" in changes:
         warnings.extend(_set_camera_template(document, changes["camera_template"]))
     if isinstance(changes.get("camera"), dict):
@@ -231,6 +235,16 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     record["templateId"] = document.get("templateId") or record["templateId"]
     _write(workspace, scene_id, record, workspace_dir)
     return _view(scene_id, record, workspace, workspace_dir)
+
+
+def apply_bindings(document: dict, changes: dict, warnings: list, workspace: str | None, workspace_dir) -> set[str]:
+    """The bindings of a patch (or of the editor's arrange call), then ``beside`` and ``rest`` solved over the whole document."""
+    bindings, stand_ins = _bindings(changes), set()
+    for binding in bindings:
+        warnings.extend(_bind(document, binding, stand_ins, workspace, workspace_dir))
+    _check_carriers(document["slots"], bindings)
+    warnings.extend(resolve_placing(document, workspace, workspace_dir))
+    return stand_ins
 
 
 def update_scene(workspace: str, scene_id: str, workspace_dir, base_revision: int, change) -> dict:
@@ -392,7 +406,7 @@ def preview_scene(workspace: str, scene_id: str, workspace_dir, *, times=None, e
     frames = rendered.get("frames") or []
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
-        "times": [frame.get("time") for frame in frames], "frames": frames,
+        "times": [frame.get("time") for frame in frames], "frames": [{key: value for key, value in frame.items() if key != "png"} for frame in frames],
         "pending": rendered.get("pending") or _pending(record["document"]),
         "loadErrors": rendered.get("loadErrors") or [],
         "images": [{"mimeType": "image/png", "data": frame.get("png")} for frame in frames if frame.get("png")],
@@ -413,9 +427,10 @@ def published_name(workspace: str, scene_id: str, record: dict, workspace_dir) -
     return f"{title}-{scene_id}" if title else scene_id
 
 
-def publish_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
+def publish_scene(workspace: str, scene_id: str, workspace_dir, name: str | None = None) -> dict:
     record = _read(workspace, scene_id, workspace_dir)
-    saved = save_document(workspace, record["document"], name=published_name(workspace, scene_id, record, workspace_dir),
+    named = f"{ascii_slug(name, 60)}-{scene_id}" if isinstance(name, str) and ascii_slug(name, 60) else None
+    saved = save_document(workspace, record["document"], name=named or published_name(workspace, scene_id, record, workspace_dir),
                           preview=None, workspace_dir=workspace_dir, capability="world3d.scene.publish")
     opened = get_document(workspace, saved["name"], workspace_dir=workspace_dir)
     traits = _traits(opened["document"])
@@ -530,8 +545,7 @@ def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | N
         _add_slot(document, binding)
     slot = _target(document["slots"], binding)
     if binding.get("remove") is True:
-        if any((s.get("hold") or {}).get("carrier") == slot["id"] for s in document["slots"]):
-            raise World3DSceneError("item_in_use", "Remove held objects before their carrier")
+        check_removable(document, slot)
         document["slots"].remove(slot)
         return []
     warnings = _clip_warning(slot, binding)
@@ -550,7 +564,29 @@ def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | N
     _bind_checked(slot, binding)
     _bind_directional(slot, binding)
     bind_motion(slot, binding, document.get("duration") or 0)
-    return warnings + apply_fit(slot, binding, workspace, workspace_dir)
+    return warnings + apply_fit(slot, binding, workspace, workspace_dir) + bind_declared(slot, binding, workspace, workspace_dir) + _default_clip(slot, binding, workspace, workspace_dir)
+
+
+def _default_clip(slot: dict, binding: dict, workspace: str | None, workspace_dir) -> list[str]:
+    """A model bound with no clip is drawn in its bind pose, and a humanoid's is a T (arms 1.67 m wide): the figure would look broken and the placement
+    check would measure the T. When the GLB has a clip named like a rest pose (Idle, Stand), play it; the reply says so, so the agent can pick another."""
+    if (slot.get("media") or "model3d") != "model3d" or slot.get("clip") or not workspace or workspace_dir is None:
+        return []
+    if _given(binding, "clip") or not (_given(binding, "sourceUrl") or _given(binding, "sourceRef")):
+        return []
+    # A seated pose bakes its own clip after this binding. Playing Idle first would be stored as the clip to restore on standing.
+    if isinstance(binding.get("rest"), dict) or isinstance(slot.get("rest"), dict):
+        return []
+    try:
+        path, _reason = resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir)
+        clip = idle_clip(glb_clips(path)) if path else None
+    except Exception:  # noqa: BLE001 - a default must never fail a binding
+        return []
+    if not clip:
+        return []
+    slot["clip"] = clip
+    slot.setdefault("clipPlayback", {"loop": True})
+    return [f"clip_default: {slot.get('id')} plays \"{clip['name']}\" (no clip was given; a model with none stands in its bind pose, a T for a humanoid). Bind clip to choose another."]
 
 
 PICTURE_SCALE = 0.85     # a 1.7 m model over a 2 m cutout plane (ui/src/features/scene3d/pictureStandIn.ts)
@@ -814,14 +850,15 @@ def _retarget(document: dict) -> None:
 
 def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_dir=None) -> dict:
     document = record["document"]
-    passes = scene_collisions(document, workspace, workspace_dir)
-    shown = scene_layout(document, workspace, workspace_dir, passes)
+    passes, contacts = scene_collisions(document, workspace, workspace_dir), scene_contacts(document, workspace, workspace_dir)
+    shown = scene_layout(document, workspace, workspace_dir, passes, contacts)
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document), "worldFx": world_fx_view(document),
-        "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"]], "traits": _traits(document),
+        "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"], *contacts["warnings"], *placement_warnings(shown["layout"].get("placement") or [], shown["layout"]["items"])], "traits": _traits(document),
         **shown,
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationX", "rotationY", "rotationZ", "scale",
+                     "height", "beside", "rest", "furniture",
                      "motion", "collide", "grounded", "camera", "playbackSpeed", "worldFx", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
                      "renderLook", "toon", "motionLab", "grade", "lens", "camera_template", "look"],
     }
@@ -846,7 +883,7 @@ def _objects(document: dict) -> list[dict]:
             "marker": not source, "finished": bool(source), "clip": slot.get("clip"), "position": slot.get("position"),
             "rotationY": slot.get("rotationY"), **_shown_tilt(slot), "scale": slot.get("scale"), "motion": slot.get("motion"),
             "accepted": [slot.get("media") or "model3d"], **({"collide": False} if slot.get("collide") is False else {}),
-            **{key: slot[key] for key in _CHECKED_FIELDS if slot.get(key) is not None},
+            **{key: slot[key] for key in (*_CHECKED_FIELDS, "beside", "rest", "furniture") if slot.get(key) is not None},
         })
     return objects
 

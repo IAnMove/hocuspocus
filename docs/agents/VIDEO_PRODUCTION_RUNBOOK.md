@@ -69,7 +69,7 @@ interleave their jobs (that made each job reload a model and one piece take 7 h)
 work and refuses it with HTTP 422 `quality_gate`. Its `message` says in plain
 words what is wrong, in which shots, with which picture, model or camera, and
 what the limit is. `problems` has one item per check, each with its own
-`message`. A resume of an unchanged spec is never checked. The five checks:
+`message`. A resume of an unchanged spec is never checked. The seven checks:
 
 1. `still_reused`: one still picture fills three or more shots that are not
    marked deliberate (`allow: ["still"]`).
@@ -84,6 +84,16 @@ what the limit is. `problems` has one item per check, each with its own
    `fallback` also bakes only its `animations`), or ask for a clip it has.
 5. `unknown_camera`: a shot, a fill or a shot override names a `camera` that is
    not a camera preset.
+6. `unknown_template`: a 3D shot's `scene3d.template` (or `world`) is not a shipped
+   Video 3D card, a `stage-<mold>` card included. The compiler would throw it after
+   the song, the cast and the models were made. `suggestions` holds the closest ids;
+   `world3d.templates.suggest` finds a card by what the shot needs.
+7. `cast_role_not_on_card`: a 3D shot casts `subject_1`, `subject_2`, `background` or
+   `prop` (or gives a `subject`) and the card has no slot with that role; the message
+   names the roles it has (a `stage-*` card binds on `two-shot`: `subject_1`,
+   `subject_2`, `background`). Cast another role, give an extra object an id with
+   `add: true`, or pick a card with the role. A cast key that is not a role name is an
+   object id and is left to the compiler.
 
 Checks 1–3 only make the video look static. They refuse by default, because a
 piece that moves is the point. To make such a plan anyway, send
@@ -92,7 +102,7 @@ those problems as `warnings`, each marked `allowed_by: "allow_thin"`.
 `production.status` then lists them as `allow_thin` (each check with its shots)
 for as long as that spec runs; a resume keeps the record, and a new spec
 replaces it. The flag applies to the spec sent with it: a later changed spec
-needs it again. Checks 4–5 would fail after the GPU work, so `allow_thin` never
+needs it again. Checks 4–7 would fail after the GPU work, so `allow_thin` never
 skips them. Fix the plan first; use `allow_thin` only when the person asked for
 that look.
 
@@ -105,7 +115,12 @@ puts nothing on screen), one H3 clip replayed in several shots (`clip_replayed`)
 H3 shots without the cast (`h3_without_cast`), 3D models built from boxes
 (`procedural_model`: use `spec.models`), rigged models that never play a clip
 (`model_not_animated`), one 3D template in more than four shots
-(`template_reused`), and the same sequence of shot kinds or the same lyric look as
+(`template_reused`), one template with one camera in two shots in a row
+(`template_repeated`; `roomCamera`, `camera_template`, `frame`, `lens` and `camera` make a
+different camera), a card drawn portrait for a landscape frame or the reverse
+(`template_format`: `width` and `height` ask for the frame, the production's own is
+16:9; the compiler adapts the camera, but a card drawn for the frame frames better), and
+the same sequence of shot kinds or the same lyric look as
 another production in the workspace (`same_shot_pattern`, `same_lyric_look`).
 
 ## Edit it by hand, shot by shot
@@ -449,9 +464,17 @@ GLB animation name, or null), `motion`, `position`, `scale`, `rotationX`, `rotat
 turn, bob or slide without a skeleton. `rotationX`, `rotationY`, `rotationZ` and `motion.turnTo` are radians (6.283 is one full turn). Omitted `rotationX` and `rotationZ` leave the stored tilt. `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
 
-**Template + cast + painted set.** Prefer this over writing a `document`: ask
-`world3d.templates.suggest` for the shot as the brief phrases it (line, speakers,
-place, mood, beat), or pick a template whose roles fit (`world3d.templates.list`
+**Template + cast + painted set.** Prefer this over writing a `document`: call
+`world3d.templates.plan` once with every 3D shot of the plan (`shots: [{key, text,
+speakers, place}]`, `format: "portrait"` for a vertical video): it chooses a card
+for each with variety and returns the `scene3d` keys to copy (`template`,
+`roomCamera`, `world`, and `width`/`height` for a portrait frame). In a portrait
+plan, people talking get the vertical pack (`vertical-dialogue-*` for two or three,
+`vertical-talk-*` for one), drawn for 9:16 with the faces on the upper third and
+the lower third free for captions; without `format` the plan takes landscape cards
+for the 16:9 production. Then ask
+`world3d.templates.suggest` only to replace one shot (line, speakers, place, mood,
+beat), or pick a template whose roles fit (`world3d.templates.list`
 with `roles: ["subject_1", "background"]`, a `setting` such as `sea` or `city`,
 or the filters `kind`, `place` and `travel`) and assign only what changes. Every
 card says what the built shot does: `shot` (close, medium, wide, far, plate),
@@ -687,6 +710,8 @@ A shot whose `width` and `height` are portrait (1080×1920) gets the template's
 landscape camera adapted to the tall frame (a wider lens, the eye nearer, the
 lateral moves narrowed), the same adaptation the editor applies when a scene
 is switched to portrait; `camera_template` and `lens` are applied before it.
+A card drawn portrait (`format: "portrait"`, such as the `vertical-*` pack)
+keeps its own camera: it is framed for 9:16 already.
 
 **Diorama sets.** A painted set is a flat picture: a camera that turns or climbs
 sees its edge. `{"kind": "diorama"}` builds the set in 3D instead, from pictures
@@ -1254,8 +1279,8 @@ Every mold is also a Video 3D card `stage-<mold>`: `scene3d: {template: "stage-s
 stages the mold on `two-shot` in its default colours, so a shot needs no `sets` entry to stand in a place; name a
 `sets` room as `background` and the shot takes its painted skin instead. A staged room always moves a little (low
 dust motes and a key light that breathes), so it never trips `template_still`. The dry run warns `stage_unskinned` when a
-stage or room shows only its mold colours and `looks_samey` when the same template and background run for more than four
-shots in a row.
+stage or room shows only its mold colours and `looks_samey` when the same template, background and camera run for more than four
+shots in a row (alternate `roomCamera` to avoid it).
 Series uses `series.location.set3d`, inherits the series style and additionally accepts `{image: "location"}` for the
 approved location image; poll `.status` before rendering. See the `series.guide` section “3D sets: molds, skins and props”.
 

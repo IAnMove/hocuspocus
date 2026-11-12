@@ -130,3 +130,22 @@ export async function listWorld3DWorkingScenes(workspace: string, signal?: Abort
   const body = await readJson<{ scenes?: World3DWorkingScene[] }>(response, 'Could not list the working Video 3D scenes')
   return Array.isArray(body.scenes) ? body.scenes : []
 }
+
+/** The reply of the editor's arrange call: the document after the bindings, the inspect warnings and layout (contacts). */
+export interface World3DArranged {
+  document: unknown
+  warnings: string[]
+  layout?: { contacts?: Array<Record<string, unknown>> }
+}
+
+/** Run the placing bindings of ``world3d.scene.patch`` (height, furniture, beside, rest) on the editor's own document:
+ *  the server resolves them as for an agent and returns the document with plain positions, turns and clips. */
+export async function arrangeWorld3DDocument(workspace: string, document: unknown, bindings: Array<Record<string, unknown>>): Promise<World3DArranged> {
+  const response = await fetch(`${BASE}/api/v1/world3d/templates/arrange`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, document, bindings }),
+  })
+  const body = await readJson<World3DArranged>(response, 'Could not arrange the Video 3D scene')
+  return { document: body.document, warnings: Array.isArray(body.warnings) ? body.warnings : [], layout: body.layout }
+}

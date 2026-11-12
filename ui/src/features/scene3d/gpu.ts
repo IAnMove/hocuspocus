@@ -8,7 +8,7 @@ import { framingFov, framingPose } from './framing'
 import { shakeCamera } from './cameraShake.ts'
 import { SpeechFaceRuntime, speechFace } from './speech/runtime'
 import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
-import { FaceDecalRuntime } from './faceDecal'
+import { FaceDecalRuntime, setBlankFaceHidden } from './faceDecal'
 import { screenGeometry } from './screenGeometry'
 import type { ScreenMediaRuntime } from './screenMediaRuntime'
 import { framingAnchor, markRestPose } from './framingAnchor'
@@ -103,6 +103,8 @@ export type SlotGpu = {
   speechFace?: SpeechFaceRuntime
   facePack?: FacePackRuntime
   faceDecal?: FaceDecalRuntime
+  /** `hidden`: the unpainted face patch was hidden; `none`: checked, nothing to hide. */
+  blankFace?: 'hidden' | 'none'
   screen?: ScreenMediaRuntime
   screenAbort?: AbortController
   screenError?: Error
@@ -485,6 +487,15 @@ function syncActorSpeech(world: GpuWorld, gpu: SlotGpu, slot: Scene3DSlot, scene
     gpu.faceDecal ??= new FaceDecalRuntime(() => renderWorld(world))
     gpu.faceDecal.sync(gpu.root, slot.faceDecal, sceneSeconds)
   }
+  syncBlankFace(gpu, slot)
+}
+
+/** A face patch nothing paints (no decal, no face pack) is hidden; the moment something paints it, it shows again. */
+function syncBlankFace(gpu: SlotGpu, slot: Scene3DSlot) {
+  if (!gpu.loaded || gpu.kind !== 'model') return
+  const painted = Boolean(slot.faceDecal || gpu.faceDecal || slot.speech?.facePack || gpu.facePack)
+  if (!painted && !gpu.blankFace) gpu.blankFace = setBlankFaceHidden(gpu.root, true) ? 'hidden' : 'none'
+  else if (painted && gpu.blankFace === 'hidden') { setBlankFaceHidden(gpu.root, false); gpu.blankFace = undefined }
 }
 
 /** One action per distinct clip of the sequence, rebuilt only when the clips change. */

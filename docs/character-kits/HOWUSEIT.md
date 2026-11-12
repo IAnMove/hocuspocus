@@ -316,7 +316,7 @@ What the job does:
    meanwhile keeps its edits. Play it (the player uses the card's own frame rule), then approve or reject it in the panel.
    **Approve** is a person's decision unless the owner turned on «Modo un solo disparo» (next section): nothing approves it otherwise.
 
-**Marioneta (`method: "puppet"`).** A catalog walk can be cut from one drawing instead of one picture per pose. The panel, MCP `characters.animation.make` and the Wizard (`make_character_animation`) are the same job. The front walk uses the rest pose of `idle`. Every other direction uses `contact-a` of that direction's twelve-pose walk. `reference: {animation, pose}` overrides that pair. A reference the kit does not have is drawn inside the same job and is not saved as a second animation. See-through layers, when installed, are cached in the workspace folder `puppet-layers/<hash>/`. The kit stores only `provenance.layers` (true or false), not the picture URLs. Without See-through the job warns `puppet_no_layers`. The panel shows that note whenever Marioneta is selected. The drawing then needs the legs apart and no skirt. The gait check still runs. Planted feet stay within one pixel. `make_set` stays pose by pose unless `method` is passed. Puppet on `idle-directions` refuses those sheets (`puppet_not_a_walk`). Details: `docs/generation/WALK_PUPPET.md`.
+**Marioneta (`method: "puppet"`).** A catalog walk can be cut from one drawing instead of one picture per pose. The panel, MCP `characters.animation.make` and the Wizard (`make_character_animation`) are the same job. The front walk uses the rest pose of `idle`. Every other direction uses `contact-a` of that direction's twelve-pose walk. `reference: {animation, pose}` overrides that pair. A reference the kit does not have (or has, but whose joints the pose model cannot find or whose legs are far from its guide) is drawn inside the same job, up to `guide.puppet.tries` times with a new seed, and is not saved as a second animation; a reference that never fits its guide stays with the warning `puppet_reference_off`. A drawing that cannot be cut (no joints, no limbs apart) no longer fails the job: it goes on pose by pose with a warning `puppet_fell_back` (and `fallback` on the job) and offers no puppet again. Frame *i* of *n* shows phase *i/n*, so the first cell is the contact of the near leg like the guides; a reference that looks left makes a sheet that says `facing: "left"`, and the sheet checks read it mirrored (the guide looks right). See-through layers, when installed, are cached in the workspace folder `puppet-layers/<hash>/`. The kit stores only `provenance.layers` (true or false), not the picture URLs. Without See-through the job warns `puppet_no_layers`. The panel shows that note whenever Marioneta is selected. The drawing then needs the legs apart and no skirt. The gait check still runs. Planted feet stay within one pixel. `make_set` stays pose by pose unless `method` is passed. Puppet on `idle-directions` refuses those sheets (`puppet_not_a_walk`). Details: `docs/generation/WALK_PUPPET.md`.
 
 **«Modo un solo disparo» (one-shot mode).** Settings › Services has a switch (`agent_autonomy`: `review`, the default, or
 `one_shot`) so that one request to an agent can go from the idea to a finished animation. Off, nothing changes: a person approves.
@@ -332,7 +332,15 @@ overturns a decision a person gave.
 `characters.animation.make` and the Wizard's `make_character_animation` take `autoApprove` / `auto_approve`. In `one_shot` the job
 reads the sheet it wrote (`services/character_animation_checks.py`), approves it as the agent only if every check passes and reports
 `autoApproved` and `checks` (id, ok, value, limit); otherwise the animation stays pending and the failed checks say why. In `review`
-mode it is ignored and the job says so (`autoApproveNote`). The checks, set against 57 real Qwen sheets (all passed the picture checks):
+mode it is ignored and the job says so (`autoApproveNote`). Approval is the only thing that depends on the mode: every finished job,
+approval asked for or not, reports on its own sheet in `result` (`services/character_animation_verdict.py`): `checks` (all of them),
+`verdict` `{ok, failed: [check ids]}`, `gait` `{checked, missed: [pose ids]}` for a walk drawn pose by pose (each pose is measured against
+its guide while it is drawn, and a pose that was kept by a remake keeps its measure) and `warnings` `[{code, message, hint}]`:
+`sheet_checks_failed`, `gait_missed`, `checks_unavailable` (the sheet is saved all the same and is never auto-approved) and the
+method's own (`puppet_no_layers`, `puppet_reference_off`, `puppet_fell_back`). The hint names a way out that exists: make only the poses
+that are off again (`pose`) or, for a catalog walk, `method: "puppet"`; it says first what the job already did (see «Remake»). The job never
+changes method on its own, except that a puppet whose drawing cannot be cut goes on pose by pose. The panel shows the failed checks and marks the poses that missed their gait on the card of a
+finished animation, and a set lists each sheet's failed checks in every mode. The checks, set against 57 real Qwen sheets (all passed the picture checks):
 
 | check | passes when |
 |---|---|
@@ -344,10 +352,16 @@ mode it is ignored and the job says so (`autoApproveNote`). The checks, set agai
 | `ground_line` | the lowest row of every figure is on the line `feet`, within 2 % of the cell (real: 0.1 %) |
 | `scale_spread` | the smallest figure is at least 80 % of the biggest (legs 80 %, head 70 %, measured before the sheet equalised them; jump and bow 45 %); real walks 0.93 to 0.99 |
 | `scale_measure` | the sheet was scaled by what was asked, not by the height it falls back to when the legs or head cannot be measured |
-| `figure_height` (the full walks only) | every figure is as tall as the median of the cycle, within 3 % |
-| `repeated_poses` (the full walks only) | the same drawing (a hash of the figure) fills at most two cells in a row |
+| `figure_height` (the full walks and the four-pose `walk`) | every figure is as tall as the median of the cycle, within 3 % |
+| `repeated_poses` (the full walks and the four-pose `walk`) | the same drawing (a hash of the figure) fills at most two cells in a row |
 | `direction_mirror` (the full walks and the breaths) | the sheet is not the same drawing as another direction of the kit, nor its mirror (at least 75 % of the cells match) |
+| `walk_foot_order` (the profile and three-quarter full walks) | the legs reach ahead of and behind the torso in the order of the guide's walk (`services/walk_gait_metrics.py`): the sheet's series is correlated with the guide's at every shift and both ways of time; it fails when a far shift beats the identity (shifts 0 and +1 cells) by more than 0.15 (0.2 in three-quarter) or, in profile, when the fit is under 0.3. Real sheets: fit 0.46 to 0.67 and gap at most 0.05 (17 profile sheets); the same sheets rolled by 2 to 4 cells all fail. A profile sheet drawn half a cycle late passes: the silhouette of the phases *p* and *p + 1/2* is the same from the side |
+| `walk_foot_alternation` (the full walks) | the foot that steps toward the viewer is the lower one, alternating between the two contact poses (about +0.10 and -0.10 of the height in the guide). It fails only in the **front** view (real fit 0.45 to 0.75 on 4 sheets, a roll by half a cycle gives -0.6); in back and three-quarter views it is reported, never failing, because real sheets did not separate |
+| `walk_loop_seam` (the full walks) | a number only: the silhouette distance of the last cell to the first over the median step between cells (real sheets 0.06 to 1.24; a step alone reaches 1.99, so no limit is safe) |
+| `walk_facing` (the profile and three-quarter full walks) | no cell is nearer the others mirrored than as it is (least ratio of real sheets 0.96; fails below 0.92: a mirrored cell is caught 86 % of the time) |
 | `walk_gait` (the full walks) | every pose has its legs as far apart as the guide's walk has them at that moment of the step, seen from the sheet's direction, within 15 % of the figure's height after one scale for the whole sheet (0.7 to 1.15). It fails a passing pose drawn as a full stride and a back view that turned three-quarter. Run on 12 sheets made from words alone (Lucky Starr, 2026-10-20) it failed 10: the front walk of Lucky and the two four-pose walks passed |
+
+Each of the four `walk_*` checks beyond `walk_gait` lists `cells`, the indexes it blames. The LTX clips of `method: "video"` start two cells after the contact (best shift 2 mod 6 on the two real keyed clips), so they fail `walk_foot_order`.
 
 The checks catch a pose drawn at another size, a bad key, a missing pose or a broken sheet. They do not judge identity (a walk sheet
 of a younger-looking character passes): the agent still looks at the sheet and rejects it when it is out of model.
@@ -407,6 +421,12 @@ of the pose against the guide's at that phase (`frames[].gait`: expected, measur
 are more than `guide.tolerance` apart, `guide.tries` drawings in all; the closest stays. A model that refuses a second picture draws the
 walk from the words, and the poses are still measured. Breaths, gestures, expressions and the author's own animations have no guide.
 
+*Remake* (`services/character_animation_remake.py`). After the first pass of a catalog walk with the `gait` check (the twelve-pose walks), the job reads the keyed pictures as the sheet checks will and draws again only the poses that fail: those whose legs missed their guide and those a failing `walk_*` check blames. `guide.remake` of the catalog: at most `rounds` rounds (2; 0 turns it off), `poses` poses a round (4, the worst first) and `tries` new seeds a pose (2). Of all the drawings of a pose the best stays: not blamed by a check, then legs near the guide, then the lowest cell score. Every drawing is recorded in the take's `attempts` and in `autoRemake` of the job and of its result (round, seed, pictures, score, which one was kept), each with a file of its own. A tool error while remaking keeps the sheet drawn so far; a cancel cancels the job. A single `pose` made again on request, the puppet and the video are not followed by more remakes. If the sheet still fails, the warning says what was remade and offers `method: "puppet"` (one drawing cut by the walk mould): it never switches method itself. Approval is decided as before.
+
+*Scale.* A walk drawn pose by pose is joined with every pose scaled by its torso (neck to middle of the hips, from the CPU pose model; `services/walk_scale.py`) instead of one scale for all, so a pose drawn 8 % smaller does not make the figure shrink; the walk's own bob stays because the legs are not measured. With no model, uncertain joints, torsos that differ by more than 1.5 times or a scale outside 0.8 to 1.25 the sheet keeps its shared scale (`normalised` of the result says `torso` when it was used).
+
+*Stride* (`services/walk_stride.py`). The job stores `stride` on the animation: the ground a cycle of the feet covers, in heights of the figure. The guide's is 0.897 (the distance between its ankles at contact, doubled); a profile sheet scales it by how far apart its feet are on the ground at the widest pose against the guide's (17 real sheets: 0.89 to 1.08), the other directions keep the guide's. The Video 2D cards `walk-cycle-sheet` and `walk-two-pose` (control `stride`), the Series walk-in (the compiler plays the sheet at the cycles the entrance's ground asks) and the 2.5D sprites (a cycle covers `stride x heightM` metres) move the figure by it, so the boots do not slide. A sheet made before has none and every player keeps its constant (0.42 of the height a step, the author's `enterStep`, 1.5 m a cycle). The footfall sound of a Series walk-in (`repeat: "steps"`) still follows `enterStep`.
+
 What the checks cannot tell: that the three-quarter or the back view is **the same character** as the front one. Qwen may change the outfit
 or the hair behind the head. A person (or an agent that looks at the sheets) approves or rejects each direction; **Rehacer** makes one pose again.
 
@@ -435,7 +455,8 @@ picture pulls the composition: without it an expression came out as a whole figu
 picture, so the animation is limited animation (a few poses a second), not fluid motion; a bust (`view: bust`) is made for
 expressions and a whole figure for gestures and cycles. A figure looks the way the picture says: a layer cannot be mirrored,
 so the card walks it the way it looks (`facing`); only a sheet `sequence` can be drawn mirrored (`mirror: true`), which is how a
-Series shot lets a character walk in against the way its sheet looks.
+Series shot lets a character walk in against the way its sheet looks. The walk cards do the same with `sheetFacing` (the way the sheet looks;
+`auto` is the way the card walks, so nothing is mirrored): a card made to walk against it mirrors the sheet.
 
 ### 4.8 Animations in a Series shot
 
@@ -494,7 +515,7 @@ import and approve the take).
 
 - **Characters:** the `subject_N` slots take the shot's own people (in the shot's order) or the `cast` you give. The sheet cards
   (`walk-cycle-sheet`, `walk-two-pose`, `character-reaction`) play the character's **approved** animation sheet: `walk` by default
-  for the walk cards, always named (`wave`, `angry`...) for `character-reaction`; `frames`, `columns` and `facing`/`step` or
+  for the walk cards, always named (`wave`, `angry`...) for `character-reaction`; `frames`, `columns`, `facing`/`sheetFacing`, `step` and the sheet's `stride` (`services/series_shot_card_bind.py` `sheet_controls`, the same controls the Characters panel gives the card) or
   `fps`/`loop` come from the sheet. A pending or rejected sheet is refused with the words of §4.8. Every other card draws a pose
   picture (`poseId`, else the pose the shot gives that character).
 - **The rest of the card:** `background` is the shot's location plate; `foreground` and props come from `assets`

@@ -95,8 +95,9 @@ def fit_reference(drawn: dict[str, np.ndarray], direction: str, mirror: bool) ->
 
     A drawing is a contact pose of a walk sheet, a character standing, an A-pose: its joints lie where the mould's do at one phase of the
     cycle. Every phase (and every way to pair the limbs: the pose model calls a limb right or left by its look, which in profile is a
-    guess) is tried; the one whose joints, taken from the neck and in units of the spine, lie nearest the drawing's wins. The cycle then
-    starts at that phase, so the first frame is the drawing itself."""
+    guess) is tried; the one whose joints, taken from the neck and in units of the spine, lie nearest the drawing's wins. That phase is the
+    moment the drawing is cut at (``start``): every frame is moved from it to the phase it shows, and frame ``i`` of ``n`` shows phase
+    ``i / n`` as in the guides, so the first cell is the contact of the near leg whatever the drawing was."""
     size = float(np.linalg.norm(drawn["neck"] - _hipmid(drawn)))
     names = {"legs": ("hip", "knee", "ankle"), "arms": ("shoulder", "elbow", "wrist")}
     best = (np.inf, 0.0, {"legs": {"r": "r", "l": "l"}, "arms": {"r": "r", "l": "l"}})
@@ -715,7 +716,7 @@ def _lay_pelvis(canvas: np.ndarray, drawn: dict[str, np.ndarray], pelvis: np.nda
 def _one_frame(ready: dict[str, Any], index: int, frames: int) -> tuple[np.ndarray, dict[str, tuple[float, float]]]:
     size = ready["size"]
     width, height = size
-    phase = ready["start"] + index / frames
+    phase = index / frames
     pose = pose_at(ready["joints"], ready["feet"], ready["pairs"], ready["ref"], mould(ready["direction"], phase), ready["mirror"], ready["k"], ready["direction"] in FRONT)
     maps = pose["maps"]
     drawn = _plant(_draw_pieces(ready["parts"], ready["meshes"], maps, size), ready["ground"], size)

@@ -282,6 +282,40 @@ def test_silicon_grid_shots_pass_dry_run():
     assert report['h3_frames'] == 0
 
 
+def test_an_unknown_template_or_a_role_the_card_lacks_is_blocked_by_the_dry_run_not_by_the_exporter():
+    from services import music_production as runner
+    from services.production_dry_run import dry_run
+
+    def native(key, template, cast):
+        return {'key': key, 'kind': 'scene3d', 't0': 0, 'scene3d': {'template': template, 'cast': cast}}
+
+    one = {'subject_1': '/api/v1/file/a.glb?workspace=test'}
+    shots = [native('typo', 'speech-portriat', one), native('second', 'speech-portrait', {**one, 'subject_2': '/api/v1/file/b.glb?workspace=test'}),
+             native('fine', 'speech-dialogue', {**one, 'subject_2': '/api/v1/file/b.glb?workspace=test'})]
+    spec = runner.validate_spec({'title': 'Fit', 'song': {'lyrics': 'neon', 'caption': 'grid', 'duration': 12, 'bpm': 120}, 'style': {},
+                                 'shots': shots})       # the spec is well formed: only the plan check knows the cards
+    blocking = {item['code']: item for item in dry_run(spec)['blocking']}
+    assert list(blocking) == ['unknown_template', 'cast_role_not_on_card']
+    assert blocking['unknown_template']['suggestions'][0] == 'speech-portrait' and blocking['unknown_template']['shots'] == ['typo']
+    assert blocking['cast_role_not_on_card']['shots'] == ['second']
+
+
+def test_every_shipped_card_fits_a_shot_that_casts_its_own_roles_in_its_own_frame():
+    from services.production_template_fit import ROLES, fit_problems, fit_warnings
+    from services.world3d_template_catalog import builtin_cards
+
+    shots = []
+    for card in builtin_cards():
+        # A stage card is compiled on two-shot: it binds the two subjects, not its marks.
+        names = ('subject_1', 'subject_2') if card['kind'] == 'stage' else [role for role in ROLES if role in card['roles']]
+        shots.append({'key': card['id'], 'kind': 'scene3d',
+                      'scene3d': {'template': card['id'], 'cast': {role: '/api/v1/file/x.glb?workspace=test' for role in names},
+                                  'width': card['width'], 'height': card['height']}})
+    assert len(shots) > 800
+    assert fit_problems({}, shots) == []
+    assert fit_warnings({}, shots) == []
+
+
 def test_silicon_circuit_shots_pass_dry_run():
     from services import music_production as runner
     from services.production_dry_run import dry_run

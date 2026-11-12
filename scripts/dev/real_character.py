@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One command, one realistic character: the mould, its two texture pictures painted by Qwen, the face kit and a talking test clip.
+"""One command, one realistic character that talks: the server job model3d.real.make, then a voice and a talking test clip.
 
     python scripts/dev/real_character.py --port 42096 --token-file <worktree>/.server.token --outputs <worktree>/app/outputs \\
         --name marta --gender woman --skin "#E3B58F" \\
@@ -8,11 +8,11 @@
         --say "Hola, me llamo Marta y esto lo ha hecho la aplicacion de una sola vez." \\
         --voice "a warm, calm young woman, natural Spanish"
 
-What it does, through the app's own tools (against YOUR test server, never the live one): model3d.anime.make (the mould and the two guides),
-generation.image twice (Qwen over each guide), model3d.anime.make again with the pictures, characters.save + characters.rig.flat (the warp
-mouth kit from the front tile), generation.speech and audio.mouth_cues for the line, then a Video 3D scene of the character turning while it
-talks, exported to <outputs>/<workspace>/<name>_habla.mp4. One GPU model family at a time: the two pictures, then the voice, then the render.
-Every step skips what already exists (rerun after a failure). Nothing here changes the app."""
+The character is made by model3d.real.make (the job the Studio 3D panel «Realista (PS2)» and the Wizard start: guides, the two Qwen
+pictures, the textured character, the photo face kit; see docs/agents/CHARACTER_STYLES.md). This script only waits for it, then adds
+generation.speech and audio.mouth_cues for the line and a Video 3D scene of the character turning while it talks, exported to
+<outputs>/<workspace>/<name>_habla.mp4 (against YOUR test server, never the live one). One GPU model family at a time: the job's
+pictures, then the voice, then the render. A rerun reuses what the job already made. Nothing here changes the app."""
 from __future__ import annotations
 
 import argparse
@@ -25,13 +25,6 @@ import time
 import urllib.request
 from pathlib import Path
 
-BODY_PROMPT = ("Flat colour texture map for a realistic PS2-era 3D game character, the full body front view on the left and the back view on the right, "
-               "exactly the same T-pose, silhouette and layout as the reference image, painted over the grey mannequin. {body} "
-               "Even flat lighting with no shadows or shading, plain dark background. Photographic texture style of early 2000s games.")
-HEAD_PROMPT = ("Three photographic portrait textures of the head and neck of the same realistic person for a PS2-era 3D game, side by side in three tall panels "
-               "with exactly the same silhouettes and layout as the reference image, painted over the grey head. Left panel: the head seen from the front. "
-               "Middle panel: the head in pure right profile, face looking to the left. Right panel: the back of the head. {face} Neutral expression, mouth closed, "
-               "bare neck down to the collarbones, even flat lighting with no shading or shadows, plain dark background, photographic texture style of early 2000s games.")
 _counter = [0]
 
 
@@ -72,25 +65,19 @@ class Server:
         sys.exit(f"{tool} {name}: nothing after {limit} s")
 
 
-def paint(server: Server, name: str, guide: str, prompt: str, seed: int) -> str:
-    out = f"{name}"
-    server.generate("generation.image", out, {"model_type": "qwen_image_21_turbo", "prompt": prompt, "resolution": "2048x1024", "seed": seed, "num_inference_steps": 8,
-                                              "guidance_scale": 1.0, "image_refs": [f"/api/v1/file/{guide}?workspace={server.workspace}"], "video_prompt_type": "KI"}, "png")
-    return f"{out}.png"
-
-
-def kit(server: Server, character_id: str, pose_file: str) -> None:
-    library = server.call("characters.list", {}, mutate=False)
-    revision = int(library["revision"])
-    base = {"id": f"{character_id}-base", "name": f"{character_id} base", "source": f"/api/v1/file/{pose_file}?workspace={server.workspace}", "kind": "image",
-            "alphaStatus": "opaque", "reviewState": "approved", "workspace": server.workspace, "width": 1024, "height": 1024}
-    character = {"version": 1, "id": character_id, "name": character_id, "style": "cutout", "base": base, "poses": {"neutral": dict(base)}, "mouth": {}, "eyes": {}, "anchors": {},
-                 "provenance": [{"method": "photo-front-tile", "image": pose_file}]}
-    existing = {item.get("id") for item in (library.get("characters") or [])}
-    if character_id in existing:
-        return
-    saved = server.call("characters.save", {"character": character, "base_revision": revision})
-    server.call("characters.rig.flat", {"character_id": character_id, "base_revision": int(saved.get("revision", revision + 1)), "style": {"mouthStyle": "warp"}})
+def make(server: Server, args: argparse.Namespace) -> dict:
+    """model3d.real.make, waited for: the job's result (everything model3d.anime.make returns, kit_id of the photo kit, warnings)."""
+    payload = {"name": args.name, "gender": args.gender, "skin": args.skin, "outfit_prompt": args.body, "face_prompt": args.face, "seed": args.seed,
+               "traits": json.loads(args.traits)}
+    job = server.call("model3d.real.make", payload)
+    while job.get("status") in ("queued", "running", "cancelling"):
+        time.sleep(5)
+        job = server.call("model3d.real.status", {"job_id": job["jobId"]}, mutate=False)
+    if job.get("status") != "completed":
+        sys.exit(f"model3d.real.make {job.get('status')}: {job.get('error')}")
+    for note in job["result"].get("warnings") or []:
+        print(f"  warning {note['code']}: {note['message']}")
+    return job["result"]
 
 
 def speech(server: Server, name: str, text: str, voice: str, seed: int, language: str) -> tuple[str, list, float]:
@@ -160,7 +147,7 @@ def main() -> None:
     parser.add_argument("--skin", default="#C9966B")
     parser.add_argument("--body", required=True, help="the clothes and the body, in English, for Qwen")
     parser.add_argument("--face", required=True, help="the face and the hair, in English, for Qwen")
-    parser.add_argument("--traits", default="{}", help="more model3d.anime.make traits as JSON (face_depth, face_span, hair_style, ...)")
+    parser.add_argument("--traits", default="{}", help="more model3d.anime.make traits of style real as JSON (face_depth, face_span, hair_style, ...)")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--say", help="a line for the character to say (Spanish unless --language)")
     parser.add_argument("--voice", default="a calm adult voice, natural Spanish")
@@ -170,21 +157,17 @@ def main() -> None:
     args = parser.parse_args()
     server = Server(args.port, Path(args.token_file).read_text().strip(), args.workspace, Path(args.outputs))
     slug = "".join(c if c.isalnum() else "-" for c in args.name.lower()).strip("-")
-    traits = {"style": "real", "gender": args.gender, "skin": args.skin, "hair_style": "none", **json.loads(args.traits)}
-    print("1/5 the mould and its guides")
-    mould = server.call("model3d.anime.make", {"name": args.name, "traits": traits})
-    print("2/5 Qwen paints the body and the head")
-    body = paint(server, f"{slug}_body", mould["guide_body_file"], BODY_PROMPT.format(body=args.body), args.seed)
-    head = paint(server, f"{slug}_head", mould["guide_head_file"], HEAD_PROMPT.format(face=args.face), args.seed)
-    print("3/5 the character with its textures")
-    made = server.call("model3d.anime.make", {"name": args.name, "traits": {**traits, "texture": body, "texture_head": head}})
+    print("1/2 model3d.real.make (the mould, the two Qwen pictures, the character, the face kit)")
+    made = make(server, args)
     made["name_slug"] = slug
-    print("4/5 the face kit with warp mouths")
-    kit(server, f"real-{slug}", made["face_pose_file"])
+    if not made.get("kit_id"):
+        sys.exit("the character has no face kit: read the warnings above")
     line = speech(server, f"{slug}_voz", args.say, args.voice, args.seed, args.language) if args.say else None
-    print("5/5 the talking clip")
-    clip = scene(server, made, f"real-{slug}", line, args.turn, args.label)
-    print(json.dumps({"character": made["rigged_file"], "kit": f"real-{slug}", "body_picture": body, "head_picture": head, "clip": str(clip)}, indent=1))
+    print("2/2 the talking clip")
+    clip = scene(server, made, made["kit_id"], line, args.turn, args.label)
+    pictures = made["recipe"]["pictures"]
+    print(json.dumps({"character": made["rigged_file"], "kit": made["kit_id"], "body_picture": pictures["body"]["file"], "head_picture": pictures["head"]["file"],
+                      "clip": str(clip)}, indent=1))
 
 
 if __name__ == "__main__":

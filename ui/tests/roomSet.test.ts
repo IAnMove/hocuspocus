@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
-import { DUST_ID, keyLightBreath, OPENING_DEPTH, OPENING_MARGIN, roomPanels, roomSky, stageRoomSet, type RoomMold } from '../src/features/scene3d/roomSet.ts'
+import { DUST_ID, keyLightBreath, OPENING_DEPTH, OPENING_MARGIN, roomPanels, roomSky, stageRoomSet, validRoomSet, type RoomMold } from '../src/features/scene3d/roomSet.ts'
 import { createDefaultScene3DDocument, parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { templateTraits } from '../src/features/scene3d/templateTraits.ts'
 import { AmbientLight, Color, Mesh, MeshBasicMaterial, PointLight } from 'three'
 import { RoomSetRuntime, SKY_DOME } from '../src/features/scene3d/roomSetRuntime.ts'
 type AuthoredMold = RoomMold & { sizes: { medium: RoomMold['dimensions'] } }
 function authored(name: string): AuthoredMold {
-  const loaded = JSON.parse(readFileSync(new URL(`../../app/shared/set_molds/${name}.json`, import.meta.url), 'utf8')) as AuthoredMold
+  // `despacho` here is a frozen copy of the plain two-block office the tests were written against; the shipped mold is richer and may change.
+  const url = name === 'despacho' ? new URL('./fixtures/simple_office_mold.json', import.meta.url) : new URL(`../../app/shared/set_molds/${name}.json`, import.meta.url)
+  const loaded = JSON.parse(readFileSync(url, 'utf8')) as AuthoredMold
   loaded.dimensions = loaded.sizes.medium; loaded.size = 'medium'
   return loaded
 }
@@ -141,6 +143,29 @@ test('a painted furniture front leaves its ends in the mold colour', () => {
   assert.equal(shelf.filter(p => p.material.image).length, 1)
   assert(shelf.filter(p => !p.material.image).every(p => p.material.color === mold.defaultSkin.shelf_front.color))
   assert(desk.every(p => p.material.color === '#112233'))
+})
+
+test('a turned block keeps its six faces and turns them about its own centre', () => {
+  const block = { id: 'slat', box: [1, 0, 2, 0.2, 0.4, 0.6] as [number, number, number, number, number, number], surfaces: ['slat_front', 'slat_top'] }
+  const faces = (rot?: [number, number, number]) => roomPanels({ mold: { ...mold, blocks: [{ ...block, ...(rot ? { rot } : {}) }] } }).filter(p => p.surface.startsWith('slat'))
+  const plain = faces(), yawed = faces([0, Math.PI / 2, 0])
+  assert.equal(plain.length, 6)
+  assert.equal(yawed.length, 6)
+  const frontOf = (list: typeof plain) => list.find(p => p.surface === 'slat_front' && p.rotation[1] === 0) ?? list[0]
+  assert.deepEqual(plain[0].position.map(n => Math.round(n * 100) / 100), [1, 0.2, 2.3])
+  // a quarter turn about Y sends the front (+z) face to +x of the block's centre (1, 0.2, 2), and the centre of the block does not move
+  assert.deepEqual(yawed[0].position.map(n => Math.round(n * 100) / 100), [1.3, 0.2, 2])
+  const centre = (list: typeof plain) => [0, 1, 2].map(axis => list.reduce((sum, p) => sum + p.position[axis], 0) / list.length)
+  assert.deepEqual(centre(plain).map(n => Math.round(n * 100) / 100), centre(yawed).map(n => Math.round(n * 100) / 100))
+  assert.ok(frontOf(yawed))
+  assert.equal(validRoomSet({ mold: { ...mold, blocks: [{ ...block, rot: [0, 'x', 0] as unknown as [number, number, number] }] } }), false)
+})
+
+test('a painted furniture front can name the colour of its ends', () => {
+  const panels = roomPanels({ mold, skin: { shelf_front: { image: { asset: '/shelf.png' }, sideColor: '#223344' } } })
+  const shelf = panels.filter(p => p.surface === 'shelf_front')
+  assert.equal(shelf.filter(p => p.material.image).length, 1)
+  assert(shelf.filter(p => !p.material.image).every(p => p.material.color === '#223344'))
 })
 
 test('an exterior closes its view with a sky dome in its preset colours; an interior has none', () => {

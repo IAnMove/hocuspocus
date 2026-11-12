@@ -19,7 +19,8 @@ turned into. The collisions the moves cause are in ``layout.collisions`` of that
 
 One call is one sheet for the objects it names: ``go``, ``face`` and ``do`` beats of an object replace its earlier ``motion`` and ``clips``,
 ``appear`` replaces its ``appearance`` and ``fx`` beats its earlier beat effects. An object has one move per call (a second ``go`` is
-ignored with a warning); a ``face`` after the move cannot be timed (ignored with a warning).
+ignored with a warning); a ``face`` after the move cannot be timed (ignored with a warning). A character seated with ``rest``
+stands up for ``go``, ``face`` or ``do`` beats (``rest_released``): its seated clip holds the whole shot.
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ import math
 from services.world3d_beat_frame import check as check_frame
 from services.world3d_beat_fx import apply as apply_fx, clear as clear_fx
 from services.world3d_beat_verbs import HANDLERS, Beat, Sheet, Stage, finish, refuse
+from services.world3d_rest_fields import stand_up
 from services.world3d_scenes import World3DSceneError, update_scene
 
 VERBS = ("appear", "go", "face", "do", "fx")
@@ -118,6 +120,11 @@ def _clear(stage: Stage, sheets: dict[str, Sheet], fx: list[Beat]) -> None:
     """What the earlier beats of these objects set goes before the new ones are applied."""
     for sheet in sheets.values():
         verbs = {beat.verb for beat in sheet.beats}
+        if verbs & {"go", "face", "do"} and isinstance(sheet.slot.get("rest"), dict):
+            # A sitter's held clip is its whole shot: acting stands it up, as a patch with motion or clips does.
+            stand_up(sheet.slot, {})
+            stage.warnings.append(f"rest_released: {sheet.slot.get('id')} stood up for its go, face or do beats (its rest is "
+                                  "removed and its own model and clips are back); a seated character cannot act yet")
         if verbs & {"go", "face", "do"}:
             sheet.slot.pop("motion", None)
             sheet.slot.pop("clips", None)

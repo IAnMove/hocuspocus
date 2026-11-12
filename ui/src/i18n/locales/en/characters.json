@@ -808,6 +808,31 @@
       "approved": "approved by the agent",
       "rejected": "rejected by the agent"
     },
+    "notes": {
+      "checks": "The automatic checks flagged this sheet: {{checks}}.",
+      "poses": "The legs are far from the walk guide in: {{poses}}.",
+      "remedy": "Use Redo under the poses that look wrong.",
+      "remedyWalk": "Use Redo under the poses that look wrong, or pick «Puppet» and Make all again.",
+      "poseMissed": "The legs of this pose are far from the guide",
+      "check": {
+        "cell_count": "number of poses",
+        "cell_size": "sheet size",
+        "filled_cells": "an empty figure",
+        "clean_alpha": "key residue",
+        "silhouette": "a keyed rectangle",
+        "ground_line": "feet off the ground line",
+        "scale_spread": "figures of different sizes",
+        "scale_measure": "scale not measured",
+        "figure_height": "uneven height",
+        "repeated_poses": "repeated poses",
+        "direction_mirror": "a copy of another direction",
+        "walk_gait": "legs at the wrong moment of the step",
+        "walk_foot_order": "the poses are not in the order of the walk",
+        "walk_foot_alternation": "the lower foot does not alternate",
+        "walk_loop_seam": "the cycle does not close",
+        "walk_facing": "a pose looks the other way"
+      }
+    },
     "make": "Make",
     "methodLabel": "How to make this walk",
     "methodPoses": "Pose by pose",

@@ -13,7 +13,7 @@ import { mixSceneSpeech } from './speech/audio'
 import { sceneAudioWavDataUrl } from '../sceneFx/audioExport'
 import { FrameAccumulator, motionBlurOf, renderQualityOf, subframeTimes, type MotionBlur } from './exportQuality'
 import { heldFrameTime, holdBlock, motionStepOf, shiftHeldFrame, stopMotionJitterOf, stopMotionOffset } from '../stopMotion'
-import { checkGeometry, geometrySampleTimes, type GeometryReport, type GeometrySample } from './geometryChecks'
+import { checkGeometry, geometrySampleTimes, restContacts, type GeometryReport, type GeometrySample } from './geometryChecks'
 import type { Scene3DDocument } from './types'
 
 /** The export plan: output size, plus the supersampling and MSAA of the quality level. A template
@@ -109,7 +109,7 @@ window.__world3dExport = {
       const sample = stage.geometrySample?.(time, snapshot)
       if (sample) samples.push(sample)
     }
-    return checkGeometry(samples)
+    return checkGeometry(samples, restContacts(snapshot.slots))
   },
   dispose() {
     if (stage && snapshot) finishWorld3DExport(stage)

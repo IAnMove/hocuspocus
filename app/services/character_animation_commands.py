@@ -73,11 +73,22 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "refuses. In that mode autoApprove: true makes the job approve it for you when the sheet passes the automatic checks (cell count "
         "and size, figures filled with clean alpha and not a keyed rectangle, feet on one ground line, figures of one size); a sheet that "
         "fails stays pending and the job lists the failed checks. autoApprove is ignored, with a note, when the mode is review. "
+        "Whatever the mode, a finished job reports on its own sheet in result: checks, verdict {ok, failed}, gait {checked, missed} (the poses "
+        "of a walk whose legs missed their guide) and warnings [{code, message, hint}]; when it warns, make only the poses that are off again "
+        "with pose, or a catalog walk again with method puppet. A catalog walk drawn pose by pose is read after its first pass and only the "
+        "poses that fail (legs far from the guide, or blamed by the walk_foot_order, walk_foot_alternation or walk_facing checks, which list "
+        "the cells they blame) are drawn again, up to two rounds, keeping the best drawing of each (result.autoRemake lists every attempt); "
+        "if the sheet still fails the warning offers method puppet and the job never switches method itself. Each pose of such a walk is scaled "
+        "by its torso, and the sheet keeps stride, the ground a cycle of its feet covers in heights of the figure, which the players use so "
+        "boots do not slide. "
         "method video (optional; omit it, or pass poses, for the path above) makes a catalog walk from one LTX-2.3 clip guided by the "
         "OpenPose gait video, keys it and samples the same sheet. It needs LTX-2.3 distilled and the union-control LoRA installed, and it "
         "refuses a single pose or an animation that is not a walk. method puppet (optional, a catalog walk) cuts one drawing into the same "
         "sheet: the front walk uses the idle rest pose and the other directions use contact-a. reference {animation, pose} overrides that "
-        "drawing. Without See-through it warns puppet_no_layers. characters.animation.make_set stays pose by pose unless method is passed.",
+        "drawing. The reference is checked first (pose-model joints and, for a walk pose, the guide's legs) and drawn again up to three times; "
+        "without See-through it warns puppet_no_layers, a reference that never fits warns puppet_reference_off, and a drawing that cannot be cut "
+        "makes the job draw the walk pose by pose with the warning puppet_fell_back. The first cell is the contact of the near leg and a sheet cut "
+        "from a drawing that looks left says facing left. characters.animation.make_set stays pose by pose unless method is passed.",
     ),
     "characters.animation.make_set": (
         {"workspace": _WORKSPACE, "character_id": _ID, "set": _SET, "model": {"type": "string", "maxLength": 80},
@@ -113,7 +124,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": _WORKSPACE, "job_id": _ID}, ["workspace", "job_id"], False,
         "Read an animation job of characters.animation.make, or a set job of characters.animation.make_set (id animset-...: its sheets and "
         "done/total): queued, running (stage poses | sheet, each pose waiting | generating | "
-        "keying | ready | failed), completed (result: animation, sheet, count, reviewState; with autoApprove also autoApproved and checks), "
+        "keying | ready | failed), completed (result: animation, sheet, count, reviewState, checks, verdict {ok, failed}, gait {checked, missed}, warnings [{code, message, hint}]; autoApprove also sets autoApproved; no verdict means the checks were not read and warnings contains checks_unavailable, which is not a pass), "
         "failed (error), cancelling, cancelled or interrupted "
         "(a restart). Poses already made are kept for the next try.",
     ),

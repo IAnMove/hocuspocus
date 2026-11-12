@@ -32,8 +32,10 @@ import type { AgentMediaToolAction } from './mediaToolCapabilities'
 import type { AgentLipsyncRedoAction } from './lipsyncRedoCapabilities'
 import type { AgentMakeCharacterAnimationAction, AgentMakeCharacterAnimationSetAction, AgentReviewCharacterAnimationAction } from './characterAnimationCapabilities'
 import type { AgentMakeCharacterFaceAction } from './characterFaceCapabilities'
+import type { AgentMakeRealCharacterAction } from './realCharacterCapability'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
+import type { AgentPlan3DTemplatesAction } from './world3dTemplatePlanCapability'
 import type { AgentRoomSetsAction } from './roomSetsCapabilities'
 import type { AgentVideo2DTemplatesAction } from './video2dTemplateCapabilities'
 import type {
@@ -676,9 +678,11 @@ export type AgentAction = AgentOpenTabAction
   | AgentSpeechAnalysisEngineAction
   | AgentBlobMakeAction
   | AgentAnimeMakeAction
+  | AgentMakeRealCharacterAction
   | AgentLipsCreatorAction
   | AgentGenerateLipsAction
   | AgentWorld3DTemplatesAction
+  | AgentPlan3DTemplatesAction
   | AgentRoomSetsAction
   | AgentVideo2DTemplatesAction
   | AgentProductionWorksAction

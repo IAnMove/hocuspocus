@@ -98,8 +98,10 @@ through `uses`. The same REST route and MCP envelope as the other template opera
   Qwen skin.
 - **Ambient life**: every staged room carries low dust motes and a key light that breathes (±8 % over 6 s), so a stage
   is never `still`. A mold may set `"ambient": false`.
-- A stage shot whose skin is only colours warns `stage_unskinned` in the dry run. The same template and background in
-  more than four consecutive shots warns `looks_samey`.
+- A stage shot whose skin is only colours warns `stage_unskinned` in the dry run. The same template, background and
+  camera in more than four consecutive shots warns `looks_samey`; one template with one camera in two consecutive
+  shots warns `template_repeated`. `production.run` refuses an unknown template id (`unknown_template`, with the
+  closest ids) and a cast role the card has no slot for (`cast_role_not_on_card`) before any GPU work.
 
 ## 7. Packs by intent
 

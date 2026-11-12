@@ -12,6 +12,8 @@ from copy import deepcopy
 
 from services.world3d_scene_bounds import CUTOUT_HEIGHT, MODEL_HEIGHT, placed_bounds, slot_native_bounds
 from services.world3d_scene_collisions import scene_collisions
+from services.world3d_scene_contacts import scene_contacts
+from services.world3d_scene_placement import scene_placement
 
 MAX_ITEMS = 32
 CONVENTION = (f"metres, y up. A 3D model is drawn {MODEL_HEIGHT:g} m x scale tall (its bounding-box height, whatever its length); "
@@ -19,7 +21,8 @@ CONVENTION = (f"metres, y up. A 3D model is drawn {MODEL_HEIGHT:g} m x scale tal
               "boundsM.min/max/center/bottomY are in the scene after position and Euler XYZ (rotationX, rotationY, rotationZ; omitted X and Z are 0, which matches a yaw-only turn). A grounded object's lowest point sits at position[1].")
 LAYOUT_DOC = ("It also shows the shot in metres: camera (the authored family, eye, look, fov, framing and a shake summary; an orbit, "
               "a framing or a shake moves the live camera from these), light, duration, size {width, height, fps} and layout.items, one per object "
-              "(at most %d) with id, role, media, position, rotationY, rotationX and rotationZ when set, scale, sourceUrl, clip and boundsM. boundsM is a 3D model's real size and place "
+              "(at most %d) with id, role, media, position, rotationY, rotationX and rotationZ when set, scale, sourceUrl, clip, boundsM and, for a "
+              "character whose maker recorded it, recordedHeightM (its real height, used when it is bound without height, fit or scale). boundsM is a 3D model's real size and place "
               "from its workspace .glb, by the renderer's own sums: a model is drawn 1.7 m x scale tall (its bounding-box height, whatever its length), "
               "so a whole-environment GLB is 1.7 m tall at scale 1. boundsM.size is its own width, height and depth; min, max, center and bottomY are "
               "scene coordinates after position and Euler XYZ (rotationX, rotationY, rotationZ; omitted X and Z are 0), and a grounded object's lowest point sits at position[1]. It is the rest pose, so an "
@@ -28,22 +31,28 @@ LAYOUT_DOC = ("It also shows the shot in metres: camera (the authored family, ey
               "model, by the other model's parts (one box per mesh node): [{a, b, part, partName?, from_s, to_s, at [x, y, z], depth_m}] with a \"collision: ...\" warning each "
               "(layout.collisionsOmitted counts the passages beyond the cap); flat low parts (the ground) are not obstacles, objects that stand still are never compared, "
               "and collide: false exempts an object. A fixed camera whose eye is inside a part warns camera_inside_geometry. "
+              "layout.placement lists what is wrong with where STILL objects stand, with the position that fixes it, and a \"placement_<code>: ...; fix: position [...]\" warning each: "
+              "outside_room, sinks_into_support (a sleeper in the mattress), overhangs_support (a body hanging off the end of its couch), below_floor, floating, cropped "
+              "(under 70 percent of a character is in frame at the start, middle or end of a fixed or following camera) and tiny; apply the fix with one patch, do not look at a picture to find these. "
               "Publish a scene and it opens in the Video 3D editor's Open dialog."
               ) % MAX_ITEMS
 _PLAIN_CAMERA = ("family", "eye", "look", "fov", "frameFormat", "orbitRadius", "orbitHeight", "orbitTurns", "eyeOffset", "targetOffset", "lensShift")
 _FRAMING = ("targetSlot", "anchor", "from", "to", "lookFrom", "lookTo", "orbitTurns", "fovFrom", "fovTo", "relativeToFacing")
 
 
-def scene_layout(document: dict, workspace: str | None, workspace_dir, passes: dict | None = None) -> dict:
+def scene_layout(document: dict, workspace: str | None, workspace_dir, passes: dict | None = None, contacts: dict | None = None) -> dict:
     """``camera``, ``light``, ``duration``, ``size`` and ``layout`` of a scene document, ready to merge into a view.
 
     ``layout.collisions`` lists where a moving object passes through another (``passes``: the result of ``scene_collisions``
-    when the caller has it already)."""
+    when the caller has it already); ``layout.contacts`` how each rigged character sits or stands among the furniture
+    (``contacts``: the result of ``scene_contacts``). ``layout.placement`` is what is wrong with where still objects stand."""
     camera, light = document.get("camera"), document.get("light")
     size = {key: document[key] for key in ("width", "height", "fps") if key in document}
     layout = _layout(document, workspace, workspace_dir)
     found = passes if passes is not None else scene_collisions(document, workspace, workspace_dir)
     layout["collisions"] = found["collisions"]
+    layout["contacts"] = (contacts if contacts is not None else scene_contacts(document, workspace, workspace_dir))["contacts"]
+    layout["placement"] = scene_placement(document, layout["items"])["issues"]
     if found["omitted"]:
         layout["collisionsOmitted"] = found["omitted"]
     return {"camera": _camera(camera) if isinstance(camera, dict) else None,
@@ -98,7 +107,20 @@ def _item(slot: dict, workspace: str | None, workspace_dir) -> dict:
     item["boundsM"], reason = _bounds(slot, item["media"], workspace, workspace_dir)
     if reason:
         item["boundsReason"] = reason
+    recorded = _recorded(slot, item["media"], workspace, workspace_dir)
+    if recorded:
+        item["recordedHeightM"] = recorded
     return item
+
+
+def _recorded(slot: dict, media: str, workspace: str | None, workspace_dir) -> float | None:
+    """The real height the model's maker recorded (a mould character), shown so nobody guesses it."""
+    if media != "model3d" or not workspace or workspace_dir is None:
+        return None
+    from services.world3d_model_height import recorded_height
+    from services.world3d_scene_bounds import resolve_workspace_glb
+    base = slot.get("restBase") if isinstance(slot.get("restBase"), dict) else {}
+    return recorded_height(resolve_workspace_glb(base.get("sourceUrl") or slot.get("sourceUrl"), workspace, workspace_dir)[0])
 
 
 def _bounds(slot: dict, media: str, workspace: str | None, workspace_dir) -> tuple[dict | None, str | None]:

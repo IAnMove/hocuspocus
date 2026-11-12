@@ -271,9 +271,21 @@ def _puppet_provenance(raw: Any, label: str) -> dict[str, Any] | None:
         raise CharacterAnimationError(f"{label} provenance start is the cycle phase")
     if not isinstance(raw.get("layers"), bool):
         raise CharacterAnimationError(f"{label} provenance layers is true or false")
-    return {"method": "puppet", "reference": {"animation": _text(reference.get("animation"), f"{label} reference", 64, required=True),
-                                               "pose": _text(reference.get("pose"), f"{label} reference pose", 120, required=True)},
-            "start": float(start), "layers": raw["layers"]}
+    found = {"method": "puppet", "reference": {"animation": _text(reference.get("animation"), f"{label} reference", 64, required=True),
+                                                "pose": _text(reference.get("pose"), f"{label} reference pose", 120, required=True)},
+             "start": float(start), "layers": raw["layers"]}
+    if raw.get("facing") in ("left", "right", "front"):  # the way the reference drawing looked: the sheet looks the same way
+        found["facing"] = raw["facing"]
+    return found
+
+
+def _stride(value: Any, label: str) -> dict[str, float]:
+    """How much ground the feet of a walk carry the figure in a cycle, in heights of the figure (``services/walk_stride.py``); none when absent."""
+    if value is None:
+        return {}
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0.2 <= value <= 3.0:
+        raise CharacterAnimationError(f"{label} stride is a share of the figure's height between 0.2 and 3")
+    return {"stride": round(float(value), 3)}
 
 
 def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
@@ -301,6 +313,7 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
         if raw["scaleBy"] not in SCALE_BY:
             raise CharacterAnimationError(f"{label} scaleBy is one of {', '.join(SCALE_BY)}")
         result["scaleBy"] = raw["scaleBy"]
+    result.update(_stride(raw.get("stride"), label))
     for key in ("guideVideo", "clip"):
         if raw.get(key):
             result[key] = _source(raw[key], f"{label} {key}")
@@ -374,25 +387,29 @@ def _face_size(figure: Image.Image) -> float:
     return float(found["face"]["head"]) if found else 0.0
 
 
-def sheet_layout(poses: list[Image.Image], floor: int, torso: float, spec: dict[str, Any], scale_by: str = "height") -> dict[str, Any]:
+def sheet_layout(poses: list[Image.Image], floor: int, torso: float, spec: dict[str, Any], scale_by: str = "height",
+                 steady: list[float] | None = None) -> dict[str, Any]:
     """The scale of each pose, the cell's width, each pose's torso centre and the mode really used. The model draws every pose at a
     slightly different size, so by `height` all share one scale (the tallest fills ``figure`` of a cell and a bob or a crouch is not
     flattened); by `base` or `face` each pose is scaled so its legs or its head are as big as in the others, whatever the arms and
-    hands do. A part that cannot be measured in some pose (no face found) falls back to `height`."""
+    hands do. A part that cannot be measured in some pose (no face found) falls back to `height`. ``steady`` (``services/walk_scale.py``: the
+    factor that makes every torso as long as the median's) replaces the one shared scale of `height` for a walk drawn pose by pose."""
     measures = [body_measure(pose, floor, scale_by) for pose in poses]
     usable = scale_by != "height" and min(measures) > 0
-    ratios = [float(np.median(measures)) / measure for measure in measures] if usable else [1.0] * len(poses)
+    ratios = [float(np.median(measures)) / measure for measure in measures] if usable else list(steady) if steady else [1.0] * len(poses)
     unit = spec["cellHeight"] * spec["figure"] / max(pose.height * ratio for pose, ratio in zip(poses, ratios))
     scales = [unit * ratio for ratio in ratios]
     centres = [_torso_centre(pose, floor, torso) for pose in poses]
     reach = max(max(centre, pose.width - centre) * scale for pose, centre, scale in zip(poses, centres, scales))
     return {"scales": scales, "cellWidth": math.ceil(2 * reach + spec["cellHeight"] * 0.04) // 2 * 2, "centres": centres,
-            "scaleBy": scale_by if usable else "height", "measures": [round(measure, 1) for measure in measures]}
+            "scaleBy": scale_by if usable else "height", "measures": [round(measure, 1) for measure in measures],
+            "normalised": "torso" if steady and not usable else None}
 
 
 def build_sheet(sources: list[str], *, uploads_root: str, workspace_root: str, workspace: str, name: str = "animation",
-                columns: int | None = None, output_dir: str | None = None, scale_by: str = "height") -> dict[str, Any]:
-    """Join keyed pose pictures into one sprite sheet of equal cells, in the order given."""
+                columns: int | None = None, output_dir: str | None = None, scale_by: str = "height", normalise: bool = False) -> dict[str, Any]:
+    """Join keyed pose pictures into one sprite sheet of equal cells, in the order given. ``normalise`` scales each pose by its torso
+    (``services/walk_scale.py``) instead of one scale for all, for a walk drawn pose by pose; ``normalised`` of the reply says whether it did."""
     if scale_by not in SCALE_BY:
         raise CharacterAnimationError(f"scale_by is one of {', '.join(SCALE_BY)}")
     spec = catalog()["sheet"]
@@ -400,7 +417,11 @@ def build_sheet(sources: list[str], *, uploads_root: str, workspace_root: str, w
         raise CharacterAnimationError(f"Give 1 to {spec['maxPoses']} keyed pose pictures")
     paths = [resolve_character_kit_image(source, uploads_root=uploads_root, workspace_root=workspace_root) for source in sources]
     poses = [_open_pose(path, spec["alphaFloor"]) for path in paths]
-    layout = sheet_layout(poses, spec["alphaFloor"], spec["torsoShare"], spec, scale_by)
+    steady = None
+    if normalise:
+        from services import walk_scale  # the pose model is an optional CPU dependency: not loaded for any other sheet
+        steady = walk_scale.ratios(poses)
+    layout = sheet_layout(poses, spec["alphaFloor"], spec["torsoShare"], spec, scale_by, steady)
     scales, cell_width, centres = layout["scales"], layout["cellWidth"], layout["centres"]
     cell_height = spec["cellHeight"]
     wide = max(1, min(len(poses), columns or len(poses)))
@@ -428,7 +449,7 @@ def build_sheet(sources: list[str], *, uploads_root: str, workspace_root: str, w
     return {"filename": filename, "source": f"/api/v1/file/{quote(filename)}?workspace={quote(workspace)}", "path": destination,
             "width": sheet.width, "height": sheet.height, "count": len(poses), "columns": wide, "rows": rows,
             "cell": {"width": cell_width, "height": cell_height}, "feet": spec["feet"], "figure": spec["figure"], "scaleBy": layout["scaleBy"],
-            "requestedScaleBy": scale_by, "measures": layout["measures"],
+            "requestedScaleBy": scale_by, "measures": layout["measures"], "normalised": layout["normalised"],
             "poses": [{"width": pose.width, "height": pose.height} for pose in poses]}
 
 

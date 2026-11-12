@@ -544,6 +544,26 @@ test('an entrance walks with the approved twelve-pose walk-12 before the four-po
   assert.equal(compileSeriesShot({ ...kits, kevin: alone12 }, spec).layers.some(layer => layer.id === 'kit-kevin-sheet-walk-in'), true, 'a kit with only the twelve-pose walk walks with it')
 })
 
+test('a walk sheet that knows its stride walks in at the rate the ground asks: a cycle of its feet covers stride times the figure\'s height', () => {
+  const enter = { fromX: -15, start: 0.5, end: 3.5, gait: 'walk' as const, step: 0.6, sway: 1.5 }
+  for (const [stride, x] of [[0.7, 60], [0.9, 60], [0.9, 30], [1.1, 80]] as const) {
+    const scene = compileSeriesShot({ ...kits, kevin: animated({ 'walk-12': twelveCells({ stride }) }) }, alone([{ kitId: 'kevin', x, motion: 'still', enter }]))
+    const sheet = scene.layers.find(layer => layer.id === 'kit-kevin-sheet-walk-in')!
+    const sequence = sheet.sequence as { count: number; fps: number }
+    const cycles = sequence.fps * (enter.end - enter.start) / sequence.count
+    const ground = (x - enter.fromX) / 100 * scene.width
+    const figure = figureBox(scene, sheet.id).figure / 100 * scene.height
+    assert.ok(Math.abs(ground / cycles / figure - stride) < 0.01 * stride, `stride ${stride}, mark ${x}: a cycle covers ${(ground / cycles / figure).toFixed(3)} heights`)
+  }
+  // The same sheet over a longer way takes quicker steps, not longer ones.
+  const rate = (x: number) => (compileSeriesShot({ ...kits, kevin: animated({ 'walk-12': twelveCells({ stride: 0.9 }) }) }, alone([{ kitId: 'kevin', x, motion: 'still', enter }]))
+    .layers.find(layer => layer.id === 'kit-kevin-sheet-walk-in')!.sequence as { fps: number }).fps
+  assert.ok(rate(80) > rate(30) * 1.5)
+  // A sheet made before has no stride and keeps the author's step: twelve cells in two steps of 0.6 s.
+  assert.equal((compileSeriesShot({ ...kits, kevin: animated({ 'walk-12': twelveCells() }) }, alone([{ kitId: 'kevin', x: 60, motion: 'still', enter }]))
+    .layers.find(layer => layer.id === 'kit-kevin-sheet-walk-in')!.sequence as { fps: number }).fps, 10)
+})
+
 test('a walk sheet is mirrored when the character walks against the way the sheet looks', () => {
   const walkFrom = (fromX: number, facing: 'left' | 'right' | 'front') => {
     const kitWith = { ...kits, kevin: animated({ walk: sheetOf('walk', 4, { facing }) }) }

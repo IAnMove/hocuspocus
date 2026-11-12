@@ -66,6 +66,7 @@ import { downloadModel as requestModelDownload, fetchModelDownloads } from '../.
 import { setupSpeechAnalysis } from './speechAnalysisAdapter'
 import { executeBlobMake } from './blobBodyAdapter'
 import { executeAnimeMake } from './animeCharacterAdapter'
+import { executeMakeRealCharacter } from './realCharacterCapability'
 
 export interface AdapterOutcome {
   commandResult?: CommandResult
@@ -216,6 +217,7 @@ export interface WizardApplicationAdapters {
   }
   blobBody: { make(action: import('./agentActions').AgentBlobMakeAction, workspace?: string): Promise<AdapterOutcome> }
   animeCharacter: { make(action: import('./agentActions').AgentAnimeMakeAction, workspace?: string): Promise<AdapterOutcome> }
+  realCharacter: { make(action: import('./realCharacterCapability').AgentMakeRealCharacterAction, workspace?: string): Promise<AdapterOutcome> }
   characterAnimations: {
     make(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
     makeSet(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationSetAction, workspace?: string): Promise<AdapterOutcome>
@@ -837,6 +839,9 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   }
   adapters.animeCharacter = {
     async make(action, workspace) { return executeAnimeMake(action, workspace) },
+  }
+  adapters.realCharacter = {
+    async make(action, workspace) { return executeMakeRealCharacter(action, workspace) },
   }
   adapters.characterAnimations = {
     async make(action, workspace) { return executeMakeCharacterAnimation(action, workspace) },

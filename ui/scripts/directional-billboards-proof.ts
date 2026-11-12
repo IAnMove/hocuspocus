@@ -166,7 +166,7 @@ function expectations(shot: Shot, document: Scene3DDocument, t: number, memory: 
   return posed.flatMap((slot, index) => {
     const sprite = slot.screen?.directional
     if (!sprite) return []
-    const { view } = directionalView(sprite, { start: [document.slots[index].position[0], document.slots[index].position[2]], eye0, eye: [eye[0], eye[2]], t, memory, id: slot.id })
+    const { view } = directionalView(sprite, { start: [document.slots[index].position[0], document.slots[index].position[2]], eye0, eye: [eye[0], eye[2]], t, memory, id: slot.id, heightM: shot.figures.find(item => item.id === slot.id)?.heightM })
     const figure = shot.figures.find(item => item.id === slot.id)!
     const feet = projectPoint(slot.position, eye, look, document.camera.fov, WIDTH / HEIGHT)!
     const head = projectPoint([slot.position[0], slot.position[1] + figure.heightM, slot.position[2]], eye, look, document.camera.fov, WIDTH / HEIGHT)!

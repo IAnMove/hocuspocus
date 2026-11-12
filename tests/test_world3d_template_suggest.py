@@ -113,7 +113,7 @@ def test_suggest_is_a_read_only_tool_with_the_same_answer_over_http_and_mcp(tmp_
     tool = next(item for item in command_catalog() if item["name"] == OPERATION)
     assert tool["mutation"] is False and "reason" in tool["description"] and "never instantiates" in tool["description"]
     fields = tool["inputSchema"]["properties"]["input"]["properties"]
-    assert set(fields) == {"workspace", "line", "speakers", "place", "mood", "beat", "format", "kind", "limit"}
+    assert set(fields) == {"workspace", "line", "speakers", "place", "mood", "beat", "format", "kind", "limit", "compact"}
     assert fields["speakers"] == {"type": "integer", "minimum": 0, "maximum": 4, "description": fields["speakers"]["description"]}
     assert fields["beat"]["enum"] == list(SUGGEST_BEATS) and fields["format"]["enum"] == list(FORMATS) and fields["kind"]["enum"] == list(KINDS)
     assert fields["limit"] == {"type": "integer", "minimum": 1, "maximum": 8}

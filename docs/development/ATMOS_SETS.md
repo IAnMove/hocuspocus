@@ -12,7 +12,7 @@ User-facing settings, parsed by `parseAtmosSettings`:
 
 | Param | Values | Default |
 | --- | --- | --- |
-| `timeOfDay` | `dawn`, `morning`, `golden` | `golden` |
+| `timeOfDay` | `dawn`, `morning`, `golden`, `night` | `golden` |
 | `fogDensity` | 0–1 | 0.58 |
 | `wind` | 0–1 | 0.46 |
 | `motes` | 0–1 | 0.72 |
@@ -252,13 +252,15 @@ Templates: `atmos-meadow-wide`, `atmos-meadow-low`. Both last 6 seconds at 24 fp
 
 | Param | Values | Default |
 | --- | --- | --- |
-| `timeOfDay` | `spring`, `overcast` | `spring` |
+| `timeOfDay` | `spring`, `overcast`, `dawn`, `night` | `spring` |
 | `palette` | `clover`, `hay` | `clover` |
 | `variant` (`atmos.breeze`) | 0–8 | 4 |
 
-Wind leans the grass in the blade shader, and the same breeze slides the low clouds. Grass stays outside the open circle and the lane, and that circle is only a lighter patch so a figure is not buried. `overcast` greys the sky. There is no shaft, depth-of-field, or grade pass. Grass tufts use the grass count (100 preview, 140 export) and clouds use the mote count (8 / 12). Materials are unlit. Without WebGL2 the set is a flat green floor. The library setting is `forest`, shared with the clearing.
+Wind leans the grass in the blade shader, and the same breeze slides the low clouds. Grass stays outside the open circle and the lane, and that circle is only a lighter patch so a figure is not buried. `overcast` greys the sky. There is no shaft, depth-of-field, or grade pass. Grass tufts use the grass count (100 preview, 140 export) and clouds use the mote count (8 / 12), thinned by the `motes` setting (its default 0.3 keeps them all, 0 is a clear sky). `dawn` gives a peach horizon, a soft blue zenith and pink clouds. Materials are unlit. Without WebGL2 the set is a flat green floor. The library setting is `forest`, shared with the clearing.
 
 A software export of `atmos-meadow-wide` produced 180 frames, 1280×720, 30 fps, 6.00 s, in 27814 ms. The mounted shot keeps the editor document's 1280×720 frame and 30 fps. That time is inside the 60 s budget.
+
+`night` (clearing and meadow) is a real night, not a day world at low exposure: the palette follows the time of day (`effectivePalette` in `atmos/night.ts`, whatever `palette` the document names), the sky is a dark gradient with two layers of stars and a lit moon with a halo (`addNightSky`; the moon sits opposite the time's `sun` vector, so that vector decides where it hangs), the grass, ground, hills, clouds and fog are painted dark, the forest's self-glow and the shaft pass are dimmed, and the hemisphere light turns moon blue. Pair it with a `moonlight` or `night` light and grade `natural` (exposure about -0.2); do not lower the exposure further to fake the dark. Sky bodies ignore the fog, so they stay crisp at any distance. The clearing drops its falling leaf at night.
 
 ## Set 15 — `atmos-rooftop-night`
 

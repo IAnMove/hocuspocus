@@ -16,6 +16,9 @@ tolerances are ``sheet.checks`` of ``app/shared/character_animations.json``.
   of the step, seen from the sheet's direction (``leg_spread`` against ``expected_spread``), after one scale for the whole sheet (a
   character in a long coat or with a short step is not wrong). A cell far off is a pose drawn at the wrong moment of the step or from
   the wrong side: a back view that turned three-quarter has the stride of a profile.
+* ``walk_foot_order``, ``walk_foot_alternation``, ``walk_loop_seam`` and ``walk_facing`` (also ``"gait"``): the order of the poses, which
+  foot is lower, whether the cycle closes and whether a cell looks the other way, from ``services/walk_gait_metrics.py`` (each is
+  listed only where it reads something in the sheet's direction; each carries ``cells``, the indexes it blames).
 """
 from __future__ import annotations
 
@@ -28,6 +31,7 @@ from PIL import Image, ImageOps
 from services.character_animation_directions import contract_of
 from services.character_animations import catalog
 from services.character_kit_face_cleanup import CharacterKitFaceCleanupError, resolve_character_kit_image
+from services.walk_gait_metrics import gait_checks
 from services.walk_guides import TURN, expected_spread, leg_spread
 
 HASH_SIDE = 16
@@ -139,9 +143,11 @@ def gait_check(figures: list[Image.Image | None], direction: str | None, limit: 
                  else f"every pose has the legs of its moment of the step (scale {scale:.2f})")
 
 
-def cycle_checks(image: Image.Image, sheet: dict[str, Any], definition: dict[str, Any], siblings: Sequence[dict[str, Any]] = ()) -> list[dict[str, Any]]:
+def cycle_checks(image: Image.Image, sheet: dict[str, Any], definition: dict[str, Any], siblings: Sequence[dict[str, Any]] = (),
+                 facing: str | None = None) -> list[dict[str, Any]]:
     """The checks the animation asks for (``definition["checks"]``: ``height``, ``repeats``, ``gait``, ``mirror``), none for one that asks
-    for none."""
+    for none. ``facing`` is the way the sheet looks when it is not the catalog's (a puppet cut from a drawing that looked left): the readings of
+    the order and the feet are made on the sheet mirrored."""
     asked = definition.get("checks") or []
     if not asked:
         return []
@@ -154,7 +160,9 @@ def cycle_checks(image: Image.Image, sheet: dict[str, Any], definition: dict[str
     if "repeats" in asked:
         found.append(repeats_check(figures, int(rules["repeatRun"]), int(rules["samePoseBits"])))
     if "gait" in asked:
-        found.append(gait_check(figures, contract_of(definition["id"], definition).get("dir"), float(rules["gait"]), floor))
+        direction = contract_of(definition["id"], definition).get("dir")
+        found.append(gait_check(figures, direction, float(rules["gait"]), floor))
+        found.extend(gait_checks(figures, direction, floor, mirrored=facing == "left"))
     if "mirror" in asked:
         others = [item for item in siblings if item.get("id") != definition["id"] and item.get("dir") != definition.get("dir")]
         found.append(mirror_check(figures, sheet, others, rules, floor))

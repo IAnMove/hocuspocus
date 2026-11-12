@@ -178,3 +178,13 @@ def test_finished_garment_layers_are_marked_complete(tmp_path):
     assert (folder / ".complete").is_file()
     cached = _cached_layers(str(folder))
     assert cached is not None and "topwear" in cached
+
+
+def test_the_first_cell_is_the_contact_of_the_near_leg_whatever_phase_the_drawing_was_cut_at():
+    """Frame i of n shows phase i / n, as the guides do: the feet are furthest apart at cells 0 and 6 and together at 3 and 9."""
+    rgba, joints = _figure()
+    frames, info = build(rgba, "side", 12, None, joints)
+    assert abs(info["start"] - 0.4583333333333333) < 1e-9, "the drawing was cut at a phase of its own"
+    apart = [abs(feet["r"][0] - feet["l"][0]) for feet in info["feet"]]
+    assert max(apart[0], apart[6]) >= max(apart) - 1.0 and min(apart[3], apart[9]) <= min(apart) + 1.0, apart
+    assert apart[0] > 1.5 * apart[3] and apart[6] > 1.5 * apart[9]

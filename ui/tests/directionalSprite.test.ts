@@ -10,7 +10,7 @@ import type { Material } from 'three'
 import type { Scene3DSlot } from '../src/features/scene3d/types.ts'
 import {
   CROSSFADE_SECONDS, DirectionMemory, directionalPosition, directionalView, faceAngle, headingDegrees, headingFacing, normalizeDegrees,
-  lightTint, pickSheet, sectorOf, strideFrame, travelFacing, walkState, type DirectionalSheet, type DirectionalSprite, type V2,
+  cycleMeters, lightTint, pickSheet, sectorOf, strideFrame, travelFacing, walkState, type DirectionalSheet, type DirectionalSprite, type V2,
 } from '../src/features/scene3d/directionalSprite.ts'
 
 const sheet = (motion: DirectionalSheet['motion'], dir: DirectionalSheet['dir'], count = 12, extra: Partial<DirectionalSheet> = {}): DirectionalSheet =>
@@ -147,6 +147,39 @@ test('the walk cycle advances one cycle every two steps of 0.75 m, with no slide
   assert.equal(strideFrame(100, 4, 'once'), 3)
 })
 
+test('a sheet with a stride walks its cycle by the height of the figure it is drawn for, and one without keeps 1.5 m', () => {
+  assert.ok(Math.abs(cycleMeters({ stride: .9 }, 1.7) - 1.53) < 1e-9 && Math.abs(cycleMeters({ stride: .9 }, 3.4) - 3.06) < 1e-9, 'a taller figure takes a longer step')
+  assert.equal(cycleMeters({}, 1.7), 1.5)
+  assert.equal(cycleMeters({ stride: .9 }), 1.5, 'a figure of unknown height keeps the catalog\'s step')
+  assert.equal(cycleMeters({ stride: 0 }, 1.7), 1.5)
+  // Nothing slides: the cycle starts over exactly every stride x height metres of ground, whatever the figure's height.
+  for (const height of [1, 1.7, 2.4]) {
+    const stride = .9
+    const sprite: DirectionalSprite = { sheets: [sheet('walk', 'side', 12, { stride })], walk: { to: [40, 0], speed: 1.5, start: 0 } } as DirectionalSprite
+    const wraps: number[] = []
+    let last = -1
+    const memory = new DirectionMemory()
+    for (let t = 0; t < 20; t += 0.01) {
+      const { view } = directionalView(sprite, { start: [0, 0], eye0: [0, 8], eye: [0, 8], t, memory, id: 'ana', heightM: height })
+      const frame = view.kind === 'sheet' ? view.frame : -1
+      if (frame < last) wraps.push(directionalPosition(sprite, [0, 0, 0], t)[0])
+      last = frame
+    }
+    assert.ok(wraps.length >= 5, `${height} m: the cycle repeats`)
+    for (let i = 1; i < wraps.length; i++) assert.ok(Math.abs(wraps[i] - wraps[i - 1] - stride * height) < 1.5 * 0.01 + 1e-6, `${height} m: a cycle covers ${stride * height} m of ground (${wraps[i] - wraps[i - 1]})`)
+  }
+  // A sheet that carries no stride is walked as before, at 1.5 m a cycle, whatever the height.
+  const old: DirectionalSprite = { sheets: [sheet('walk', 'side')], walk: { to: [40, 0], speed: 1.5, start: 0 } } as DirectionalSprite
+  const at = (heightM: number) => { const { view } = directionalView(old, { start: [0, 0], eye0: [0, 8], eye: [0, 8], t: 3, memory: new DirectionMemory(), id: 'b', heightM }); return view.kind === 'sheet' ? view.frame : -1 }
+  assert.equal(at(1), at(2.4))
+})
+
+test('the stride of a sheet is read from the scene when it is a share of the figure\'s height and dropped when it is not', () => {
+  const read = (stride: unknown) => parseDirectional({ sheets: [{ motion: 'walk', dir: 'side', source: '/api/v1/file/w.png', count: 12, columns: 4, rows: 3, cell: { width: 400, height: 640 }, stride }] })?.sheets[0]
+  assert.equal(read(.87)?.stride, .87)
+  for (const bad of [0.1, 3.5, 'long', null, undefined]) assert.equal(read(bad)?.stride, undefined, String(bad))
+})
+
 test('a missing direction takes the nearest one the kit has, a missing walk glides on an idle sheet, and nothing falls back to the pose', () => {
   const pick = (sheets: DirectionalSheet[], motion: 'walk' | 'idle', theta: number) => {
     const found = pickSheet(sheets, motion, sectorOf(theta))
@@ -273,6 +306,22 @@ test('the painter pass turns the figure to the camera and hands the painter the 
   assert.ok(Math.abs(painted.scale - 1 / 0.86) < 1e-9)
   assert.equal(painted.screen?.directional?.view?.kind, 'sheet')
   assert.equal(slot.screen?.directional?.view, undefined)
+})
+
+test('through the painter pass a 1.7 m figure with a stride starts its walk cycle over every stride times 1.7 m of ground', () => {
+  const slot = { ...slotOf({ sheets: [sheet('walk', 'side', 12, { stride: 0.9 })], walk: { to: [41, 2], speed: 1.5, start: 0 } }), scale: 0.85 } as Scene3DSlot
+  const memory = new DirectionMemory()
+  const wraps: number[] = []
+  let last = -1
+  for (let t = 0; t < 20; t += 0.01) {
+    const walked = walkedSlot(slot, slot.position, t)
+    const view = facingSlot(walked, slot.position, { memory, eye: [1, 1.6, 12], eye0: [1, 12], t }).screen?.directional?.view
+    const frame = view?.kind === 'sheet' ? view.frame : -1
+    if (frame < last) wraps.push(walked.position[0])
+    last = frame
+  }
+  assert.ok(wraps.length >= 6, 'the cycle repeats along the walk')
+  for (let i = 1; i < wraps.length; i++) assert.ok(Math.abs(wraps[i] - wraps[i - 1] - 0.9 * 1.7) < 0.02, `a cycle covers ${wraps[i] - wraps[i - 1]} m, not 1.53`)
 })
 
 test('a walking figure is placed along its path by the time, and every other slot is returned as it came', () => {

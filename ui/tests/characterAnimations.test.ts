@@ -3,10 +3,11 @@ import test from 'node:test'
 import {
   animationSets, animationSlug, canAddAnimation, customAnimationDef, customViews, freeAnimationId, kitCustomDefs, MAX_ANIMATIONS, MAX_CUSTOM_POSES,
   controlsForCard, findKitAnimationBySheet,
-  ANIMATION_SHEET, animationDef, animationDefs, animationFrame, animationGroups, animationReference, animationState, animationsOf,
+  ANIMATION_SHEET, animationNotes, isSheetCheckId, SHEET_CHECK_IDS, animationDef, animationDefs, animationFrame, animationGroups, animationReference, animationState, animationsOf,
   kitStyleId, localized, reviewedByAgent, reviewKitAnimation, sheetCellStyle, templateControls, withKitAnimation, withoutKitAnimation, type KitAnimation,
 } from '../src/lib/characterAnimations.ts'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
+import { resolveSceneTemplate } from '../src/features/sceneTemplates/catalog.ts'
 
 const made = (changes: Partial<KitAnimation> = {}): Omit<KitAnimation, 'reviewState'> => ({
   sheet: { source: '/api/v1/file/walk-sheet.png?workspace=w', width: 1480, height: 640, count: 4, columns: 4, rows: 1, cell: { width: 370, height: 640 } },
@@ -88,11 +89,16 @@ test('one cell of the sheet is shown by scaling the sheet to its grid and shifti
 })
 
 test('a made animation tells the Video 2D card that plays it which controls to use', () => {
-  assert.deepEqual(templateControls(made({ fps: 4 }) as KitAnimation, 'walk-cycle-sheet'), { frames: 4, columns: 4, facing: 'right', step: .5 })
+  assert.deepEqual(templateControls(made({ fps: 4 }) as KitAnimation, 'walk-cycle-sheet'), { frames: 4, columns: 4, facing: 'right', sheetFacing: 'right', step: .5 })
   assert.equal(templateControls(made({ facing: 'left', fps: 8 }) as KitAnimation, 'walk-cycle-sheet').facing, 'left')
+  assert.equal(templateControls(made({ facing: 'left', fps: 8 }) as KitAnimation, 'walk-cycle-sheet').sheetFacing, 'left', 'the card is told which way the picture looks, so it can mirror it')
+  // A sheet that carries its stride gives it to the card; an older one gives none and the card keeps its constant.
+  assert.equal(templateControls(made({ stride: .87 }) as KitAnimation, 'walk-cycle-sheet').stride, .87)
+  assert.equal('stride' in templateControls(made() as KitAnimation, 'walk-cycle-sheet'), false)
+  assert.equal('stride' in templateControls(made({ stride: .87 }) as KitAnimation, 'character-reaction'), false, 'a gesture has no stride')
   assert.equal(templateControls(made({ fps: 1 }) as KitAnimation, 'walk-cycle-sheet').step, 1, 'a step stays inside the card\'s range')
   // A two-pose sheet is one step, so its two poses play at twice the pace of a four-pose cycle's.
-  assert.deepEqual(templateControls(made({ sheet: { ...made().sheet, count: 2, columns: 2 }, fps: 4 }) as KitAnimation, 'walk-two-pose'), { frames: 2, columns: 2, facing: 'right', step: .5 })
+  assert.deepEqual(templateControls(made({ sheet: { ...made().sheet, count: 2, columns: 2 }, fps: 4 }) as KitAnimation, 'walk-two-pose'), { frames: 2, columns: 2, facing: 'right', sheetFacing: 'right', step: .5 })
   assert.deepEqual(templateControls(made({ fps: 3, loop: 'once', facing: 'front' }) as KitAnimation, 'character-reaction'), { frames: 4, columns: 4, fps: 3, loop: 'once' })
 })
 
@@ -116,6 +122,17 @@ test('a card is given only the controls it has, with values it accepts', () => {
   // Two poses are out of range for the walk card (at least 3), and a card without `fps` never gets one.
   assert.equal(controlsForCard(made({ sheet: { ...made().sheet, count: 2 } }) as KitAnimation, 'walk-cycle-sheet', walk).frames, undefined)
   assert.equal('fps' in controlsForCard(made() as KitAnimation, 'character-reaction', { frames: reaction.frames }), false)
+})
+
+test('the real walk cards declare the stride and the sheet facing, so a card is given them and keeps them', () => {
+  for (const [card, count] of [['walk-cycle-sheet', 4], ['walk-two-pose', 2]] as const) {
+    const { template } = resolveSceneTemplate(card)
+    const sheet = { ...made({ stride: .87, facing: 'left' }).sheet, count, columns: count }
+    const given = controlsForCard(made({ stride: .87, facing: 'left', sheet }) as KitAnimation, card, template.controls as never)
+    assert.equal(given.stride, .87, `${card}: the stride reaches the card`)
+    assert.deepEqual([given.facing, given.sheetFacing], ['left', 'left'], `${card}: and the way the sheet looks`)
+    assert.equal('stride' in controlsForCard(made({ sheet }) as KitAnimation, card, template.controls as never), false, `${card}: a sheet with no stride gives none`)
+  }
 })
 
 test('an animation the author names gets a free slug, and its poses are the lines they wrote', () => {
@@ -187,5 +204,23 @@ test('the catalog has five directions, a twelve-pose walk for each and the sets 
   assert.deepEqual(animationSets['walk-directions'].sheets.map(step => step.reference ?? null), [null, 'walk-12', 'walk-front34', 'walk-12', 'walk-back34'])
   assert.deepEqual(Object.keys(animationSets), ['walk-12', 'walk-directions', 'idle-directions'])
   assert.deepEqual(templateControls({ ...made({ fps: 12, facing: 'right' }), reviewState: 'approved', sheet: { ...made().sheet, count: 12, columns: 6, rows: 2 } }, 'walk-cycle-sheet'),
-    { frames: 12, columns: 6, facing: 'right', step: 0.5 }, 'twelve cells at twelve a second are one cycle in a second: two steps of half a second')
+    { frames: 12, columns: 6, facing: 'right', sheetFacing: 'right', step: 0.5 }, 'twelve cells at twelve a second are one cycle in a second: two steps of half a second')
+})
+
+test('a finished sheet is judged by the job that made it and by the gait each pose kept, and says nothing when all is well', async () => {
+  const { finishedOf } = await import('../src/features/characters/useCharacterAnimations.ts')
+  const entry = { ...made({ frames: [{ id: 'contact', source: '/api/v1/file/c.png', gait: { expected: 0.3, measured: 0.31, ok: true } },
+    { id: 'passing', source: '/api/v1/file/p.png', gait: { expected: 0.05, measured: 0.4, ok: false } }, { id: 'contact-b', source: '/api/v1/file/d.png' }] }), reviewState: 'pending' as const }
+  const job = (sheet: string, failed: string[]) => ({ result: { sheet, verdict: { ok: !failed.length, failed } } })
+  assert.deepEqual(animationNotes(entry, job(entry.sheet.source, ['scale_spread'])), { checks: ['scale_spread'], poses: ['passing'] })
+  assert.deepEqual(animationNotes(entry, job('/api/v1/file/older-sheet.png', ['scale_spread'])), { checks: [], poses: ['passing'] }, 'an older sheet\'s job never judges this one')
+  assert.deepEqual(animationNotes(entry, undefined), { checks: [], poses: ['passing'] }, 'the poses are on the character itself, whatever the jobs say')
+  const fine = { ...entry, frames: entry.frames.filter(frame => frame.gait?.ok !== false) }
+  assert.equal(animationNotes(fine, job(entry.sheet.source, [])), null)
+  assert.equal(animationNotes(fine, { result: { sheet: entry.sheet.source } }), null, 'a job from before the verdict says nothing')
+  assert.ok(SHEET_CHECK_IDS.every(isSheetCheckId) && !isSheetCheckId('made_up'))
+  const done = (jobId: string, animationId: string, status: string, createdAt: number) => ({ jobId, animationId, status, createdAt, takes: [] }) as never
+  const found = finishedOf([done('a', 'walk', 'completed', 1), done('b', 'walk', 'completed', 3), done('c', 'walk', 'failed', 4), done('d', 'wave', 'running', 5), done('e', 'nod', 'completed', 2)])
+  assert.deepEqual(Object.keys(found).sort(), ['nod', 'walk'])
+  assert.equal(found.walk.jobId, 'b', 'the latest job that completed is the one that made the sheet on the card')
 })

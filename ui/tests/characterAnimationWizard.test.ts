@@ -178,6 +178,8 @@ test('the Wizard makes the full walks as one server job through the route of the
 test('method video is sent only for a whole walk, and poses stays the request the panel already sends', async () => {
   assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /method "video"/)
   assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /method "puppet"/)
+  assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /method "video" \(only a catalog walk[^;]*\) makes that walk from one skeleton-guided clip, and method "puppet" \(also only a catalog walk\) cuts one drawing/,
+    'the knowledge text names both opt-in methods in one clause')
   const make = getCapability('make_character_animation')!
   assert.deepEqual(make.resolve({ type: 'make_character_animation', animation_id: 'walk-12', method: 'video', confirm: true }),
     { type: 'make_character_animation', kitName: '', animation: 'walk-12', confirm: true, method: 'video' })

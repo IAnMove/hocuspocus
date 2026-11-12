@@ -1169,6 +1169,7 @@ These IDs are in `AGENT_ACTION_TYPES`. They are listed so L0 can prove every Wiz
 | `other.blob_make` | `blob_make` | `executeBlobMake` | `ui/src/features/agent/blobBodyAdapter.ts` | `blobBody.make` |
 | `other.make_character_face` | `make_character_face` | `executeMakeCharacterFace` | `ui/src/features/agent/characterFaceCapabilities.ts` | `characterFaces.make` |
 | `other.anime_make` | `anime_make` | `executeAnimeMake` | `ui/src/features/agent/animeCharacterAdapter.ts` | `animeCharacter.make` |
+| `other.make_real_character` | `make_real_character` | `executeMakeRealCharacter` | `ui/src/features/agent/realCharacterCapability.ts` | `realCharacter.make` |
 | `other.prepare_image` | `prepare_image` | `prepareImage` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareImage` |
 | `other.prepare_audio` | `prepare_audio` | `prepareAudio` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareAudio` |
 | `other.download_model` | `download_model` | `downloadModel` | `ui/src/features/agent/studioCapabilities.ts` | `studio.downloadModel` |
@@ -1343,6 +1344,15 @@ id through `world3dTemplates.command`, registered by
 `ui/src/features/agent/world3dTemplateCapabilities.ts`. The same cards serve MCP
 and the production planner. A tied or unknown query does not create a scene.
 Coverage is in `ui/tests/world3dTemplatesWizard.test.ts`.
+
+`video3d.templates.plan` (`plan_3d_templates`) chooses the cards of every shot of a
+video in one call, with variety, through the same `world3dTemplates.command`,
+registered by `registerWorld3DTemplatePlanCapabilities` in
+`ui/src/features/agent/world3dTemplatePlanCapability.ts`. It is the operation
+`world3d.templates.plan` of MCP and REST (`app/services/world3d_template_plan.py`);
+`world3d_templates` does not take it. The Wizard lists `key | id | title | shot | why`
+per shot. Coverage is in `ui/tests/world3dTemplatePlanWizard.test.ts` and
+`tests/test_world3d_template_plan.py`.
 
 ## Productions
 

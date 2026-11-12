@@ -533,3 +533,11 @@ def test_a_kit_with_a_badge_on_one_side_is_told_when_the_shot_mirrors_it_and_the
     assert not flips(leftwards, talker_kit(asymmetric=True, reversed_on=("side", "front34", "back34"))), "its own left side wins over the mirror"
     free = {"kind": "3d", "cast": [{"characterId": "ana", "heading": 0}]}
     assert len([item for item in run_check(free, {"kit-ana": talker_kit(asymmetric=True)})[1] if item["code"] == "mirror_flips_detail"]) == 1
+
+
+def test_a_sheet_that_has_a_stride_hands_it_to_the_renderer_and_one_that_has_none_does_not():
+    sheets = {item["id"]: item for item in directional.kit_sheets(kit(**{"walk-12": sheet_record(12, motion="walk", dir="side", stride=0.812),
+                                                                       "walk": sheet_record(4, group="cycle", view="side"),
+                                                                       "walk-front": sheet_record(12, motion="walk", dir="front", stride=9)}))}
+    assert sheets["walk-12"]["stride"] == 0.812, "heights a cycle: the figure walks by it"
+    assert "stride" not in sheets["walk"] and "stride" not in sheets["walk-front"], "an old sheet and a number out of range keep the renderer's constants"

@@ -29,6 +29,7 @@ SERIES_TOOLS = frozenset({
     "characters.animation.cancel", "characters.animation.sheet", "characters.voice.band",
     "characters.rig.flat", "characters.rig.flat.preview", "characters.rig.check", "characters.face.make",
     "model3d.blob.make", "model3d.anime.make", "model3d.blob.presets",
+    "model3d.real.make", "model3d.real.status", "model3d.real.cancel", "model3d.real.get", "model3d.real.list", "model3d.real.presets",
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
     "jobs.cancel",
@@ -38,8 +39,8 @@ SERIES_TOOLS = frozenset({
     # Editing a take's scene and Video 3D.
     "scenes.document.get", "scenes.document.save", "scenes.effects.catalog", "scenes.effects.apply",
     "scenes.video2d.export", "scenes.video2d.export.receipt", "scenes.video2d.preview",
-    "world3d.templates.list", "world3d.templates.suggest", "world3d.templates.get", "world3d.templates.user.put", "world3d.scene.instantiate",
-    "world3d.scene.inspect", "world3d.scene.patch", "world3d.scene.beats", "world3d.scene.talk", "world3d.scene.face", "world3d.scene.preview", "world3d.scene.publish",
+    "world3d.templates.list", "world3d.templates.catalog", "world3d.templates.suggest", "world3d.templates.plan", "world3d.templates.get", "world3d.templates.user.put", "world3d.scene.instantiate",
+    "world3d.scene.inspect", "world3d.scene.patch", "world3d.scene.fix_placement", "world3d.scene.beats", "world3d.scene.talk", "world3d.scene.face", "world3d.scene.preview", "world3d.scene.publish",
     "scenes.world3d.export", "scenes.world3d.export.receipt",
 })
 

@@ -10,8 +10,11 @@ from services.humanoid_rig.names import BONE_NAMES
 RIG_VERSION = 5
 
 
-def rig_humanoid(source: bytes, clip_ids: list[str] | None = None, bpm: float = 120.0) -> tuple[bytes, dict]:
-    """Return ``(glb, sidecar)``. Raises ``NotHumanoid`` when the mesh is not a person."""
+def rig_humanoid(source: bytes, clip_ids: list[str] | None = None, bpm: float = 120.0, hints: dict | None = None) -> tuple[bytes, dict]:
+    """Return ``(glb, sidecar)``. Raises ``NotHumanoid`` when the mesh is not a person.
+
+    ``hints`` is a mould's own leg layout (``layout_hints``): it places legs a skirt hides from the silhouette."""
+    from services.humanoid_rig.layout_hints import apply_leg_hints
     from services.humanoid_rig.clips import clip_library, rig_for_skeleton
     from services.humanoid_rig.comfort import comfort_limits
     from services.humanoid_rig.gltf_export import read_primitives, write_rigged_glb
@@ -21,7 +24,7 @@ def rig_humanoid(source: bytes, clip_ids: list[str] | None = None, bpm: float = 
 
     primitives = read_primitives(bytes(source))
     positions, indices, counts = _combined(primitives)
-    found = detect_landmarks(positions, indices)
+    found = apply_leg_hints(detect_landmarks(positions, indices), hints)
     skeleton = build_skeleton(found["points"], found["height"], found["y_min"], found["facing"], found["head_region"], found["base"],
                               found["robe"])
     joints, weights = compute_weights(positions, indices, skeleton, found["cloth"])

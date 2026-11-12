@@ -685,7 +685,7 @@ def command_catalog() -> list[dict]:
                     "required": ["workspace", "document"]}
     return [
         {"name": OPERATION, "version": 1, "supportedVersions": [1], "domain": "scenes", "mutation": True,
-         "description": "Admit an immutable Video 3D snapshot and durable media refs as one canonical task. A server-owned worker renders with the existing world3d exporter (headless browser is allowed). Closing the UI does not cancel. Reuse intent_id only to recover the receipt; inspect its task for progress, cancel, retry and the validated MP4. output_name publishes it under a stable file name (set-crane-loop.mp4) that a later export with the same name replaces, keeping the replaced file as set-crane-loop.previous.mp4.",
+         "description": "Admit an immutable Video 3D snapshot and durable media refs as one canonical task: input.document is the scene's document, as world3d.scene.publish returns it (its reply's document; world3d.scene.inspect has the working copy's). A server-owned worker renders with the existing world3d exporter (headless browser is allowed). Closing the UI does not cancel. Reuse intent_id only to recover the receipt; poll scenes.world3d.export.receipt {intent_id} (not jobs.wait: an export is a task, not a generation job) for its task's progress, status and the validated MP4. output_name publishes it under a stable file name (set-crane-loop.mp4) that a later export with the same name replaces, keeping the replaced file as set-crane-loop.previous.mp4.",
          "inputSchema": {"type": "object", "additionalProperties": False,
                          "properties": {"version": {"type": "integer", "const": 1},
                                         "operation": {"const": OPERATION}, "intent_id": intent,

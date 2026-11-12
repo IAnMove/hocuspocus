@@ -12,9 +12,9 @@
       2.7
     ],
     "medium": [
-      6,
-      6,
-      3
+      6.0,
+      6.0,
+      3.0
     ],
     "large": [
       7.5,
@@ -41,21 +41,127 @@
       "wall": "right",
       "kind": "door",
       "x": 0.75,
-      "width": 0.8999999999999999,
+      "width": 0.9,
       "height": 2.1
     }
   ],
   "blocks": [
     {
+      "id": "bed_frame",
+      "kind": "bed",
+      "box": [
+        0.0,
+        0.0,
+        -1.95,
+        1.76,
+        0.3,
+        2.06
+      ],
+      "surfaces": [
+        "headboard_front",
+        "headboard_top"
+      ]
+    },
+    {
       "id": "bed",
       "kind": "bed",
       "box": [
-        0,
-        0,
-        -1.3,
-        1.7,
+        0.0,
+        0.3,
+        -1.95,
+        1.66,
+        0.25,
+        1.98
+      ],
+      "surfaces": [
+        "bed_front",
+        "bed_top"
+      ]
+    },
+    {
+      "id": "headboard",
+      "kind": "bed",
+      "box": [
+        0.0,
+        0.3,
+        -2.965,
+        1.86,
+        0.95,
+        0.07
+      ],
+      "surfaces": [
+        "headboard_front",
+        "headboard_top"
+      ]
+    },
+    {
+      "id": "pillow_l",
+      "kind": "pillow",
+      "box": [
+        -0.33,
         0.55,
-        2.2
+        -2.66,
+        0.7,
+        0.14,
+        0.38
+      ],
+      "surfaces": [
+        "pillow_front",
+        "pillow_top"
+      ],
+      "rot": [
+        0.12,
+        0,
+        -0.04
+      ]
+    },
+    {
+      "id": "pillow_r",
+      "kind": "pillow",
+      "box": [
+        0.33,
+        0.55,
+        -2.66,
+        0.7,
+        0.14,
+        0.38
+      ],
+      "surfaces": [
+        "pillow_front",
+        "pillow_top"
+      ],
+      "rot": [
+        0.12,
+        0,
+        0.04
+      ]
+    },
+    {
+      "id": "duvet",
+      "kind": "duvet",
+      "box": [
+        0.0,
+        0.5,
+        -1.5,
+        1.78,
+        0.2,
+        1.62
+      ],
+      "surfaces": [
+        "duvet_front",
+        "duvet_top"
+      ]
+    },
+    {
+      "id": "duvet_fold",
+      "kind": "duvet",
+      "box": [
+        0.0,
+        0.62,
+        -2.28,
+        1.76,
+        0.11,
+        0.26
       ],
       "surfaces": [
         "bed_front",
@@ -67,11 +173,11 @@
       "kind": "nightstand",
       "box": [
         1.35,
-        0,
-        -2,
-        0.6,
-        0.65,
-        0.6
+        0.0,
+        -2.6,
+        0.5,
+        0.62,
+        0.5
       ],
       "surfaces": [
         "nightstand_front",
@@ -79,19 +185,625 @@
       ]
     },
     {
+      "id": "drawer",
+      "kind": "trim",
+      "box": [
+        1.35,
+        0.3,
+        -2.345,
+        0.4,
+        0.18,
+        0.02
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "drawer_knob",
+      "kind": "trim",
+      "box": [
+        1.35,
+        0.37,
+        -2.325,
+        0.06,
+        0.03,
+        0.02
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "lamp_base",
+      "kind": "lamp",
+      "box": [
+        1.35,
+        0.62,
+        -2.72,
+        0.1,
+        0.18,
+        0.1
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "lamp_shade",
+      "kind": "lamp",
+      "box": [
+        1.35,
+        0.78,
+        -2.72,
+        0.28,
+        0.22,
+        0.28
+      ],
+      "surfaces": [
+        "lamp_front",
+        "lamp_top"
+      ]
+    },
+    {
+      "id": "nightstand_l",
+      "kind": "nightstand",
+      "box": [
+        -1.35,
+        0.0,
+        -2.6,
+        0.5,
+        0.62,
+        0.5
+      ],
+      "surfaces": [
+        "nightstand_front",
+        "nightstand_top"
+      ]
+    },
+    {
+      "id": "drawer_l",
+      "kind": "trim",
+      "box": [
+        -1.35,
+        0.3,
+        -2.345,
+        0.4,
+        0.18,
+        0.02
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "drawer_knob_l",
+      "kind": "trim",
+      "box": [
+        -1.35,
+        0.37,
+        -2.325,
+        0.06,
+        0.03,
+        0.02
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "lamp_base_l",
+      "kind": "lamp",
+      "box": [
+        -1.35,
+        0.62,
+        -2.72,
+        0.1,
+        0.18,
+        0.1
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "lamp_shade_l",
+      "kind": "lamp",
+      "box": [
+        -1.35,
+        0.78,
+        -2.72,
+        0.28,
+        0.22,
+        0.28
+      ],
+      "surfaces": [
+        "lamp_front",
+        "lamp_top"
+      ]
+    },
+    {
       "id": "wardrobe",
       "kind": "wardrobe",
       "box": [
-        -2.55,
-        0,
-        -1,
-        0.7,
+        2.68,
+        0.0,
+        -1.3,
+        1.6,
         2.2,
-        1.6
+        0.62
       ],
       "surfaces": [
         "wardrobe_front",
         "wardrobe_top"
+      ],
+      "rot": [
+        0,
+        -1.5708,
+        0
+      ]
+    },
+    {
+      "id": "wardrobe_door_a",
+      "kind": "wardrobe",
+      "box": [
+        2.355,
+        0.12,
+        -1.7,
+        0.76,
+        1.96,
+        0.03
+      ],
+      "surfaces": [
+        "wardrobe_front",
+        "wardrobe_top"
+      ],
+      "rot": [
+        0,
+        -1.5708,
+        0
+      ]
+    },
+    {
+      "id": "wardrobe_handle_a",
+      "kind": "trim",
+      "box": [
+        2.335,
+        0.95,
+        -1.38,
+        0.03,
+        0.3,
+        0.03
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ],
+      "rot": [
+        0,
+        -1.5708,
+        0
+      ]
+    },
+    {
+      "id": "wardrobe_door_b",
+      "kind": "wardrobe",
+      "box": [
+        2.355,
+        0.12,
+        -0.9,
+        0.76,
+        1.96,
+        0.03
+      ],
+      "surfaces": [
+        "wardrobe_front",
+        "wardrobe_top"
+      ],
+      "rot": [
+        0,
+        -1.5708,
+        0
+      ]
+    },
+    {
+      "id": "wardrobe_handle_b",
+      "kind": "trim",
+      "box": [
+        2.335,
+        0.95,
+        -1.22,
+        0.03,
+        0.3,
+        0.03
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ],
+      "rot": [
+        0,
+        -1.5708,
+        0
+      ]
+    },
+    {
+      "id": "wardrobe_cornice",
+      "kind": "wardrobe",
+      "box": [
+        2.65,
+        2.2,
+        -1.3,
+        1.68,
+        0.08,
+        0.66
+      ],
+      "surfaces": [
+        "wardrobe_front",
+        "wardrobe_top"
+      ],
+      "rot": [
+        0,
+        -1.5708,
+        0
+      ]
+    },
+    {
+      "id": "window_sill",
+      "kind": "trim",
+      "box": [
+        -2.9,
+        0.92,
+        -0.3,
+        0.2,
+        0.04,
+        1.8
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "window_frame_top",
+      "kind": "trim",
+      "box": [
+        -2.97,
+        2.26,
+        -0.3,
+        0.06,
+        0.05,
+        1.7
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "window_frame_a",
+      "kind": "trim",
+      "box": [
+        -2.97,
+        0.96,
+        -1.07,
+        0.06,
+        1.3,
+        0.05
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "window_frame_b",
+      "kind": "trim",
+      "box": [
+        -2.97,
+        0.96,
+        0.47,
+        0.06,
+        1.3,
+        0.05
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "window_mullion",
+      "kind": "trim",
+      "box": [
+        -2.975,
+        0.96,
+        -0.3,
+        0.03,
+        1.3,
+        0.04
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "window_transom",
+      "kind": "trim",
+      "box": [
+        -2.975,
+        1.62,
+        -0.3,
+        0.03,
+        0.04,
+        1.5
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "curtain_rod",
+      "kind": "trim",
+      "box": [
+        -2.9,
+        2.5,
+        -0.3,
+        0.05,
+        0.04,
+        2.4
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "curtain_a",
+      "kind": "curtain",
+      "box": [
+        -2.9,
+        0.1,
+        -1.3,
+        0.12,
+        2.42,
+        0.44
+      ],
+      "surfaces": [
+        "curtain_front",
+        "curtain_top"
+      ]
+    },
+    {
+      "id": "curtain_b",
+      "kind": "curtain",
+      "box": [
+        -2.9,
+        0.1,
+        0.7,
+        0.12,
+        2.42,
+        0.44
+      ],
+      "surfaces": [
+        "curtain_front",
+        "curtain_top"
+      ]
+    },
+    {
+      "id": "door_frame_a",
+      "kind": "trim",
+      "box": [
+        2.97,
+        0.0,
+        1.0,
+        0.06,
+        2.15,
+        0.1
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "door_frame_b",
+      "kind": "trim",
+      "box": [
+        2.97,
+        0.0,
+        2.0,
+        0.06,
+        2.15,
+        0.1
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "door_frame_top",
+      "kind": "trim",
+      "box": [
+        2.97,
+        2.1,
+        1.5,
+        0.06,
+        0.08,
+        1.1
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "door_handle",
+      "kind": "trim",
+      "box": [
+        2.94,
+        1.0,
+        1.15,
+        0.05,
+        0.04,
+        0.14
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "skirting_back",
+      "kind": "trim",
+      "box": [
+        0.0,
+        0.0,
+        -2.985,
+        5.9,
+        0.12,
+        0.03
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "skirting_left",
+      "kind": "trim",
+      "box": [
+        -2.985,
+        0.0,
+        0.0,
+        0.03,
+        0.12,
+        5.9
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "skirting_right_a",
+      "kind": "trim",
+      "box": [
+        2.985,
+        0.0,
+        -1.0,
+        0.03,
+        0.12,
+        3.9
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "skirting_right_b",
+      "kind": "trim",
+      "box": [
+        2.985,
+        0.0,
+        2.5,
+        0.03,
+        0.12,
+        1.0
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "skirting_front",
+      "kind": "trim",
+      "box": [
+        0.0,
+        0.0,
+        2.985,
+        5.9,
+        0.12,
+        0.03
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "rug",
+      "kind": "rug",
+      "box": [
+        0.0,
+        0.0,
+        -0.45,
+        3.2,
+        0.012,
+        2.5
+      ],
+      "surfaces": [
+        "rug_front",
+        "rug_top"
+      ]
+    },
+    {
+      "id": "picture_frame",
+      "kind": "art",
+      "box": [
+        0.0,
+        1.5,
+        -2.975,
+        1.2,
+        0.8,
+        0.02
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "picture",
+      "kind": "art",
+      "box": [
+        0.0,
+        1.55,
+        -2.96,
+        1.04,
+        0.7,
+        0.02
+      ],
+      "surfaces": [
+        "art_front",
+        "art_top"
+      ]
+    },
+    {
+      "id": "ceiling_lamp",
+      "kind": "lamp",
+      "box": [
+        0.0,
+        2.9,
+        0.0,
+        0.46,
+        0.1,
+        0.46
+      ],
+      "surfaces": [
+        "lamp_front",
+        "lamp_top"
       ]
     }
   ],
@@ -106,10 +818,26 @@
     "door",
     "bed_front",
     "bed_top",
+    "duvet_front",
+    "duvet_top",
+    "pillow_front",
+    "pillow_top",
+    "headboard_front",
+    "headboard_top",
     "nightstand_front",
     "nightstand_top",
     "wardrobe_front",
-    "wardrobe_top"
+    "wardrobe_top",
+    "trim_front",
+    "trim_top",
+    "curtain_front",
+    "curtain_top",
+    "rug_front",
+    "rug_top",
+    "lamp_front",
+    "lamp_top",
+    "art_front",
+    "art_top"
   ],
   "marks": [
     {
@@ -161,7 +889,7 @@
     {
       "id": "ots_a",
       "position": [
-        -2.0999999999999996,
+        -2.1,
         1.6,
         -1.5
       ],
@@ -175,7 +903,7 @@
     {
       "id": "ots_b",
       "position": [
-        2.0999999999999996,
+        2.1,
         1.6,
         1.5
       ],
@@ -203,7 +931,7 @@
     {
       "id": "close_1",
       "position": [
-        -0.8999999999999999,
+        -0.9,
         1.6,
         1.32
       ],
@@ -217,7 +945,7 @@
     {
       "id": "close_2",
       "position": [
-        0.8999999999999999,
+        0.9,
         1.6,
         -1.32
       ],
@@ -231,9 +959,9 @@
     {
       "id": "entrance",
       "position": [
-        -2.4000000000000004,
+        -2.4,
         1.7,
-        1.7999999999999998
+        1.8
       ],
       "lookAt": [
         2.4,
@@ -249,9 +977,9 @@
       "id": "table_left",
       "on": "nightstand_top",
       "position": [
-        1.2000000000000002,
-        0.65,
-        -2
+        -1.35,
+        0.62,
+        -2.45
       ],
       "maxHeight": 0.6
     },
@@ -259,9 +987,9 @@
       "id": "table_right",
       "on": "nightstand_top",
       "position": [
-        1.5,
-        0.65,
-        -2
+        1.35,
+        0.62,
+        -2.45
       ],
       "maxHeight": 0.6
     },
@@ -271,7 +999,7 @@
       "position": [
         -2.4,
         0,
-        -2.4
+        2.2
       ],
       "maxHeight": 2
     },
@@ -279,8 +1007,8 @@
       "id": "wall_picture",
       "on": "wall_back",
       "position": [
-        2.0999999999999996,
-        1.2,
+        2.1,
+        1.4,
         -2.98
       ],
       "maxHeight": 0.8
@@ -288,46 +1016,119 @@
   ],
   "defaultSkin": {
     "floor": {
-      "color": "#85715b"
+      "pattern": "wood",
+      "color": "#8c6a45"
     },
     "ceiling": {
-      "color": "#eee9df"
+      "pattern": "plaster",
+      "color": "#ece6da"
     },
     "wall_back": {
-      "color": "#d8d2c4"
+      "pattern": "plaster",
+      "color": "#d2c6b0"
     },
     "wall_left": {
-      "color": "#d8d2c4"
+      "pattern": "plaster",
+      "color": "#d2c6b0"
     },
     "wall_right": {
-      "color": "#d8d2c4"
-    },
-    "window_view": {
-      "color": "#385872"
-    },
-    "door": {
-      "color": "#b89f80"
-    },
-    "bed_front": {
-      "color": "#7b6754"
-    },
-    "bed_top": {
-      "color": "#7b6754"
-    },
-    "nightstand_front": {
-      "color": "#7b6754"
-    },
-    "nightstand_top": {
-      "color": "#7b6754"
-    },
-    "wardrobe_front": {
-      "color": "#7b6754"
-    },
-    "wardrobe_top": {
-      "color": "#7b6754"
+      "pattern": "plaster",
+      "color": "#d2c6b0"
     },
     "wall_front": {
-      "color": "#d8d2c4"
+      "pattern": "plaster",
+      "color": "#d2c6b0"
+    },
+    "window_view": {
+      "view": "day_window"
+    },
+    "door": {
+      "pattern": "wood",
+      "color": "#7a5638"
+    },
+    "bed_front": {
+      "pattern": "fabric",
+      "color": "#ece7de"
+    },
+    "bed_top": {
+      "pattern": "fabric",
+      "color": "#f2eee6"
+    },
+    "duvet_front": {
+      "pattern": "quilt",
+      "color": "#46618c"
+    },
+    "duvet_top": {
+      "pattern": "quilt",
+      "color": "#52709c"
+    },
+    "pillow_front": {
+      "pattern": "fabric",
+      "color": "#f4f0e8"
+    },
+    "pillow_top": {
+      "pattern": "fabric",
+      "color": "#f4f0e8"
+    },
+    "headboard_front": {
+      "pattern": "wood",
+      "color": "#5a3b26"
+    },
+    "headboard_top": {
+      "pattern": "wood",
+      "color": "#5a3b26"
+    },
+    "nightstand_front": {
+      "pattern": "wood",
+      "color": "#6e4d33"
+    },
+    "nightstand_top": {
+      "pattern": "wood",
+      "color": "#74533a"
+    },
+    "wardrobe_front": {
+      "pattern": "wood",
+      "color": "#5a4030"
+    },
+    "wardrobe_top": {
+      "pattern": "wood",
+      "color": "#5a4030"
+    },
+    "trim_front": {
+      "pattern": "plastic",
+      "color": "#e6dfd1"
+    },
+    "trim_top": {
+      "pattern": "plastic",
+      "color": "#eee8da"
+    },
+    "curtain_front": {
+      "pattern": "fabric",
+      "color": "#8a3b3f"
+    },
+    "curtain_top": {
+      "pattern": "fabric",
+      "color": "#8a3b3f"
+    },
+    "rug_front": {
+      "pattern": "carpet",
+      "color": "#7a4d3d"
+    },
+    "rug_top": {
+      "pattern": "carpet",
+      "color": "#7a4d3d"
+    },
+    "lamp_front": {
+      "color": "#fff1cf"
+    },
+    "lamp_top": {
+      "color": "#fff6dc"
+    },
+    "art_front": {
+      "color": "#3d6a8a"
+    },
+    "art_top": {
+      "color": "#496f8d"
     }
   }
 }

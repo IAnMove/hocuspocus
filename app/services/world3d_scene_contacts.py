@@ -1,0 +1,454 @@
+"""Does a person in a Video 3D scene really sit on the seat, at the table, with no limb through the furniture?
+
+Judged from the character's JOINTS at the pose it holds in the middle of the shot (``world3d_contact_poses``), against
+the triangles of every piece of furniture, never from bind-pose boxes. ``world3d.scene.inspect`` and every patch reply
+carry ``layout.contacts`` (one row per rigged character) and a warning for each problem; nothing is refused. Each
+warning ends with the fix in numbers and field names to paste into ``world3d.scene.patch`` bindings, and the row's
+``fix`` holds the same as bindings:
+
+- ``seated_without_seat``: the hips are held low (a seated clip) and nothing is under them;
+- ``floats_above_seat`` / ``sunk_into_seat``: the hips are that far over or into the seat under them;
+- ``seat_height_unusual``: the seat is too high or too low for the sitter's legs (the feet leave the floor, or the knees
+  come up to the chest);
+- ``limb_through_object``: a limb (thigh, shin, forearm...) runs that deep inside a piece of furniture;
+- ``inside_object``: a person standing still is inside a piece of furniture;
+- ``at_height_unusual``, ``at_out_of_reach``, ``at_not_in_front``: the table of ``rest.at`` is not between the seated hips
+  and chest, too far for the forearms, or not in front;
+- ``furniture_size_unusual``: a seat or a table someone uses is still drawn 1.7 m tall (every model is 1.7 m x scale
+  until it is sized); a GLB named like furniture is said so before anyone uses it (``world3d_furniture_sizes``).
+
+``collide: false`` exempts a person from the limb and inside checks.
+"""
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import logging
+
+import numpy as np
+
+from services.world3d_contact_poses import Person, Piece, measure_scene
+from services.world3d_furniture_sizes import size_hints
+from services.world3d_scene_bounds import resolve_workspace_glb
+from services.world3d_rest_hands import edge_distance as _edge_distance
+from services.world3d_rest_place import CLIP_NAME, HIP_ABOVE_SEAT
+from services.world3d_seats import table_top
+
+LOG = logging.getLogger(__name__)
+_MEMO: dict = {}
+CONTACTS_DOC = ("layout.contacts: one row per rigged character, judged from its joints at the pose it holds mid-shot against the furniture's "
+                "real faces: {id, pose seated|standing, hipsM, seat? {object, part, topM, gapM}, at? {object, topM, rangeM [lowest, highest], "
+                "edgeM}, through? [{limb, object, part, depthM, at}], issues?, fix? [bindings to paste into world3d.scene.patch]}. Warnings: "
+                "seated_without_seat, floats_above_seat, sunk_into_seat, seat_height_unusual, legs_unusually_short (a grown body that would need "
+                "a child's seat: no seat is shrunk for it), limb_through_object, inside_object, at_height_unusual, at_out_of_reach, "
+                "at_not_in_front, furniture_size_unusual, and from beats rest_released; each ends with the fix in numbers.")
+MAX_PEOPLE = 8
+TOLERANCE_M = 0.05            # hips this close to where the seat puts them are on it
+THROUGH_M = 0.03              # a limb this deep in furniture goes through it
+_CORE = ("back", "neck")       # the body itself, not a limb
+CHILD_SEAT_M, ADULT_M = 0.35, 1.4   # a seat lower than this for a body taller than that is a child's: the legs are wrong
+KNEE_SHARE = 0.28              # knee height over body height of a grown person
+REACH = 0.6                   # arm lengths from the seated chest to the table's edge that the forearms still rest on
+MAX_WARNINGS = 12
+_KIND_HEIGHTS = (("chair", 0.9), ("silla", 0.9), ("table", 0.75), ("mesa", 0.75), ("desk", 0.75), ("escritorio", 0.75), ("bed", 0.55),
+                 ("cama", 0.55), ("sofa", 0.85), ("stool", 0.46), ("taburete", 0.46), ("bench", 0.45), ("banco", 0.45))
+
+
+def scene_contacts(document: dict, workspace: str | None, workspace_dir) -> dict:
+    """``{contacts, warnings}``; never raises. The same document over the same files is judged once (an inspect after a
+    patch, the editor reopening it)."""
+    if not workspace or workspace_dir is None:
+        return {"contacts": [], "warnings": []}
+    try:
+        key = _memo_key(document, workspace, workspace_dir)
+        if key not in _MEMO:
+            if len(_MEMO) >= 16:
+                _MEMO.clear()
+            _MEMO[key] = _judged(document, workspace, workspace_dir)
+        return copy.deepcopy(_MEMO[key])
+    except Exception:  # noqa: BLE001 - a contact check never fails an inspect
+        LOG.exception("world3d contact check failed")
+        return {"contacts": [], "warnings": []}
+
+
+def _memo_key(document: dict, workspace: str, workspace_dir) -> tuple:
+    """The slots and duration as written, and the version of every workspace GLB they show."""
+    files = []
+    for slot in document.get("slots") or []:
+        path, _reason = resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir) if isinstance(slot, dict) else (None, None)
+        if path is not None:
+            stat = path.stat()
+            files.append((str(path), stat.st_mtime_ns, stat.st_size))
+    text = json.dumps([document.get("slots"), document.get("duration"), document.get("room")], sort_keys=True, default=str)
+    return workspace, hashlib.sha256(text.encode()).hexdigest(), tuple(files)
+
+
+def _judged(document: dict, workspace: str, workspace_dir) -> dict:
+    seconds = float(document.get("duration") or 0) / 2
+    people, pieces, drawn = measure_scene(document, workspace, workspace_dir, seconds)
+    report = _Report(pieces, drawn)
+    for person in people[:MAX_PEOPLE]:
+        report.check(person)
+    report.tables(people[:MAX_PEOPLE])
+    for row in report.rows:
+        row.pop("seatTooHigh", None)
+    rests = [person.slot.get("rest") for person in people[:MAX_PEOPLE] if isinstance(person.slot.get("rest"), dict)]
+    used = {name for rest in rests for name in (rest.get("on"), rest.get("at")) if name}
+    return {"contacts": report.rows, "warnings": (report.warnings + size_hints(pieces, drawn, used | report.sized))[:MAX_WARNINGS]}
+
+
+class _Report:
+    def __init__(self, pieces: list[Piece], drawn: dict) -> None:
+        self.pieces = {piece.id: piece for piece in pieces}
+        self.drawn = drawn
+        self.rows: list[dict] = []
+        self.warnings: list[str] = []
+        self.sized: set[str] = set()
+
+    def warn(self, row: dict, line: str, *fixes: dict) -> None:
+        self.warnings.append(line)
+        row.setdefault("issues", []).append(line.split(":", 1)[0])
+        for fix in fixes:
+            if fix not in row.setdefault("fix", []):
+                row["fix"].append(fix)
+
+    def check(self, person: Person) -> None:
+        # A sitter resolved by rest is seated even when its thighs slope down to the floor (a seat too high for its legs).
+        seated = person.seated() or (isinstance(person.slot.get("rest"), dict) and (person.slot.get("clip") or {}).get("name") == CLIP_NAME)
+        row = {"id": person.id, "pose": "seated" if seated else "standing", "hipsM": _rounded(person.joints["Hips"])}
+        self.rows.append(row)
+        rest = person.slot.get("rest") if isinstance(person.slot.get("rest"), dict) else {}
+        for name, use in ((rest.get("on"), "on"), (rest.get("at"), "at")):
+            if name in self.drawn:
+                self._size(row, name, use)
+        if seated:
+            self._seat(row, person, rest)
+        if person.slot.get("collide") is not False:
+            self._through(row, person, seated)
+
+    # ------------------------------------------------------------------------------------------------------------ seat
+
+    def _seat(self, row: dict, person: Person, rest: dict) -> None:
+        under = self._under(person)
+        if under is None:
+            self.warn(row, f"seated_without_seat: {person.id} is held seated (hips {person.hips_height:.2f} m above the floor) with nothing "
+                           f"under the hips; add a seat and sit on it: {{object_id: \"seat_{person.id}\", add: true, furniture: {{kind: \"chair\"}}}} "
+                           f"then {person.id}: rest {{pose: \"sit\", on: \"seat_{person.id}\"}}",
+                      {"object_id": f"seat_{person.id}", "add": True, "furniture": {"kind": "chair"}},
+                      {"object_id": person.id, "rest": {"pose": "sit", "on": f"seat_{person.id}"}})
+            return
+        piece, top, part = under
+        gap = float(person.joints["Hips"][1] - top - HIP_ABOVE_SEAT * person.size["leg"])
+        row["seat"] = {"object": piece.id, "part": piece.part_name(part), "topM": round(top - person.floor, 3), "gapM": round(gap, 3)}
+        sit = {"object_id": person.id, "rest": {"pose": "sit", "on": piece.id, **({"at": rest["at"]} if rest.get("at") else {})}}
+        if gap > TOLERANCE_M:
+            self.warn(row, f"floats_above_seat: {person.id}'s hips are {gap:.2f} m above {piece.id} ({piece.part_name(part)}); give {person.id} "
+                           f"rest {{pose: \"sit\", on: \"{piece.id}\"}}", sit)
+        elif gap < -TOLERANCE_M:
+            self.warn(row, f"sunk_into_seat: {person.id}'s hips are {-gap:.2f} m into {piece.id} ({piece.part_name(part)}); give {person.id} "
+                           f"rest {{pose: \"sit\", on: \"{piece.id}\"}}", sit)
+        if piece.id not in self.sized:
+            self._seat_height(row, person, piece, top - person.floor)
+
+    def _under(self, person: Person):
+        """``(piece, seat top y, part)`` right under the hips, or None."""
+        from services.world3d_mesh_solid import _hits
+        hips = person.joints["Hips"]
+        best = None
+        for piece in self.pieces.values():
+            depth, part = piece.depth(np.array([hips]))
+            if depth[0] > 0:
+                top = _support_y(piece, hips)
+                if best is None or top > best[1]:
+                    best = (piece, top, int(part[0]))
+                continue
+            native = piece.frame.to_native([hips])[0]
+            distances, owners = _hits(piece.mesh, native, np.array([0.0, -1.0, 0.0]))
+            if not len(distances):
+                continue
+            top = float(hips[1] - distances.min() * piece.frame.factor)
+            if top - person.floor > 0.08 and (best is None or top > best[1]):
+                best = (piece, top, int(owners[distances.argmin()]))
+        return best
+
+    @staticmethod
+    def _top_over(piece: Piece, point: np.ndarray) -> float:
+        """The scene y of the first face above a point inside a piece (where its solid ends upward)."""
+        from services.world3d_mesh_solid import _hits
+        native = piece.frame.to_native([point])[0]
+        distances, _ = _hits(piece.mesh, native, np.array([0.0, 1.0, 0.0]))
+        return float(point[1] + (distances.min() if len(distances) else 0.0) * piece.frame.factor)
+
+    def _seat_height(self, row: dict, person: Person, piece: Piece, seat: float) -> None:
+        """The thighs slope a little toward the knees with the shins upright: the seat that gives that, against this one."""
+        size, rest, factor = person.size, person.rest, person.frame.factor
+        knee = float((rest["LeftLeg"][1] + rest["RightLeg"][1]) / 2 - person.body.box_low) * factor
+        drop = float(rest["Hips"][1] - (rest["LeftUpLeg"][1] + rest["RightUpLeg"][1]) / 2) * factor
+        flesh = HIP_ABOVE_SEAT * size["leg"]
+        lowest, best, highest = (knee + share * size["thigh"] - flesh + drop for share in (-0.3, 0.1, 0.55))
+        if lowest <= seat <= highest:
+            return
+        what = "the thighs slope steeply and the feet barely reach the floor" if seat > highest else "the knees come up toward the chest"
+        row.setdefault("seatTooHigh", []).append(piece.id)
+        if best < CHILD_SEAT_M and person.height > ADULT_M:
+            self._short_legs(row, person, knee, best)
+            return
+        if piece.slot.get("roomBlock"):
+            how, fix = _stage_seat(person, piece.id, best)
+            self.warn(row, f"seat_height_unusual: {piece.id}'s seat is {seat:.2f} m high and {person.id}'s knees are {knee:.2f} m high, so {what}; "
+                           f"a seat for {person.id} is {best:.2f} m: {how}", fix)
+            return
+        fix = _resize(piece, best, seat, "seat")
+        self.warn(row, f"seat_height_unusual: {piece.id}'s seat is {seat:.2f} m high and {person.id}'s knees are {knee:.2f} m high, so {what}; "
+                       f"a seat for {person.id} is {best:.2f} m: give {piece.id} {_text(fix)}", {"object_id": piece.id, **fix})
+
+    def _short_legs(self, row: dict, person: Person, knee: float, best: float) -> None:
+        """A grown body whose rig put its knees far too low: say so rather than shrink the furniture to a child's."""
+        hips = person.rest_hips_height
+        self.warn(row, f"legs_unusually_short: {person.id} is {person.height:.2f} m tall but its knees are {knee:.2f} m high and its hips "
+                       f"{hips:.2f} m (a body that tall has its knees near {KNEE_SHARE * person.height:.2f} m), so it would need a "
+                       f"{best:.2f} m seat, a child's. Either its rig bent the legs at a skirt's or a coat's hem (make the character again "
+                       f"with model3d.blob.make or model3d.anime.make, whose rig now reads the legs under a skirt), or it really is a "
+                       f"short-legged figure (a chibi, a blob): then give its seat that height yourself; no seat is changed for you")
+
+    # ---------------------------------------------------------------------------------------------------------- limbs
+
+    def _through(self, row: dict, person: Person, seated: bool) -> None:
+        """Limbs (and, standing, the body) that run inside a piece of furniture or cross its faces."""
+        found = _hits_outside_own_backrest(person, self._limb_hits(person), seated)
+        # A body inside a piece is one warning (inside_object), not one per limb as well.
+        inside = {piece.id for depth, label, piece, *_rest in found if not seated and label in _CORE and depth >= THROUGH_M}
+        seen = set()
+        for depth, label, piece, part, point, out in sorted(found, key=lambda item: -item[0]):
+            key = ("body", piece.id) if piece.id in inside else (label, piece.id)
+            if key in seen or len(seen) >= 4:
+                continue
+            seen.add(key)
+            row.setdefault("through", []).append({"limb": label, "object": piece.id, "part": piece.part_name(part), "depthM": round(depth, 3),
+                                                  "at": _rounded(point)})
+            if piece.id in row.get("seatTooHigh", ()) and label.endswith("thigh"):
+                continue                                         # the seat's height is the cause, and it has its warning
+            self._through_warning(row, person, seated, (label, piece, part, depth, out))
+
+    def _limb_hits(self, person: Person) -> list[tuple]:
+        found = []
+        for piece in self.pieces.values():
+            for label, start, end in person.segments():
+                hit = _limb_hit(piece, start, end)
+                if hit is not None:
+                    found.append((hit[0], label, piece, *hit[1:]))
+        return found
+
+    def _through_warning(self, row: dict, person: Person, seated: bool, hit: tuple) -> None:
+        label, piece, part, depth, out = hit
+        seats = {name: item.slot for name, item in self.pieces.items()}
+        text, fix = _standing_fix(person, piece) if not seated else _seated_fix(person, piece, depth, out, seats)
+        where = f"{piece.id} ({piece.part_name(part)})"
+        if not seated and label in _CORE and depth >= THROUGH_M:
+            self.warn(row, f"inside_object: {person.id} stands inside {where}, its {label} {depth:.2f} m deep; {text}", *([fix] if fix else []))
+            return
+        how = f"goes {depth:.2f} m inside" if depth >= THROUGH_M else "passes right through"
+        self.warn(row, f"limb_through_object: {person.id}'s {label} {how} {where}; {text}, or give {person.id} collide: false", *([fix] if fix else []))
+
+    # ---------------------------------------------------------------------------------------------------------- tables
+
+    def tables(self, people: list[Person]) -> None:
+        """``rest.at``: the top between the seated hips and chest, in front, within forearm reach; one height for everyone at it."""
+        groups: dict[str, list] = {}
+        for person in people:
+            name = (person.slot.get("rest") or {}).get("at")
+            row = next(item for item in self.rows if item["id"] == person.id)
+            if name in self.pieces and row["pose"] == "seated":
+                groups.setdefault(name, []).append((person, row))
+        for name, members in groups.items():
+            self._table(self.pieces[name], members)
+
+    def _table(self, piece: Piece, members: list) -> None:
+        top = table_top(piece.box, piece.frame.factor, piece.mesh, piece.parts)
+        if top is None:
+            return
+        corners = piece.frame.to_world([[top.low[0], top.y, top.low[1]], [top.high[0], top.y, top.low[1]],
+                                        [top.high[0], top.y, top.high[1]], [top.low[0], top.y, top.high[1]]])
+        top_y, floor = float(corners[:, 1].mean()), piece.floor_y()
+        spans = [_span(person) for person, _row in members]
+        low, high = max(span[0] for span in spans), min(span[2] for span in spans)
+        common = min(max(float(np.mean([span[1] for span in spans])), low), high) if low <= high else float(np.mean([span[1] for span in spans]))
+        for (person, row), (lowest, _ideal, highest) in zip(members, spans):
+            row["at"] = {"object": piece.id, "topM": round(top_y - floor, 3), "rangeM": [round(lowest - floor, 3), round(highest - floor, 3)]}
+            if piece.id not in self.sized and not lowest <= top_y <= highest:
+                self._at_height(row, person, piece, (top_y - floor, common - floor, floor), len(members) > 1)
+            self._reach(row, person, piece, corners)
+
+    def _at_height(self, row: dict, person: Person, piece: Piece, heights: tuple, shared: bool) -> None:
+        top, wanted, floor = heights
+        fix = None if piece.slot.get("roomBlock") else _resize(piece, wanted, top, "height")
+        how = (f"give {piece.id} {_text(fix)}" if fix else f"{piece.id} is part of the stage's set: add a table of that height, "
+               f"{{object_id: \"table\", add: true, furniture: {{kind: \"table\", height: {wanted:.2f}}}}}, and seat them at it")
+        self.warn(row, f"at_height_unusual: {piece.id}'s top is {top:.2f} m high; seated, {person.id}'s hips are at "
+                       f"{person.joints['Hips'][1] - floor:.2f} m and chest at {person.joints['Spine2'][1] - floor:.2f} m, so a table "
+                       f"for {'everyone at it' if shared else person.id} is {wanted:.2f} m: {how}", *([{"object_id": piece.id, **fix}] if fix else []))
+
+    def _reach(self, row: dict, person: Person, piece: Piece, corners: np.ndarray) -> None:
+        chest = person.joints["Spine2"]
+        edge = _edge_distance(corners, chest, person.forward)
+        seat = (person.slot.get("rest") or {}).get("on")
+        if edge is None:
+            turn = {"beside": {"object": piece.id, "facing": "object"}}
+            self.warn(row, f"at_not_in_front: {piece.id} is not in front of {person.id}; turn the seat toward it: give {seat} {_text(turn)}",
+                      {"object_id": seat, **turn})
+            return
+        row["at"]["edgeM"] = round(edge, 3)
+        reach, wanted = REACH * person.size["arm"], 0.3 * person.size["arm"]
+        if edge <= reach:
+            return
+        near = self.pieces.get(seat)
+        beside = (near.slot.get("beside") if near else None) or {}
+        gap = beside.get("gap", 0.0) - (edge - wanted) if beside.get("object") == piece.id else None
+        binding = {**beside, "gap": round(gap, 2)} if gap is not None else {"object": piece.id, "facing": "object", "gap": 0.0}
+        self.warn(row, f"at_out_of_reach: {person.id}'s chest is {edge:.2f} m from {piece.id}'s edge and the forearms reach "
+                       f"{reach:.2f} m; give {seat} {_text({'beside': binding})}", {"object_id": seat, "beside": binding})
+
+    # ------------------------------------------------------------------------------------------------------------ size
+
+    def _size(self, row: dict, name: str, use: str) -> None:
+        height, scale = self.drawn[name]
+        if name in self.sized or abs(height - 1.7) > 0.01 or abs(scale - 1) > 1e-6:
+            return
+        self.sized.add(name)
+        piece = self.pieces.get(name)
+        named = " ".join(str(piece.slot.get(key) or "") for key in ("id", "sourceUrl")).lower() if piece else name.lower()
+        wanted = next((value for word, value in _KIND_HEIGHTS if word in named), 0.75 if use == "at" else 0.9)
+        self.warn(row, f"furniture_size_unusual: {name} is drawn 1.70 m tall (every model is 1.7 m x scale until it is sized); a "
+                       f"{'table' if use == 'at' else 'seat'} like it is about {wanted:g} m: give {name} height {wanted:g}, then read the "
+                       f"seat and table warnings again", {"object_id": name, "height": wanted})
+
+
+def _seat_of_block(piece: Piece):
+    """The cushion of a stage box that includes its back, or None when the box top is the seat (a bed, a stool, a low cushion)."""
+    block = piece.slot.get("roomBlock")
+    if not isinstance(block, dict):
+        return None
+    from services.world3d_room_blocks import block_seat
+    return block_seat(block)
+
+
+def _support_y(piece: Piece, point: np.ndarray) -> float:
+    """Scene y of the surface under a point inside a piece: the cushion when the box draws a back, else the lid."""
+    seat = _seat_of_block(piece)
+    if seat is None:
+        return _Report._top_over(piece, point)
+    return float(piece.frame.to_world([[0.0, seat.y, 0.0]])[0][1])
+
+
+def _hits_outside_own_backrest(person: Person, found: list, seated: bool) -> list:
+    """A sitter's body inside the stage box it sits on is the backrest, not a limb through furniture."""
+    rest = person.slot.get("rest") if seated and isinstance(person.slot.get("rest"), dict) else {}
+    on = rest.get("on")
+    if not on:
+        return found
+    return [hit for hit in found if hit[2].id != on or _seat_of_block(hit[2]) is None]
+
+
+def _stage_seat(person: Person, block_id: str, best: float) -> tuple[str, dict]:
+    """A stage box has no ``height`` binding. The repair is a real chair, which ``world3d.scene.patch`` can add."""
+    seat_id = f"seat_{person.id}"
+    fix = {"object_id": seat_id, "add": True, "furniture": {"kind": "chair", "seat": round(best, 2)}}
+    how = (f"{block_id} is part of the stage's set: add a seat of that height, "
+           f"{{object_id: \"{seat_id}\", add: true, furniture: {{kind: \"chair\", seat: {best:.2f}}}}}")
+    return how, fix
+
+
+def _limb_hit(piece: Piece, start: np.ndarray, end: np.ndarray):
+    """``(depth m, part, point, way out)`` of a limb inside a piece or right through it, or None."""
+    points = start + (end - start) * np.linspace(0.0, 1.0, 17)[:, None]
+    depth, parts, exits = piece.depth_exits(points)
+    crossed = piece.crossed(start, end)
+    deepest = int(np.argmax(depth))
+    if depth[deepest] < THROUGH_M and not len(crossed):
+        return None
+    if depth[deepest] > 0:
+        return float(depth[deepest]), int(parts[deepest]), points[deepest], exits[deepest]
+    return 0.0, int(crossed[0]), (start + end) / 2, np.zeros(3)
+
+
+def _standing_fix(person: Person, piece: Piece) -> tuple[str, dict | None]:
+    """Step the person out of the piece's footprint, away from its middle."""
+    corners = piece.frame.to_world([[x, piece.box["min"][1], z] for x in (piece.box["min"][0], piece.box["max"][0])
+                                    for z in (piece.box["min"][2], piece.box["max"][2])])[:, [0, 2]]
+    centre, here = corners.mean(axis=0), person.joints["Hips"][[0, 2]]
+    away = here - centre
+    away = away / np.linalg.norm(away) if np.linalg.norm(away) > 1e-6 else np.array([0.0, 1.0])
+    distance = float(((corners - centre) @ away).max() - (here - centre) @ away) + 0.3      # its far edge plus a body
+    position = [float(value) for value in person.slot.get("position") or [0, 0, 0]]
+    moved = [round(float(position[0] + away[0] * distance), 3), position[1], round(float(position[2] + away[1] * distance), 3)]
+    return f"move {person.id} {distance:.2f} m out of it: position {_js(moved)}", {"object_id": person.id, "position": moved}
+
+
+def _seated_fix(person: Person, piece: Piece, depth: float, out: np.ndarray, seats: dict) -> tuple[str, dict | None]:
+    """A sitter's limb in a table or another piece: raise or lower its top when the way out is up or down, else move it away."""
+    rest = person.slot.get("rest") if isinstance(person.slot.get("rest"), dict) else {}
+    if piece.slot.get("roomBlock"):
+        return f"{piece.id} is part of the stage's set: move {person.id} (its seat's beside gap or position)", None
+    if piece.id == rest.get("on"):
+        return f"move {person.id} or {piece.id} apart (rest re-places the sitter; a beside gap moves a chair)", None
+    gap = _gap_fix(rest, piece, depth, seats)
+    if gap is not None:
+        return gap
+    if not out.any():
+        return f"move {person.id} or {piece.id} apart (rest re-places the sitter; a beside gap moves a chair)", None
+    top = float(piece.frame.to_world([[0.0, piece.box["max"][1], 0.0]])[0][1]) - piece.floor_y()
+    wanted = top + (depth + 0.05) * (-1 if out[1] > 0 else 1)
+    if abs(out[1]) > 0.7 and abs(piece.floor_y() - person.floor) < 0.05 and wanted >= 0.2:
+        fix = _resize(piece, wanted, top, "height")       # a table top in the knees or the forearms: its height
+        return f"{'lower' if out[1] > 0 else 'raise'} {piece.id} to {wanted:.2f} m: give {piece.id} {_text(fix)}", {"object_id": piece.id, **fix}
+    position = [float(value) for value in piece.slot.get("position") or [0, 0, 0]]
+    step = -out * (depth + 0.05)
+    moved = [round(float(position[axis] + step[axis]), 3) for axis in range(3)]
+    return f"move {piece.id} {depth + 0.05:.2f} m away: position {_js(moved)}", {"object_id": piece.id, "position": moved}
+
+
+def _gap_fix(rest: dict, piece: Piece, depth: float, seats: dict) -> tuple[str, dict] | None:
+    """The sitter's seat stands beside this piece and follows it: open the gap between them instead."""
+    near = (seats.get(rest.get("on")) or {}).get("beside") or {}
+    if near.get("object") != piece.id:
+        return None
+    binding = {"beside": {**near, "gap": round(float(near.get("gap", 0.0)) + max(depth, 0.05) + 0.05, 2)}}
+    return f"move {rest['on']} back from {piece.id}: give {rest['on']} {_text(binding)}", {"object_id": rest["on"], **binding}
+
+
+def _span(person: Person) -> tuple[float, float, float]:
+    """Scene heights a table top may have for this sitter: a little over the hips, about the elbows, the chest."""
+    hips, shoulders = float(person.joints["Hips"][1]), float((person.joints["LeftArm"][1] + person.joints["RightArm"][1]) / 2)
+    reach = shoulders - hips
+    return hips + 0.15 * reach, hips + 0.4 * reach, max(float(person.joints["Spine2"][1]), hips + 0.55 * reach)
+
+
+def _resize(piece: Piece, wanted: float, current: float, key: str) -> dict:
+    """The binding that brings a height (a seat, a top) to ``wanted`` metres: the furniture's own size, else ``height``."""
+    furniture = piece.slot.get("furniture") if isinstance(piece.slot.get("furniture"), dict) else None
+    if furniture:
+        given = {name: furniture[name] for name in ("kind", "width", "depth", "color") if name in furniture}
+        return {"furniture": {**given, ("seat" if key == "seat" and "seat" in furniture else "height"): round(wanted, 2)}}
+    return {"height": round(piece.drawn_height() * wanted / max(current, 1e-3), 2)}
+
+
+def _text(binding: dict) -> str:
+    """A binding as the warnings write it: ``height 0.75``, ``beside {object: "table", gap: -0.1}``."""
+    return ", ".join(f"{key} {_js(value)}" for key, value in binding.items())
+
+
+def _js(value) -> str:
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{key}: {_js(item)}" for key, item in value.items()) + "}"
+    if isinstance(value, str):
+        return f'"{value}"'
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
+
+
+def _rounded(point) -> list:
+    return [round(float(value), 3) for value in point]
