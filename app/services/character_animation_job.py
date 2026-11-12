@@ -10,6 +10,8 @@ them into a sprite sheet and saves it on the kit as ``animations.<id>`` waiting 
 * ``autoApprove`` («Modo un solo disparo», ``agent_autonomy`` = ``one_shot``) lets the job approve what it made when the sheet passes the
   automatic checks (``services/character_animation_checks.py``): the approval is the agent's review (``reviewedBy: agent``), the job
   reports ``autoApproved`` and ``checks``, and a sheet that fails stays pending for a person with the list of what failed.
+  Whatever the mode, a finished job also reports on its sheet in ``result`` (``checks``, ``verdict``, ``gait``, ``warnings``:
+  ``services/character_animation_verdict.py``); only approval depends on the mode.
 * A job is a small file under ``.character-animation-jobs-v1`` of the workspace, so it can be followed after a reload and listed.
 * ``references`` are extra pictures (the picture of another direction of the same character) sent after the character's own as
   ``image_refs``: a model that takes only one reference refuses them, and the job goes on with the character's picture alone
@@ -40,7 +42,11 @@ from services.character_animation_checks import failed, sheet_checks, summary
 from services.character_animation_cycle_checks import sibling_sheets
 from services.character_animation_directions import contract_of
 from services.character_animation_guides import gait_of, guide_for, guided_prompt, tries
+from services import character_animation_remake as remake
+from services import walk_scale
+from services import walk_stride
 from services.character_animation_review import AnimationReviewError, review_kit_animation
+from services.character_animation_verdict import CHECKS_UNAVAILABLE, report_of
 from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
                                            pose_prompt)
 from services.character_kit_face_cleanup import resolve_character_kit_image
@@ -84,6 +90,8 @@ class AnimationJobDeps:
     services: Callable[[], Mapping[str, Any]] | None = None
     # None asks the disk whether LTX-2.3 distilled and the union-control LoRA are installed. A test can answer instead.
     walk_video_ready: Callable[[], bool] | None = None
+    # How many rounds of remaking the poses that fail a catalog walk gets (None: ``guide.remake.rounds`` of the catalog, 0 turns it off).
+    remake_rounds: int | None = None
 
 
 def _now() -> float:
@@ -109,6 +117,12 @@ def _saved_frames(job: dict[str, Any], definition: dict[str, Any]) -> list[dict[
                 frame[key] = take[key]
         frames.append(frame)
     return frames
+
+
+def _kept_pose(made: dict[str, Any], keyed: str) -> dict[str, Any]:
+    """A pose a new job keeps: its keyed picture, and the guide and the gait that the earlier drawing recorded (``made``: a saved frame
+    or a take), which a remake of another pose must not erase."""
+    return {"keyed": keyed, **{key: made[key] for key in ("guide", "gait") if made.get(key)}}
 
 
 def reference_of(kit: dict[str, Any]) -> str | None:
@@ -230,17 +244,18 @@ class CharacterAnimationJobs:
         self._store(workspace).save(job)
         return job
 
-    def _kept(self, workspace: str, kit: dict[str, Any], animation_id: str, remake: str | None, ids: list[str]) -> dict[str, str]:
-        """Poses (id → keyed picture) the new job does not make again: the others when one pose is remade, else those an earlier
-        failed, cancelled or interrupted job for this animation had already keyed."""
+    def _kept(self, workspace: str, kit: dict[str, Any], animation_id: str, remake: str | None, ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Poses (id → ``{"keyed", "guide"?, "gait"?}``) the new job does not make again: the others when one pose is remade, else those an
+        earlier failed, cancelled or interrupted job for this animation had already keyed. A pose keeps its guide and how its legs measured
+        against it, so the finished sheet still says which poses missed."""
         if remake:
             frames = (kit.get("animations") or {}).get(animation_id, {}).get("frames") or []
-            return {frame["id"]: frame["source"] for frame in frames if frame["id"] != remake and frame["id"] in ids}
+            return {frame["id"]: _kept_pose(frame, frame["source"]) for frame in frames if frame["id"] != remake and frame["id"] in ids}
         latest = next((job for job in self._store(workspace).list() if job.get("kitId") == kit["id"] and job.get("animationId") == animation_id), None)
         if not latest or latest.get("status") not in RESUMABLE or latest.get("remake"):
             return {}
         made = [take for take in latest.get("takes") or [] if take.get("keyed") and take["status"] in ("ready", "reused")]
-        return {take["id"]: take["keyed"] for take in made if take["id"] in ids}
+        return {take["id"]: _kept_pose(take, take["keyed"]) for take in made if take["id"] in ids}
 
     def _definition(self, kit: dict[str, Any], animation_id: str, custom: dict[str, Any] | None, pose: str | None) -> dict[str, Any]:
         """What to make, or why it cannot be made: nothing is asked of the model before this passes."""
@@ -264,7 +279,7 @@ class CharacterAnimationJobs:
         ids = [item["id"] for item in definition["poses"]]
         # A guided clip replaces every pose. A pose kept from an earlier pose-by-pose try is not a frame of that clip.
         kept = {} if method_name in ("video", "puppet") else self._kept(workspace, kit, definition["id"], pose, ids)
-        takes = [{"id": item, "status": "reused", "keyed": kept[item], "seed": 0} if item in kept else
+        takes = [{"id": item, "status": "reused", "seed": 0, **kept[item]} if item in kept else
                  {"id": item, "status": "waiting", "seed": random.randrange(2_000_000_000)} for item in ids]
         job = {"jobId": f"anim-{uuid.uuid4().hex[:12]}", "workspace": workspace, "kitId": kit["id"], "animationId": definition["id"],
                "title": definition["title"]["en"], "model": model or DEFAULT_MODEL, "status": "queued", "stage": "poses", "takes": takes,
@@ -409,7 +424,10 @@ class CharacterAnimationJobs:
         drawn(name)
         return name, tools.key(f"{job['jobId']}-{pose['id']}-key{again}", name, built["screen"])
 
-    def _take(self, store: JobStore, job: dict[str, Any], take: dict[str, Any], tools: LocalTools, pose: dict[str, Any]) -> None:
+    def _take(self, store: JobStore, job: dict[str, Any], take: dict[str, Any], tools: LocalTools, pose: dict[str, Any], *,
+              attempts: int | None = None, offset: int = 0, round_no: int = 0) -> None:
+        """Draw one pose: up to ``guide.tries`` drawings (``attempts`` when a remake asks for fewer) and keep the closest to the guide. Every
+        drawing is recorded in the take's ``attempts``; ``offset`` keeps the files of a remake apart from the first pass's."""
         definition, workspace = job["definition"], job["workspace"]
         root = self.deps.workspace_dir(workspace)
         built = pose_prompt(definition["id"], pose["id"], job["description"], job.get("style"),
@@ -424,13 +442,14 @@ class CharacterAnimationJobs:
             self._update(store, job)
 
         best: dict[str, Any] | None = None
-        for attempt in range(tries(guide)):
-            seed = take["seed"] if attempt == 0 else random.randrange(2_000_000_000)
-            name, keyed = self._draw(job, tools, pose, built, guide, seed, attempt, keying)
+        for index in range(attempts or tries(guide)):
+            seed = take["seed"] if index == 0 else random.randrange(2_000_000_000)
+            name, keyed = self._draw(job, tools, pose, built, guide, seed, offset + index, keying)
             drawn = {"raw": file_url(name, workspace), "keyed": keyed, "seed": seed}
             if guide:  # a walk pose is measured against its guide and drawn again when its legs are far off
                 drawn["gait"] = gait_of(guide, resolve_character_kit_image(keyed, uploads_root=self.deps.uploads_root(), workspace_root=root))
-                take["tries"] = attempt + 1
+                take.setdefault("attempts", []).append({"round": round_no, **drawn})
+                take["tries"] = len(take["attempts"])
             if best is None or abs(drawn["gait"]["measured"] - guide["expected"]) < abs(best["gait"]["measured"] - guide["expected"]):
                 best = drawn
             if not guide or drawn["gait"]["ok"]:
@@ -438,6 +457,25 @@ class CharacterAnimationJobs:
             self._update(store, job)
         take.update(status="ready", **(best or {}))
         self._update(store, job)
+
+    def _remake_poses(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
+        """After the first pass of a catalog walk: redraw the poses that fail, a few rounds, and keep the best drawing of each
+        (``services/character_animation_remake.py``)."""
+        poses = {item["id"]: item for item in job["definition"]["poses"]}
+        root, uploads = self.deps.workspace_dir(job["workspace"]), self.deps.uploads_root()
+
+        def redraw(take: dict[str, Any], attempts: int, offset: int, round_no: int) -> None:
+            take["seed"] = random.randrange(2_000_000_000)
+            self._take(store, job, take, tools, poses[take["id"]], attempts=attempts, offset=offset, round_no=round_no)
+
+        def stop() -> None:
+            if self._cancelled(store, job["jobId"]):
+                raise ToolError("cancelled", "the job was cancelled")
+
+        found = remake.run(job, resolve=lambda source: resolve_character_kit_image(source, uploads_root=uploads, workspace_root=root), redraw=redraw,
+                           stop=stop, update=lambda: self._update(store, job), rounds=self.deps.remake_rounds)
+        if found:
+            self._update(store, job, autoRemake=found)
 
     def _run(self, workspace: str, job_id: str) -> None:
         store = self._store(workspace)
@@ -452,17 +490,8 @@ class CharacterAnimationJobs:
                 self._update(store, job, status="running")
                 if job.get("method") == "video":
                     self._video_cycle(store, job, tools)
-                elif job.get("method") == "puppet":
-                    self._puppet_cycle(store, job, tools)
-                else:
-                    poses = {item["id"]: item for item in job["definition"]["poses"]}
-                    for take in job["takes"]:
-                        if take["status"] not in ("reused", "ready"):
-                            try:
-                                self._take(store, job, take, tools, poses[take["id"]])
-                            except ToolError as error:
-                                take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
-                                raise
+                elif job.get("method") != "puppet" or self._puppet_cycle(store, job, tools):
+                    self._pose_cycle(store, job, tools)
                 self._update(store, job, stage="sheet")
                 self._finish(store, job)
         except ToolError as error:
@@ -475,8 +504,8 @@ class CharacterAnimationJobs:
         finally:
             self._tools.pop(job_id, None)
 
-    def _puppet_reference_picture(self, job: dict[str, Any], tools: LocalTools, animation_id: str, pose_id: str) -> str:
-        """Draw the reference pose on a copy of the job. The kit does not gain a second animation."""
+    def _puppet_reference_picture(self, job: dict[str, Any], tools: LocalTools, animation_id: str, pose_id: str, seed: int, attempt: int = 0) -> str:
+        """Draw the reference pose on a copy of the job. The kit does not gain a second animation. Another try (``attempt``) has files of its own."""
         try:
             definition = animation_def(animation_id)
         except CharacterAnimationError as error:
@@ -489,26 +518,47 @@ class CharacterAnimationJobs:
         guide = guide_for(definition, pose["id"], workspace_root=root,
                           name=f"{job['kitId']}-{definition['id']}-{pose['id']}-guide-{job['jobId'][-6:]}.png")
         copy = {**job, "definition": definition, "jobId": f"{job['jobId']}ref"}
-        _name, keyed = self._draw(copy, tools, pose, built, guide, job["takes"][0]["seed"], 0, lambda _drawn: None)
+        _name, keyed = self._draw(copy, tools, pose, built, guide, seed, attempt, lambda _drawn: None)
         if copy.get("refsDropped"):
             job["refsDropped"] = True
         return keyed
 
-    def _puppet_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
-        """One drawing, then one keyed frame per pose. A missing limb fails the job and leaves no sheet."""
+    def _puppet_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> bool:
+        """One drawing, then one keyed frame per pose. Returns True when the drawing could not be cut (no joints, no limbs apart): the job then
+        goes on pose by pose with the same takes and a warning, because a walk the person can look at is worth more than a failed job. A tool
+        error still fails the job."""
         try:
-            try:
-                fill_puppet_takes(job, tools, workspace_root=self.deps.workspace_dir(job["workspace"]),
-                                  uploads_root=self.deps.uploads_root(), kit=self._kit(job["workspace"], job["kitId"]),
-                                  draw=lambda animation, pose: self._puppet_reference_picture(job, tools, animation, pose),
-                                  update=lambda **changes: self._update(store, job, **changes))
-            except WalkPuppetError as error:
-                raise ToolError("puppet_failed", str(error)) from error
+            fill_puppet_takes(job, tools, workspace_root=self.deps.workspace_dir(job["workspace"]),
+                              uploads_root=self.deps.uploads_root(), kit=self._kit(job["workspace"], job["kitId"]),
+                              draw=lambda animation, pose, seed, attempt: self._puppet_reference_picture(job, tools, animation, pose, seed, attempt),
+                              update=lambda **changes: self._update(store, job, **changes))
+            return False
+        except WalkPuppetError as error:
+            reason = str(error)[:300]
         except ToolError as error:
             for take in job["takes"]:
                 if take["status"] not in ("ready", "reused"):
                     take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
             raise
+        for take in job["takes"]:
+            take.update(status="waiting")
+        job.pop("method", None)
+        # whatever the puppet recorded before it failed (no layers, a reference off its guide) is about a cut that did not happen
+        self._update(store, job, fallback={"from": "puppet", "to": "poses", "reason": reason}, warnings=["puppet_fell_back"])
+        return True
+
+    def _pose_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
+        """Every pose in turn (the first pass), then the remake of the ones that fail."""
+        poses = {item["id"]: item for item in job["definition"]["poses"]}
+        for take in job["takes"]:
+            if take["status"] not in ("reused", "ready"):
+                try:
+                    self._take(store, job, take, tools, poses[take["id"]])
+                except ToolError as error:
+                    take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
+                    raise
+        if remake.applies(job):
+            self._remake_poses(store, job, tools)
 
     def _video_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
         """One guided clip, then one keyed frame per pose. A tool error fails the job the same way a pose does."""
@@ -526,39 +576,75 @@ class CharacterAnimationJobs:
         root = self.deps.workspace_dir(workspace)
         sheet = build_sheet([take["keyed"] for take in job["takes"]], uploads_root=self.deps.uploads_root(), workspace_root=root,
                             workspace=workspace, name=f"{job['kitId']}-{definition['id']}", scale_by=definition["scaleBy"], output_dir=root,
-                            columns=definition.get("columns"))
+                            columns=definition.get("columns"), normalise=walk_scale.applies(job))
         entry: dict[str, Any] = {
             "sheet": {key: sheet[key] for key in ("source", "width", "height", "count", "columns", "rows", "cell")},
             # What the author wrote for a pose stays with it, so that pose can be made again alone.
             "frames": _saved_frames(job, definition),
-            "fps": definition["fps"], "loop": definition["loop"], "facing": definition["facing"], "view": definition["view"],
+            "fps": definition["fps"], "loop": definition["loop"], "facing": self._facing(job, definition),
+            "view": definition["view"],
             "scaleBy": definition["scaleBy"], "model": job["model"], "reviewState": "pending", "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             **contract_of(definition["id"], definition), **clip_fields(job),
+            **self._stride_field(sheet, definition),
             **({"title": definition["title"]["es"]} if definition.get("custom") else {}), **({"prompt": job["prompt"]} if job.get("prompt") else {}),
             **({"provenance": job["puppet"]} if job.get("puppet") else {}),
         }
         normalize_kit_animations({definition["id"]: entry})
+        checks = self._sheet_checks(job, sheet, definition)
         self._save_on_kit(workspace, job["kitId"], definition["id"], entry)
-        approval = self._auto_approve(job, sheet, definition) if job.get("autoApprove") else {}
+        # Only autoApprove decides approval; the checks and the gait are reported to whoever reads the job, in every mode.
+        approval = self._auto_approve(job, checks) if job.get("autoApprove") else {}
         result = {"animation": definition["id"], "reviewState": approval.get("reviewState", "pending"), "sheet": sheet["source"], "count": sheet["count"],
                   "frames": [take["keyed"] for take in job["takes"]], "scaleBy": sheet["scaleBy"], **clip_fields(job),
-                  **{key: approval[key] for key in ("autoApproved", "checks") if key in approval},
-                  **({"provenance": job["puppet"]} if job.get("puppet") else {}),
-                  **({"warnings": job["warnings"]} if job.get("warnings") else {})}
+                  **report_of(checks, definition, job), **({"autoApproved": approval["autoApproved"]} if approval else {}),
+                  **self._what_was_done(job, sheet),
+                  **({"provenance": job["puppet"]} if job.get("puppet") else {})}
         self._update(store, job, status="completed", finishedAt=_now(), generationJob=None, result=result,
                      **{key: approval[key] for key in ("autoApproved", "checks", "reviewNote") if key in approval})
 
-    def _auto_approve(self, job: dict[str, Any], sheet: dict[str, Any], definition: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _facing(job: dict[str, Any], definition: dict[str, Any]) -> str:
+        """The way the sheet looks: the catalog's, unless a puppet was cut from a drawing that looked the other way."""
+        return (job.get("puppet") or {}).get("facing", definition["facing"])
+
+    @staticmethod
+    def _what_was_done(job: dict[str, Any], sheet: dict[str, Any]) -> dict[str, Any]:
+        """What the job did to the poses besides drawing them, for its result: the poses it drew again and whether it scaled them by their torso."""
+        return {**({"autoRemake": job["autoRemake"]} if job.get("autoRemake") else {}), **({"normalised": sheet["normalised"]} if sheet.get("normalised") else {})}
+
+    @staticmethod
+    def _stride_field(sheet: dict[str, Any], definition: dict[str, Any]) -> dict[str, Any]:
+        """``stride`` of a catalog walk: the ground a cycle of its feet covers, in heights, read from the sheet just joined (the players move
+        the figure by it). Nothing for any other animation, or when the sheet cannot be read: the players keep their constants."""
+        if definition.get("custom") or definition.get("guide") != "walk":
+            return {}
+        try:
+            found = walk_stride.stride_of_sheet(sheet, contract_of(definition["id"], definition).get("dir"))
+        except Exception:  # noqa: BLE001 - a measure is never worth a sheet
+            return {}
+        return {"stride": found} if found else {}
+
+    def _sheet_checks(self, job: dict[str, Any], sheet: dict[str, Any], definition: dict[str, Any]) -> list[dict[str, Any]] | None:
+        """The automatic checks on the sheet just written, whatever the approval mode. None when they could not be read: the sheet is
+        made and saved all the same (a diagnosis never costs it), the job warns ``checks_unavailable`` and nothing is auto-approved."""
+        try:
+            root = self.deps.workspace_dir(job["workspace"])
+            siblings = sibling_sheets(self._kit(job["workspace"], job["kitId"]), definition, uploads_root=self.deps.uploads_root(), workspace_root=root)
+            return sheet_checks(sheet, definition, siblings, self._facing(job, definition))
+        except Exception as error:  # the checks are a report on the sheet, not a step of making it
+            job["checksError"] = f"{error}"[:200]
+            return None
+
+    def _auto_approve(self, job: dict[str, Any], checks: list[dict[str, Any]] | None) -> dict[str, Any]:
         """The agent's review of the animation just saved: approved when every automatic check passes, else it stays pending with the
         checks that failed. The approval is the same operation a review over MCP is (``review_kit_animation``, actor ``agent``)."""
-        root = self.deps.workspace_dir(job["workspace"])
-        siblings = sibling_sheets(self._kit(job["workspace"], job["kitId"]), definition, uploads_root=self.deps.uploads_root(), workspace_root=root)
-        checks = sheet_checks(sheet, definition, siblings)
+        if checks is None:
+            return {"autoApproved": False, "reviewState": "pending", "reviewNote": CHECKS_UNAVAILABLE}
         outcome = {"autoApproved": False, "checks": checks, "reviewState": "pending", "reviewNote": summary(checks)}
         if failed(checks):
             return outcome
         try:
-            review = review_kit_animation(self.deps.workspace_dir(job["workspace"]), job["kitId"], definition["id"], "approve", outcome["reviewNote"], "agent",
+            review = review_kit_animation(self.deps.workspace_dir(job["workspace"]), job["kitId"], job["definition"]["id"], "approve", outcome["reviewNote"], "agent",
                                           services=self._services())
         except AnimationReviewError as error:  # the owner switched the mode off while the poses were made: a person decides
             return {**outcome, "reviewNote": str(error)}

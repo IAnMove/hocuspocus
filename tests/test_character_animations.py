@@ -409,9 +409,10 @@ def test_the_catalog_has_five_directions_each_with_a_twelve_pose_walk_at_twelve_
         assert item["view"] == direction and item["columns"] == 6 and set(item["checks"]) == {"height", "repeats", "mirror", "gait"}
         assert item["guide"] == "walk", "every pose of a walk is drawn over its guide"
         assert len({pose["id"] for pose in item["poses"]}) == 12 == len({pose["prompt"] for pose in item["poses"]}), "twelve different drawings"
-    # The old four-pose walk stays as it was, and says what it is.
+    # The four-pose walk keeps its four poses and says what it is. It is read for one size and for a walk that stops; the mirror compares
+    # cell with cell against the twelve-pose directions and the gait compares each cell with its moment of a twelve-pose step.
     walk = next(item for item in data["animations"] if item["id"] == "walk")
-    assert len(walk["poses"]) == 4 and walk["fps"] == 4 and (walk["motion"], walk["dir"]) == ("walk", "side") and "checks" not in walk
+    assert len(walk["poses"]) == 4 and walk["fps"] == 4 and (walk["motion"], walk["dir"]) == ("walk", "side") and walk["checks"] == ["height", "repeats"]
     assert walk["guide"] == "walk" and data["guide"]["style"] in data["guide"]["text"]
     idles = {item["dir"] for item in data["animations"] if item.get("motion") == "idle"}
     assert idles == {"front", "side", "front34", "back34", "back"}
@@ -542,6 +543,8 @@ def test_a_twelve_pose_walk_passes_the_cycle_checks_when_the_figures_are_one_siz
     assert {"figure_height", "repeated_poses", "ground_line", "cell_count"} <= set(checks)
     assert checks["figure_height"]["limit"] == 0.03 and checks["repeated_poses"]["value"] == 1 and checks["repeated_poses"]["limit"] == 2
     assert "direction_mirror" in checks and checks["direction_mirror"]["ok"], "a kit with no other direction has nothing to repeat"
+    assert {"walk_foot_order", "walk_loop_seam", "walk_facing"} <= set(checks) and "walk_foot_alternation" not in checks, "a profile walk lists the readings it can make"
+    assert all(isinstance(check.get("cells"), list) for check in checks.values() if check["id"].startswith("walk_") and check["id"] != "walk_gait")
 
 
 def test_a_pose_drawn_a_tenth_smaller_fails_the_same_height_check_and_a_hair_of_difference_does_not(folder):
@@ -589,4 +592,111 @@ def test_the_cycle_checks_run_only_on_the_animations_that_ask_for_them(folder):
     four = [_figure(folder / f"p{index}.png", legs=(30 + index, 100 - index)) for index in range(4)]
     built = _sheet_of(folder, four)
     ids = set(_checks(built, "walk"))
-    assert not ids & {"figure_height", "repeated_poses", "direction_mirror"}, "the old walk is checked as it always was"
+    asked = {"direction_mirror", "walk_gait", "walk_foot_order", "walk_foot_alternation", "walk_loop_seam", "walk_facing"}
+    assert {"figure_height", "repeated_poses"} <= ids and not ids & asked, "the four-pose walk asks for two of the four"
+    assert not set(_checks(built, "wave")) & ({"figure_height", "repeated_poses"} | asked), "a gesture is checked as it always was"
+
+
+def _four_pose_walk(folder: Path, name: str, *, heights: dict[int, int] | None = None, same: dict[int, int] | None = None) -> dict:
+    """The four poses of ``walk`` (contact, passing, contact, passing: phases 0, 3, 6 and 9 of the twelve a walker is drawn in)."""
+    poses = [_walker(folder / f"{name}-{index}.png", (same or {}).get(index, 3 * index), height=(heights or {}).get(index, 200)) for index in range(4)]
+    return build_sheet([pose.name for pose in poses], uploads_root=str(folder / "uploads"), workspace_root=str(folder), workspace="demo", name=name, output_dir=str(folder))
+
+
+def test_the_four_pose_walk_fails_the_size_and_the_repeat_checks_like_the_long_cycles(folder):
+    good = _checks(_four_pose_walk(folder, "four-good"), "walk")
+    assert all(check["ok"] for check in good.values()), {key: check for key, check in good.items() if not check["ok"]}
+    small = _checks(_four_pose_walk(folder, "four-small", heights={1: 170}), "walk")
+    assert not small["figure_height"]["ok"] and small["figure_height"]["value"] > 0.03, "a pose a tenth smaller makes the walk pulse"
+    stopped = _checks(_four_pose_walk(folder, "four-stopped", same={1: 0, 2: 0}), "walk")
+    assert not stopped["repeated_poses"]["ok"] and stopped["repeated_poses"]["value"] == 3, "three poses alike in a row is a walk that stops"
+
+
+# ----- a walk drawn pose by pose is scaled by its torso, not by one scale for all (services/walk_scale.py) -----
+
+TRUNK = (230, 180, 30)
+
+
+def _jittered(path: Path, *, factor: float = 1.0, leg_end: int = 200) -> Path:
+    """A keyed pose of the same character drawn at ``factor`` of its size (a head, a 70-row trunk, two legs ending at ``leg_end``)."""
+    base = _figure(path, legs=(48, 72), height=leg_end)
+    with Image.open(base) as opened:
+        image = opened.convert("RGBA")
+    if factor != 1.0:
+        image = image.resize((max(1, round(image.width * factor)), max(1, round(image.height * factor))), Image.Resampling.NEAREST)
+    image.save(path)
+    return path
+
+
+def _pose_model(page: Image.Image) -> dict:
+    """The pose model of a perfect eye: the neck is where the trunk starts, the hips where it ends, whatever the legs do."""
+    rows = np.nonzero((np.asarray(page)[..., :3] == TRUNK).all(axis=2).any(axis=1))[0]
+    columns = np.nonzero((np.asarray(page)[..., :3] == TRUNK).all(axis=2).any(axis=0))[0]
+    middle = float(columns.mean())
+    body = [[0.0, 0.0, 0.0] for _ in range(18)]
+    body[1], body[8], body[11] = [middle, float(rows[0]), 0.9], [middle - 8, float(rows[-1]), 0.9], [middle + 8, float(rows[-1]), 0.9]
+    return {"body": body}
+
+
+def _heights(built: dict) -> list[int]:
+    sheet = Image.open(built["path"]).convert("RGBA")
+    cell, boxes = built["cell"], []
+    for index in range(built["count"]):
+        row, column = divmod(index, built["columns"])
+        part = sheet.crop((column * cell["width"], row * cell["height"], (column + 1) * cell["width"], (row + 1) * cell["height"]))
+        boxes.append(part.getchannel("A").point(lambda value: 255 if value > 8 else 0).getbbox())
+    assert all(box and abs(box[3] - round(cell["height"] * built["feet"])) <= 1 for box in boxes), "every figure stands on the line of the cell"
+    return [box[3] - box[1] for box in boxes]
+
+
+def test_poses_drawn_at_different_sizes_are_scaled_by_their_torso_so_the_figure_keeps_its_size(folder, monkeypatch):
+    monkeypatch.setattr("services.face_landmarks.detect", _pose_model)
+    factors = [1.0, 0.92, 1.05, 0.97, 1.1, 1.0, 0.9, 1.03, 0.95, 1.08, 1.0, 0.98]
+    poses = [_jittered(folder / f"j{index}.png", factor=factor) for index, factor in enumerate(factors)]
+    names = [pose.name for pose in poses]
+    kwargs = dict(uploads_root=str(folder / "uploads"), workspace_root=str(folder), workspace="demo", columns=6, output_dir=str(folder))
+    shared = build_sheet(names, name="shared", **kwargs)
+    steady = build_sheet(names, name="steady", normalise=True, **kwargs)
+    assert shared["normalised"] is None and steady["normalised"] == "torso" and steady["scaleBy"] == "height"
+    spread = lambda built: (max(_heights(built)) - min(_heights(built))) / max(_heights(built))  # noqa: E731
+    assert spread(shared) > 0.08, "one shared scale keeps every drawing's own size"
+    assert spread(steady) < 0.015, "each torso is the median's: the same character in every cell"
+    from services.character_animation_checks import sheet_checks
+    checks = {check["id"]: check for check in sheet_checks(steady, animations.animation("walk-12"))}
+    assert checks["figure_height"]["ok"] and checks["ground_line"]["ok"]
+    assert not {check["id"]: check for check in sheet_checks(shared, animations.animation("walk-12"))}["figure_height"]["ok"], "the check the jitter used to fail"
+
+
+def test_the_torso_scale_keeps_the_bob_of_a_walk_because_the_legs_are_not_what_it_measures(folder, monkeypatch):
+    monkeypatch.setattr("services.face_landmarks.detect", _pose_model)
+    poses = [_jittered(folder / f"b{index}.png", leg_end=end) for index, end in enumerate([200, 196, 192, 190, 192, 196] * 2)]
+    built = build_sheet([pose.name for pose in poses], uploads_root=str(folder / "uploads"), workspace_root=str(folder), workspace="demo", name="bob",
+                        columns=6, output_dir=str(folder), normalise=True)
+    heights = _heights(built)
+    assert built["normalised"] == "torso" and min(heights) / max(heights) == pytest.approx(180 / 190, abs=0.01), "a pose with its legs apart is lower, as it should be"
+
+
+def test_the_shared_scale_stays_when_the_pose_model_is_missing_or_guesses_or_a_scale_is_too_big(folder, monkeypatch):
+    from services import walk_scale
+
+    figures = [Image.open(_jittered(folder / f"f{index}.png", factor=1.0 + 0.02 * index)).convert("RGBA") for index in range(4)]
+    monkeypatch.setattr("services.face_landmarks.detect", lambda page: None)
+    assert walk_scale.ratios(figures) is None and walk_scale.torso_length(figures[0]) == 0.0, "no model, nothing found"
+    monkeypatch.setattr("services.face_landmarks.detect", lambda page: (_ for _ in ()).throw(RuntimeError("no onnx")))
+    assert walk_scale.ratios(figures) is None, "a model that fails is not an error of the sheet"
+    unsure = lambda page: {**_pose_model(page), "body": [[0, 0, 0]] * 18}  # noqa: E731
+    assert walk_scale.ratios(figures, unsure) is None, "joints the model is not sure of are not used"
+    monkeypatch.setattr("services.face_landmarks.detect", _pose_model)
+    assert walk_scale.ratios(figures) is not None and all(0.9 < value < 1.1 for value in walk_scale.ratios(figures))
+    wild = [Image.open(_jittered(folder / f"w{index}.png", factor=factor)).convert("RGBA") for index, factor in enumerate([1.0, 1.0, 1.0, 0.6])]
+    assert walk_scale.ratios(wild) is None, "a torso 40 % shorter than the rest is a guess of the model, not a drawing at another size"
+    assert walk_scale.ratios(figures[:1]) is None
+
+
+def test_only_a_catalog_walk_drawn_pose_by_pose_is_scaled_by_its_torso():
+    from services import walk_scale
+
+    job = {"definition": animations.animation_def("walk-12")}
+    assert walk_scale.applies(job) and walk_scale.applies({"definition": animations.animation_def("walk-front34")})
+    assert not walk_scale.applies({**job, "method": "puppet"}) and not walk_scale.applies({**job, "method": "video"}), "the bob of a puppet and of a clip is real"
+    assert not walk_scale.applies({"definition": animations.animation_def("wave")}), "a gesture keeps its own mode"

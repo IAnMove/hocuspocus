@@ -83,6 +83,7 @@ test('the Characters tab lists the animations of a saved character, plays a made
     assert.match(card.querySelector('[data-testid="animation-contract"]')!.textContent!, /walk · side|andar · perfil/, 'a cycle says what it is for a 3D set: its motion and direction')
     assert.equal(screen.getByTestId('animation-angry').querySelector('[data-testid="animation-contract"]'), null, 'an expression is no motion')
     assert.ok(card.querySelector('[data-testid="animation-player"]'), 'a made animation is played from its sheet')
+    assert.equal(card.querySelector('[data-testid="animation-notes"]'), null, 'a sheet nobody found fault with shows no warning')
     assert.match(card.textContent!, /walk-cycle-sheet/)
     assert.match(card.textContent!, /frames 4, columns 4, facing right, step 0\.5/)
     const angry = screen.getByTestId('animation-angry')
@@ -414,6 +415,38 @@ test('choosing the puppet sends method puppet and shows the no-layers note', asy
     fireEvent.click(screen.getByTestId('animation-walk-12').querySelector('button') as HTMLButtonElement)
     await waitFor(() => assert.equal(api.state.posts!.length, 1))
     assert.deepEqual(api.state.posts![0].body, { workspace: 'w', kitId: 'ana', animation: 'walk-12', model: 'qwen_image_21', method: 'puppet' })
+  } finally {
+    globalThis.fetch = original
+    cleanup()
+  }
+})
+
+test('a finished walk says which checks failed and which poses missed their guide, and marks those poses', async () => {
+  const { render, screen, cleanup, waitFor } = await import('@testing-library/react')
+  const { CharacterAnimationsPanel } = await import('../src/features/characters/CharacterAnimationsPanel.tsx')
+  await withModel()
+  const frames = [{ id: 'contact', source: '/api/v1/file/c.png', gait: { expected: 0.3, measured: 0.31, ok: true } },
+    { id: 'passing', source: '/api/v1/file/p.png', gait: { expected: 0.05, measured: 0.4, ok: false } }]
+  const finished = (failed: string[], sheet = walk.sheet.source) => ({ jobId: 'anim-done', workspace: 'w', kitId: 'ana', animationId: 'walk', title: 'walk', model: 'qwen_image_21',
+    status: 'completed', stage: 'sheet', createdAt: 50, updatedAt: 60, takes: [], result: { animation: 'walk', reviewState: 'pending', sheet, count: 4, frames: [], scaleBy: 'height',
+      verdict: { ok: !failed.length, failed } } })
+  const original = globalThis.fetch
+  try {
+    globalThis.fetch = server({ library: kitOf({ walk: { ...walk, frames, reviewState: 'pending' } }), jobs: [finished(['scale_spread', 'figure_height'])] }).fetch
+    render(<CharacterAnimationsPanel workspace="w" />)
+    await waitFor(() => assert.match(screen.getByTestId('animation-walk').querySelector('[data-testid="animation-notes"]')?.textContent ?? '', /figures of different sizes|figuras de distinto tamaño/))
+    const notes = screen.getByTestId('animation-walk').querySelector('[data-testid="animation-notes"]')!.textContent!
+    assert.match(notes, /uneven height|altura irregular/)
+    assert.match(notes, /Passing|Paso/, 'the pose is named as the card names it')
+    assert.match(notes, /Puppet|Marioneta/, 'a catalog walk can be made again as a puppet')
+    assert.equal(screen.getByTestId('animation-walk').querySelectorAll('img.border-amber-400').length, 1, 'only the pose that missed is marked')
+    cleanup()
+    // A sheet whose poses all kept their gait but that failed a check: the check is named, no pose is marked.
+    globalThis.fetch = server({ library: kitOf({ walk: { ...walk, reviewState: 'pending' } }), jobs: [finished(['ground_line'])] }).fetch
+    render(<CharacterAnimationsPanel workspace="w" />)
+    await waitFor(() => assert.match(screen.getByTestId('animation-walk').querySelector('[data-testid="animation-notes"]')?.textContent ?? '', /feet off the ground line|pies fuera de la línea del suelo/))
+    assert.doesNotMatch(screen.getByTestId('animation-walk').textContent!, /legs are far from the walk guide|piernas se alejan de la guía/)
+    assert.equal(screen.getByTestId('animation-walk').querySelectorAll('img.border-amber-400').length, 0)
   } finally {
     globalThis.fetch = original
     cleanup()

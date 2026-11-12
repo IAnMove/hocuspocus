@@ -47,15 +47,20 @@ def _spoil(path: Path, how: str) -> None:
     image.save(path)
 
 
-def _guided(stem: str) -> float | None:
-    """How wide the legs of the walk pose a file of the hero is should be, None for a picture that is not a pose of a walk."""
+def _guided_pose(stem: str) -> tuple[float, str] | None:
+    """How wide the legs of the walk pose a file of the hero is should be, and the pose's id; None for a picture that is not a pose of a walk."""
     for item in sorted(catalog()["animations"], key=lambda entry: -len(entry["id"])):
         head = f"hero-{item['id']}-"
         if item.get("guide") and stem.startswith(head):
             ids = [pose["id"] for pose in item["poses"]]
             pose = next((name for name in sorted(ids, key=len, reverse=True) if stem[len(head):].startswith(f"{name}-")), None)
-            return expected_spread(contract_of(item["id"], item)["dir"], phase_of(ids.index(pose), len(ids))) if pose else None
+            return (expected_spread(contract_of(item["id"], item)["dir"], phase_of(ids.index(pose), len(ids))), pose) if pose else None
     return None
+
+
+def _guided(stem: str) -> float | None:
+    found = _guided_pose(stem)
+    return found[0] if found else None
 
 
 def _legs(path: Path, spread: float) -> None:
@@ -78,6 +83,9 @@ class FakeServer:
         self.root, self.calls, self.refuse, self.during = root, [], set(), None
         self.spoil = {}  # n-th key (1-based) -> "small" (a pose drawn at half the size) | "box" (a key that left a whole rectangle)
         self.follow_guides, self.wrong_legs = True, set()
+        # pose id -> how many of its first drawings come out with the legs together; a number of images after which the model fails
+        self.bad_draws: dict[str, int] = {}
+        self.fail_after: int | None = None
         self.last_output = ""
 
     def _clip(self, name: str) -> None:
@@ -88,10 +96,12 @@ class FakeServer:
             check=True, capture_output=True)
 
     def draw_legs(self, name: str) -> None:
-        spread = _guided(Path(name).stem.removesuffix("-key"))
-        if spread is None:
+        found = _guided_pose(Path(name).stem.removesuffix("-key"))
+        if found is None:
             return
-        if len(self.of("studio.key")) in self.wrong_legs or not self.follow_guides:
+        spread, pose = found
+        drawn = sum(1 for item in self.of("studio.key") if f"-{pose}-" in str(item.get("source")))  # drawings of this pose so far, this one included
+        if len(self.of("studio.key")) in self.wrong_legs or not self.follow_guides or drawn <= self.bad_draws.get(pose, 0):
             spread = 0.08 if spread > 0.3 else 0.6
         _legs(self.root / name, spread)
 
@@ -102,6 +112,8 @@ class FakeServer:
         self.calls.append((tool, arguments))
         if tool == "generation.image":
             name = arguments["input"]["output_name"]
+            if self.fail_after is not None and len(self.of("generation.image")) > self.fail_after:
+                return {"_is_error": True, "error": {"code": "insufficient_vram", "message": "insufficient VRAM"}}
             if any(f"-{pose}-" in name for pose in self.refuse):
                 return {"_is_error": True, "error": {"code": "insufficient_vram", "message": "insufficient VRAM"}}
             _picture(self.root / f"{name}.png", keyed=False)
@@ -141,7 +153,7 @@ def world(tmp_path):
                                                 "activeId": "hero"}, base_revision=0)
     server = FakeServer(tmp_path)
     jobs = CharacterAnimationJobs(AnimationJobDeps(call=server.call, workspace_dir=lambda workspace: str(tmp_path),
-                                                   uploads_root=lambda: str(tmp_path / "uploads"), inline=True,
+                                                   uploads_root=lambda: str(tmp_path / "uploads"), inline=True, remake_rounds=0,
                                                    model_defaults=lambda model: {"num_inference_steps": 8, "guidance_scale": 1} if "turbo" in model else {}))
     return tmp_path, server, jobs
 
@@ -609,10 +621,11 @@ def test_auto_approve_approves_a_good_sheet_in_one_shot_and_reports_the_checks(w
     assert job["status"] == "completed" and job["autoApprove"] is True and job["autoApproved"] is True
     assert job["result"]["autoApproved"] is True and job["result"]["reviewState"] == "approved"
     names = [check["id"] for check in job["checks"]]
-    assert names == ["cell_count", "cell_size", "filled_cells", "clean_alpha", "silhouette", "ground_line", "scale_spread", "scale_measure"]
+    assert names == ["cell_count", "cell_size", "filled_cells", "clean_alpha", "silhouette", "ground_line", "scale_spread", "scale_measure",
+                     "figure_height", "repeated_poses"], "the four-pose walk is read for one size and for a walk that stops; the mirror and the gait are for the twelve-pose cycles"
     assert all(check["ok"] for check in job["checks"]), job["checks"]
     made = _kit(root)["animations"]["walk"]
-    assert made["reviewState"] == "approved" and made["reviewedBy"] == "agent" and made["reviewNote"].startswith("Automatic checks passed (8)")
+    assert made["reviewState"] == "approved" and made["reviewedBy"] == "agent" and made["reviewNote"].startswith("Automatic checks passed (10)")
     assert jobs.status(WS, job["jobId"])["checks"] == job["checks"], "the job store reports them too"
 
 
@@ -622,7 +635,7 @@ def test_auto_approve_leaves_a_bad_sheet_pending_with_the_failed_checks(world):
     server.spoil = {3: "small"}
     small = jobs.start(WS, "hero", "walk", auto_approve=True)
     assert small["status"] == "completed" and small["autoApproved"] is False
-    assert [check["id"] for check in small["checks"] if not check["ok"]] == ["scale_spread"]
+    assert [check["id"] for check in small["checks"] if not check["ok"]] == ["scale_spread", "figure_height"], "one pose at half the size is both"
     assert next(check for check in small["checks"] if check["id"] == "scale_spread")["value"] < 0.80
     made = _kit(root)["animations"]["walk"]
     assert made["reviewState"] == "pending" and "reviewedBy" not in made and small["result"]["reviewState"] == "pending"
@@ -746,7 +759,7 @@ def directions(tmp_path):
                                                 "activeId": "hero"}, base_revision=0)
     server = VariedServer(tmp_path)
     jobs = CharacterAnimationJobs(AnimationJobDeps(call=server.call, workspace_dir=lambda workspace: str(tmp_path), uploads_root=lambda: str(tmp_path / "uploads"),
-                                                   inline=True, model_defaults=lambda model: {"num_inference_steps": 8, "guidance_scale": 1}))
+                                                   inline=True, remake_rounds=0, model_defaults=lambda model: {"num_inference_steps": 8, "guidance_scale": 1}))
     return tmp_path, server, jobs, CharacterAnimationSets(jobs)
 
 
@@ -767,7 +780,7 @@ def test_the_twelve_pose_walk_is_made_at_twelve_frames_a_second_with_its_contrac
     guides = [frame["guide"] for frame in made["frames"]]
     assert len(server.of("generation.image")) == 12 and _refs(server) == [[f"/api/v1/file/hero-key.png?workspace={WS}", guide] for guide in guides], \
         "the first direction has the character's own picture and the guide of each pose"
-    # The old four-pose walk keeps its four poses and no new checks; it is drawn over its guide like the full walks.
+    # The four-pose walk keeps its four poses; it is drawn over its guide like the full walks.
     old = jobs.start(WS, "hero", "walk")
     assert old["status"] == "completed" and _kit(root)["animations"]["walk"]["sheet"]["columns"] == 4 and _kit(root)["animations"]["walk"]["motion"] == "walk"
 
@@ -852,7 +865,7 @@ def test_the_set_asks_for_the_agents_approval_only_in_one_shot_and_leaves_a_copi
     kit = _kit(root)["animations"]
     assert kit["walk-front34"]["reviewState"] == "approved" and by_name["walk-front34"]["autoApproved"] is True
     copied = by_name["walk-front"]
-    assert copied["autoApproved"] is False and copied["failed"] == ["walk_gait", "direction_mirror"] and kit["walk-front"]["reviewState"] == "pending"
+    assert copied["autoApproved"] is False and copied["failed"] == ["walk_gait", "walk_foot_alternation", "direction_mirror"] and kit["walk-front"]["reviewState"] == "pending"
     assert jobs.status(WS, copied["jobId"])["reviewNote"].startswith("Automatic checks failed: walk_gait 0."), \
         "a profile copied into the front has the strides of a profile too"
     assert kit["walk-back34"]["reviewState"] == "approved", "a sheet that fails the checks does not stop the next one"
@@ -1049,15 +1062,16 @@ def test_method_video_samples_one_clip_into_the_same_sheet_and_keeps_the_guide(d
     assert gait["ok"], job.get("checks")
 
 
-def _patch_puppet(monkeypatch, *, installed: bool):
-    """The fake picture is one blob. The real cutter would refuse it, and the pose model must not run."""
+def _patch_puppet(monkeypatch, *, installed: bool, mirror: bool = False, find=None, direction: str = "side"):
+    """The fake picture is one blob. The real cutter would refuse it, and the pose model must not run. ``mirror``: the reference looked left;
+    ``find`` replaces the pose model's joints (it may raise ``WalkPuppetError`` for a joint it missed)."""
     seen = {"decompose": 0, "layers": None}
 
-    def fake_build(rgba, direction, frames, layers, joints):
+    def fake_build(rgba, direction_asked, frames, layers, joints):
         seen["layers"] = layers
-        assert joints == {"nose": (1, 2)} and frames == 12 and direction == "side"
+        assert joints == {"nose": (1, 2)} and frames == 12 and direction_asked == direction
         picture = np.zeros((rgba.shape[0] * 2, rgba.shape[1] * 2, 4), np.uint8)
-        return [picture.copy() for _ in range(frames)], {"start": 0.25}
+        return [picture.copy() for _ in range(frames)], {"start": 0.25, "mirror": mirror}
 
     def decompose(image, label):
         seen["decompose"] += 1
@@ -1065,7 +1079,7 @@ def _patch_puppet(monkeypatch, *, installed: bool):
         return {"images": {}}
 
     monkeypatch.setattr("services.walk_puppet_method.build", fake_build)
-    monkeypatch.setattr("services.walk_puppet_method.find_joints", lambda _rgba: {"nose": (1, 2)})
+    monkeypatch.setattr("services.walk_puppet_method.find_joints", find or (lambda _rgba: {"nose": (1, 2)}))
     monkeypatch.setattr("services.walk_puppet_method.installed", lambda: installed)
     monkeypatch.setattr("services.walk_puppet_method.decompose_image", decompose)
     return seen
@@ -1083,7 +1097,8 @@ def test_method_puppet_cuts_one_drawing_keeps_the_gait_check_and_warns_without_l
     provenance = made["walk-12"]["provenance"]
     assert provenance["method"] == "puppet" and provenance["reference"] == {"animation": "walk-12", "pose": "contact-a"}
     assert provenance["layers"] is False and provenance["start"] == 0.25
-    assert job["result"]["warnings"] == ["puppet_no_layers"] and job["result"]["provenance"]["method"] == "puppet"
+    assert [warning["code"] for warning in job["result"]["warnings"]] == ["puppet_no_layers"] and job["result"]["provenance"]["method"] == "puppet"
+    assert "See-through" in job["result"]["warnings"][0]["message"] and job["warnings"] == ["puppet_no_layers"], "the job still records the bare code"
     assert seen["decompose"] == 0 and seen["layers"] is None
     gait = next(item for item in job["checks"] if item["id"] == "walk_gait")
     assert gait["ok"], job.get("checks")
@@ -1169,3 +1184,332 @@ def test_a_model_id_may_carry_a_provider_prefix_but_never_a_path():
     for pattern in (_MODEL, SET_MODEL):
         assert pattern.fullmatch("minimax:image-01") and pattern.fullmatch("qwen_image_21_turbo")
         assert not pattern.fullmatch("minimax:../x") and not pattern.fullmatch(":image-01") and not pattern.fullmatch("a/b")
+
+
+# ----- what every job says about its own sheet, whatever the approval mode (services/character_animation_verdict.py) -----
+
+def test_a_job_in_review_mode_carries_the_checks_the_verdict_and_the_gait_and_is_still_pending(world):
+    root, server, jobs = world
+    job = jobs.start(WS, "hero", "walk")
+    result = job["result"]
+    assert job["status"] == "completed" and result["reviewState"] == "pending" and "autoApproved" not in result, "nothing asked for an approval"
+    assert [check["id"] for check in result["checks"]][-2:] == ["figure_height", "repeated_poses"] and all(check["ok"] for check in result["checks"])
+    assert result["verdict"] == {"ok": True, "failed": []} and result["gait"] == {"checked": 4, "missed": []} and "warnings" not in result
+    assert "checks" not in job and "autoApproved" not in job, "the job record keeps what only an approval request adds"
+    assert _kit(root)["animations"]["walk"]["reviewState"] == "pending" and "reviewedBy" not in _kit(root)["animations"]["walk"]
+    assert jobs.status(WS, job["jobId"])["result"]["verdict"] == result["verdict"], "the job store reports them too"
+    assert result["sheet"] == _kit(root)["animations"]["walk"]["sheet"]["source"], "the panel matches the verdict to the sheet on the card by this picture"
+    gesture = jobs.start(WS, "hero", "wave")["result"]
+    assert gesture["verdict"]["ok"] and "gait" not in gesture, "a gesture has no guide to be measured against"
+
+
+def test_a_bad_sheet_in_review_mode_says_so_with_the_way_out_and_stays_pending(world):
+    root, server, jobs = world
+    server.spoil = {3: "small"}
+    walk = jobs.start(WS, "hero", "walk")["result"]
+    assert walk["verdict"] == {"ok": False, "failed": ["scale_spread", "figure_height"]} and walk["reviewState"] == "pending"
+    [warning] = walk["warnings"]
+    assert warning["code"] == "sheet_checks_failed" and "scale_spread" in warning["message"] and "figure_height" in warning["message"]
+    assert "pose:" in warning["hint"] and 'method "puppet"' in warning["hint"], "a catalog walk can be made again pose by pose or as a puppet"
+    assert _kit(root)["animations"]["walk"]["reviewState"] == "pending"
+    server.spoil, server.calls = {2: "box"}, []
+    [wave] = jobs.start(WS, "hero", "wave")["result"]["warnings"]
+    assert wave["code"] == "sheet_checks_failed" and "silhouette" in wave["message"]
+    assert "pose:" in wave["hint"] and "puppet" not in wave["hint"], "a gesture has no puppet to be made with"
+
+
+def test_a_failing_check_is_listed_in_a_warning_and_only_autoapprove_decides_the_approval(world, monkeypatch):
+    root, server, jobs = world
+    broken = [{"id": "ground_line", "ok": False, "value": 0.2, "limit": 0.02, "detail": "feet off the line"}, {"id": "cell_count", "ok": True, "value": 4, "limit": 4, "detail": ""}]
+    monkeypatch.setattr(character_animation_job, "sheet_checks", lambda *args, **kwargs: broken)
+    review = jobs.start(WS, "hero", "wave")["result"]
+    assert review["checks"] == broken and review["verdict"] == {"ok": False, "failed": ["ground_line"]}
+    assert review["warnings"][0]["message"] == "The sheet failed 1 automatic check: ground_line 0.2 (limit 0.02)."
+    _mode(jobs, ONE_SHOT)
+    asked = jobs.start(WS, "hero", "wave", auto_approve=True)
+    assert asked["autoApproved"] is False and asked["result"]["reviewState"] == "pending" and asked["result"]["warnings"][0]["code"] == "sheet_checks_failed"
+    assert _kit(root)["animations"]["wave"]["reviewState"] == "pending", "a failed check still blocks the agent's approval"
+    monkeypatch.undo()
+    good = jobs.start(WS, "hero", "wave")["result"]
+    assert good["verdict"]["ok"] is True and good["reviewState"] == "pending", "one-shot mode alone approves nothing: it has to be asked for"
+
+
+def test_checks_that_cannot_be_read_warn_and_never_cost_the_sheet_nor_approve_it(world, monkeypatch):
+    root, server, jobs = world
+
+    def unreadable(*args, **kwargs):
+        raise OSError("the sheet file is gone")
+    monkeypatch.setattr(character_animation_job, "sheet_checks", unreadable)
+    _mode(jobs, ONE_SHOT)
+    job = jobs.start(WS, "hero", "wave", auto_approve=True)
+    assert job["status"] == "completed" and "wave" in _kit(root)["animations"], "the animation was made and saved"
+    assert "checks" not in job["result"] and "verdict" not in job["result"]
+    assert [warning["code"] for warning in job["result"]["warnings"]] == ["checks_unavailable"] and "the sheet file is gone" in job["result"]["warnings"][0]["message"]
+    assert job["autoApproved"] is False and _kit(root)["animations"]["wave"]["reviewState"] == "pending", "nobody approves what was not judged"
+
+
+def test_the_poses_that_missed_their_gait_are_listed_with_the_way_out(world):
+    root, server, jobs = world
+    server.wrong_legs = {2}
+    assert "gait" in jobs.start(WS, "hero", "walk")["result"] and jobs.start(WS, "hero", "walk")["result"]["gait"]["missed"] == [], "a retry that fixed it is no miss"
+    server.calls, server.follow_guides = [], False
+    result = jobs.start(WS, "hero", "walk")["result"]
+    ids = [pose["id"] for pose in catalog()["animations"][0]["poses"]]
+    assert result["gait"] == {"checked": 4, "missed": ids}
+    warning = next(item for item in result["warnings"] if item["code"] == "gait_missed")
+    assert warning["message"] == "4 of 4 poses have the legs far from their guide: contact, passing, contact-b, passing-b."
+    assert "pose:" in warning["hint"] and 'method "puppet"' in warning["hint"]
+    assert result["reviewState"] == "pending"
+
+
+def test_remaking_one_pose_keeps_what_the_others_measured_so_the_sheet_still_lists_their_misses(world):
+    root, server, jobs = world
+    server.follow_guides = False
+    jobs.start(WS, "hero", "walk")
+    assert [frame["gait"]["ok"] for frame in _kit(root)["animations"]["walk"]["frames"]] == [False] * 4
+    server.follow_guides, server.calls = True, []
+    remade = jobs.start(WS, "hero", "walk", pose="contact")
+    assert remade["status"] == "completed" and len(server.of("generation.image")) == 1
+    assert remade["result"]["gait"] == {"checked": 4, "missed": ["passing", "contact-b", "passing-b"]}, "the other three are not forgotten"
+    frames = _kit(root)["animations"]["walk"]["frames"]
+    assert [frame["gait"]["ok"] for frame in frames] == [True, False, False, False] and all(frame.get("guide") for frame in frames)
+
+
+def test_a_set_in_review_mode_reports_the_checks_that_failed_of_each_sheet(directions, monkeypatch):
+    root, server, jobs, sets = directions
+    done = sets.start(WS, "hero", "walk-12")
+    sheet = done["sheets"][0]
+    assert sheet["status"] == "completed" and sheet["failed"] == [] and "autoApproved" not in sheet, "nothing was approved, but the sheet was judged"
+    broken = [{"id": "scale_spread", "ok": False, "value": 0.5, "limit": 0.8, "detail": "x"}]
+    monkeypatch.setattr(character_animation_job, "sheet_checks", lambda *args, **kwargs: broken)
+    again = sets.start(WS, "hero", "idle-directions")
+    assert {tuple(sheet["failed"]) for sheet in again["sheets"] if sheet["status"] == "completed"} == {("scale_spread",)}
+
+
+# ----- the poses of a walk that fail are drawn again before the sheet is joined (services/character_animation_remake.py) -----
+
+def _remaking(world, monkeypatch, rounds=None, blamed=lambda masks, direction: []):
+    """The job with the catalog's rounds. The stub figures are not walkers, so the sheet checks' blame is a stub too: nothing (the poses that
+    miss their guide are remade all the same) unless a test says who."""
+    from services import character_animation_remake as remake
+
+    root, server, jobs = world
+    jobs.deps.remake_rounds = rounds  # None: the catalog's default (two rounds)
+    monkeypatch.setattr(remake, "blamed_cells", blamed)
+    return root, server, jobs
+
+
+def test_a_pose_that_still_misses_its_guide_after_the_first_pass_is_drawn_again_and_the_best_drawing_stays(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch)
+    server.bad_draws = {"lift-a": 3}  # the three drawings of the first pass come out with the legs together
+    job = jobs.start(WS, "hero", "walk-12")
+    assert job["status"] == "completed" and job["result"]["gait"] == {"checked": 12, "missed": []}
+    again = job["autoRemake"]
+    assert again["rounds"] == 1 and again["max"] == 2 and again["failing"] == [] and [item["id"] for item in again["poses"]] == ["lift-a"]
+    attempts = again["poses"][0]["attempts"]
+    assert [item["round"] for item in attempts] == [0, 0, 0, 1] and [item["kept"] for item in attempts] == [False, False, False, True]
+    assert len({item["keyed"] for item in attempts}) == 4, "every drawing has a picture of its own: none overwrites another"
+    assert len(server.of("generation.image")) == 11 + 3 + 1, "eleven poses once, the missed one three times, then one new drawing that fits"
+    take = next(take for take in job["takes"] if take["id"] == "lift-a")
+    assert take["keyed"] == attempts[-1]["keyed"] and take["gait"]["ok"] and take["tries"] == 4
+    saved = next(frame for frame in _kit(root)["animations"]["walk-12"]["frames"] if frame["id"] == "lift-a")
+    assert saved["source"] == take["keyed"] and saved["gait"]["ok"], "the sheet is joined from the kept drawing"
+    assert job["result"]["autoRemake"] == again and not any(item["code"] == "gait_missed" for item in job["result"].get("warnings", []))
+
+
+def test_a_sheet_whose_poses_all_fit_is_not_drawn_again_and_the_remake_can_be_turned_off(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch)
+    job = jobs.start(WS, "hero", "walk-12")
+    assert job["status"] == "completed" and "autoRemake" not in job and len(server.of("generation.image")) == 12
+    server.calls, server.bad_draws = [], {"lift-a": 3, "reach-b": 3}
+    jobs.deps.remake_rounds = 0
+    off = jobs.start(WS, "hero", "walk-12")
+    assert "autoRemake" not in off and len(server.of("generation.image")) == 12 + 4 and off["result"]["gait"]["missed"] == ["lift-a", "reach-b"]
+
+
+def test_the_rounds_are_bounded_the_worst_poses_go_first_and_the_job_offers_the_puppet_without_switching(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch)
+    server.follow_guides = False  # every drawing of every pose has the wrong legs
+    job = jobs.start(WS, "hero", "walk-12")
+    again = job["autoRemake"]
+    assert job["status"] == "completed" and "method" not in job, "the method is never switched by the job"
+    assert again["rounds"] == 2 and len(again["failing"]) == 12
+    assert len(server.of("generation.image")) == 12 * 3 + 2 * (4 * 2), "three drawings a pose, then two rounds of four poses with two new drawings each"
+    assert all(len(item["attempts"]) >= 5 and sum(attempt["kept"] for attempt in item["attempts"]) == 1 for item in again["poses"])
+    warnings = {item["code"]: item for item in job["result"]["warnings"]}
+    assert 'method "puppet"' in warnings["gait_missed"]["hint"] and "already remade" in warnings["gait_missed"]["hint"]
+    assert job["result"]["reviewState"] == "pending" and _kit(root)["animations"]["walk-12"]["reviewState"] == "pending"
+
+
+def test_a_pose_a_failing_check_blames_is_drawn_again_even_when_its_legs_fit(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch, blamed=lambda masks, direction: [4])  # the order check names the fifth pose, whatever is drawn
+    job = jobs.start(WS, "hero", "walk-12")
+    record = next(item for item in job["autoRemake"]["poses"] if item["id"] == "up-a")
+    assert job["autoRemake"]["rounds"] == 2 and len(record["attempts"]) == 3 and sum(item["kept"] for item in record["attempts"]) == 1
+    assert len(server.of("generation.image")) == 12 + 2 and job["autoRemake"]["failing"] == ["up-a"]
+    assert job["takes"][4]["keyed"] in {item["keyed"] for item in record["attempts"]}
+
+
+def test_a_single_pose_the_person_asks_for_again_is_not_followed_by_more_remakes(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch)
+    assert jobs.start(WS, "hero", "walk-12")["status"] == "completed"
+    server.calls, server.bad_draws = [], {"lift-a": 3, "reach-b": 3}
+    again = jobs.start(WS, "hero", "walk-12", pose="lift-a")
+    assert again["status"] == "completed" and "autoRemake" not in again and len(server.of("generation.image")) == 3
+
+
+def test_a_cancel_during_a_remake_cancels_the_job_and_a_failure_in_it_keeps_the_sheet_that_was_drawn(world, monkeypatch):
+    root, server, jobs = _remaking(world, monkeypatch)
+    server.bad_draws = {"lift-a": 3}
+
+    def cancel_in_the_remake():
+        if len(server.of("generation.image")) == 15:
+            running = next(job for job in jobs.jobs(WS, "hero") if job["status"] == "running")
+            jobs.cancel(WS, running["jobId"])
+
+    server.during = cancel_in_the_remake
+    cancelled = jobs.start(WS, "hero", "walk-12")
+    assert cancelled["status"] == "cancelled" and not cancelled.get("error") and "animations" not in _kit(root)
+    server.during, server.calls = None, []
+    server.fail_after = 0  # the poses the cancelled job made are kept, so the first drawing of this job is the remake's: the model fails on it
+    failed = jobs.start(WS, "hero", "walk-12")
+    assert failed["status"] == "completed" and failed["autoRemake"]["error"] and failed["autoRemake"]["poses"] == []
+    assert next(take for take in failed["takes"] if take["id"] == "lift-a")["status"] == "ready"
+    assert failed["result"]["gait"]["missed"] == ["lift-a"] and _kit(root)["animations"]["walk-12"]["reviewState"] == "pending"
+
+
+def test_the_remake_settings_come_from_the_catalog_and_only_a_catalog_walk_with_the_gait_check_is_remade():
+    from services import character_animation_remake as remake
+    from services.character_animations import animation_def
+
+    assert remake.settings() == {"rounds": 2, "poses": 4, "tries": 2} and remake.settings(0)["rounds"] == 0 and remake.settings(5)["rounds"] == 5
+    job = {"definition": animation_def("walk-12"), "takes": []}
+    assert remake.applies(job) and not remake.applies({**job, "method": "puppet"}) and not remake.applies({**job, "method": "video"})
+    assert not remake.applies({**job, "remake": "lift-a"}), "one pose made again on request"
+    assert not remake.applies({"definition": animation_def("walk"), "takes": []}), "the four-pose walk asks for no gait check"
+    assert not remake.applies({"definition": animation_def("wave"), "takes": []})
+
+
+def _trunk_model(page):
+    """A pose model that finds the neck and the hips on the stub figure (its mustard trunk), at any size."""
+    mask = (np.asarray(page)[..., :3] == (230, 180, 30)).all(axis=2)
+    rows, middle = np.nonzero(mask.any(axis=1))[0], float(np.nonzero(mask.any(axis=0))[0].mean())
+    body = [[0.0, 0.0, 0.0] for _ in range(18)]
+    body[1], body[8], body[11] = [middle, float(rows[0]), 0.9], [middle - 6, float(rows[-1]), 0.9], [middle + 6, float(rows[-1]), 0.9]
+    return {"body": body}
+
+
+def test_a_walk_drawn_pose_by_pose_is_joined_with_every_pose_scaled_by_its_torso_and_a_gesture_is_not(world, monkeypatch):
+    monkeypatch.setattr("services.face_landmarks.detect", _trunk_model)
+    root, server, jobs = world
+    walk = jobs.start(WS, "hero", "walk-12")
+    assert walk["status"] == "completed" and walk["result"]["normalised"] == "torso"
+    assert "normalised" not in jobs.start(WS, "hero", "wave")["result"], "a gesture keeps its own scale"
+    monkeypatch.setattr("services.face_landmarks.detect", lambda page: None)
+    assert "normalised" not in jobs.start(WS, "hero", "walk-12")["result"], "without the pose model the sheet keeps its shared scale, as before"
+
+
+# ----- the reference of a puppet is checked before it is cut, and a drawing that cannot be cut falls back to the poses -----
+
+def test_a_reference_whose_legs_miss_its_guide_is_drawn_again_with_a_new_seed_before_anything_is_cut(directions, monkeypatch):
+    seen = _patch_puppet(monkeypatch, installed=True)
+    root, server, jobs, _sets = directions
+    server.bad_draws = {"contact-a": 1}  # the first reference drawing has the legs together
+    job = jobs.start(WS, "hero", "walk-12", method="puppet")
+    assert job["status"] == "completed", job.get("error")
+    attempts = job["puppetAttempts"]
+    assert [item["ok"] for item in attempts] == [False, True] and [item["joints"] for item in attempts] == [True, True]
+    assert attempts[0]["gait"]["ok"] is False and attempts[1]["gait"]["ok"] is True and attempts[0]["source"] != attempts[1]["source"]
+    images = server.of("generation.image")
+    assert len(images) == 2 and images[0]["params"]["seed"] != images[1]["params"]["seed"], "the second drawing has a seed of its own"
+    assert "warnings" not in job["result"] and seen["decompose"] == 1
+
+
+def test_a_reference_that_never_fits_its_guide_stays_with_a_warning_after_the_tries(directions, monkeypatch):
+    from services.walk_puppet_reference import tries
+
+    _patch_puppet(monkeypatch, installed=False)
+    root, server, jobs, _sets = directions
+    server.follow_guides = False
+    job = jobs.start(WS, "hero", "walk-12", method="puppet")
+    assert job["status"] == "completed" and len(server.of("generation.image")) == tries() == 3 and len(job["puppetAttempts"]) == 3
+    codes = [warning["code"] for warning in job["result"]["warnings"]]
+    assert codes[:2] == ["puppet_no_layers", "puppet_reference_off"] and job["method"] == "puppet", "the method recorded the two, then the sheet's own checks speak"
+
+
+def test_a_drawing_the_pose_model_cannot_find_its_joints_on_is_drawn_again_then_the_walk_is_made_pose_by_pose(directions, monkeypatch):
+    from services.walk_puppet import WalkPuppetError
+
+    def lost(_rgba):
+        raise WalkPuppetError("the pose model did not find l_ankle, r_knee on the drawing")
+
+    seen = _patch_puppet(monkeypatch, installed=True, find=lost)
+    root, server, jobs, _sets = directions
+    job = jobs.start(WS, "hero", "walk-12", method="puppet")
+    assert job["status"] == "completed", job.get("error")
+    assert "method" not in job and job["fallback"]["from"] == "puppet" and "l_ankle" in job["fallback"]["reason"]
+    assert len(server.of("generation.image")) == 3 + 12, "three tries at a reference, then the twelve poses"
+    assert seen["decompose"] == 0, "the See-through layers are not made for a drawing that cannot be cut"
+    codes = [warning["code"] for warning in job["result"]["warnings"]]
+    assert "puppet_fell_back" in codes and "provenance" not in job["result"], "no puppet record on a walk that was not cut"
+    fell = next(warning for warning in job["result"]["warnings"] if warning["code"] == "puppet_fell_back")
+    assert "pose by pose" in fell["message"] and "l_ankle" in fell["message"]
+    assert all(take["status"] == "ready" for take in job["takes"]) and "puppet" not in _kit(root)["animations"]["walk-12"].get("provenance", {}).get("method", "")
+    assert "provenance" not in _kit(root)["animations"]["walk-12"]
+
+
+def test_a_sheet_cut_from_a_drawing_that_looks_left_says_it_looks_left(directions, monkeypatch):
+    _patch_puppet(monkeypatch, installed=True, mirror=True)
+    root, server, jobs, _sets = directions
+    job = jobs.start(WS, "hero", "walk-12", method="puppet")
+    made = _kit(root)["animations"]["walk-12"]
+    assert job["status"] == "completed" and made["facing"] == "left" and made["dir"] == "side" and made["provenance"]["facing"] == "left"
+    assert job["result"]["provenance"]["facing"] == "left"
+    _patch_puppet(monkeypatch, installed=True, mirror=False)
+    jobs.start(WS, "hero", "walk-12", method="puppet")
+    assert _kit(root)["animations"]["walk-12"]["facing"] == "right"
+
+
+def test_a_walk_keeps_its_stride_on_the_kit_and_a_gesture_has_none(world):
+    root, server, jobs = world
+    assert jobs.start(WS, "hero", "walk-12")["status"] == "completed" and jobs.start(WS, "hero", "wave")["status"] == "completed"
+    animations = _kit(root)["animations"]  # read back through the library's own normaliser: the field survives the round trip
+    assert 0.5 < animations["walk-12"]["stride"] < 1.4 and "stride" not in animations["wave"]
+
+
+def test_the_stride_of_an_animation_is_a_share_of_the_figures_height_and_nothing_else():
+    from services.character_animations import CharacterAnimationError, normalize_animation
+
+    base = {"sheet": {"source": "/api/v1/file/s.png", "width": 10, "height": 10, "count": 4, "columns": 4, "rows": 1, "cell": {"width": 3, "height": 10}}, "frames": []}
+    assert normalize_animation({**base, "stride": 0.8123456})["stride"] == 0.812 and "stride" not in normalize_animation(base)
+    for bad in (0.1, 3.5, True, "0.9"):
+        with pytest.raises(CharacterAnimationError):
+            normalize_animation({**base, "stride": bad})
+
+
+def test_a_fall_back_forgets_what_the_puppet_recorded_about_a_cut_that_never_happened(directions, monkeypatch):
+    from services.walk_puppet import WalkPuppetError
+
+    _patch_puppet(monkeypatch, installed=False)
+
+    def not_apart(*_args):
+        raise WalkPuppetError("no leg on the l side could be cut: the limbs are not apart in this drawing")
+
+    monkeypatch.setattr("services.walk_puppet_method.build", not_apart)  # the joints were found, the layers were skipped, then the cut failed
+    root, server, jobs, _sets = directions
+    job = jobs.start(WS, "hero", "walk-12", method="puppet")
+    assert job["status"] == "completed" and job["fallback"]["reason"].startswith("no leg")
+    codes = [warning["code"] for warning in job["result"]["warnings"]]
+    assert "puppet_fell_back" in codes and "puppet_no_layers" not in codes and "puppet_reference_off" not in codes
+    assert job["warnings"] == ["puppet_fell_back"]
+
+
+def test_a_puppet_sheet_that_looks_left_is_checked_mirrored(directions, monkeypatch):
+    seen = {}
+    from services import character_animation_job as module
+
+    _patch_puppet(monkeypatch, installed=True, mirror=True)
+    real = module.sheet_checks
+    monkeypatch.setattr(module, "sheet_checks", lambda sheet, definition, siblings=(), facing=None: seen.setdefault("facing", facing) and real(sheet, definition, siblings, facing))
+    root, server, jobs, _sets = directions
+    assert jobs.start(WS, "hero", "walk-12", method="puppet")["status"] == "completed" and seen["facing"] == "left"

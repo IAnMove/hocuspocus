@@ -5,8 +5,8 @@ import { isActiveJob, type AnimationJob } from '../../api/characterAnimationJobs
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import {
-  animationGroups, animationReference, animationState, animationsOf, canAddAnimation, freeAnimationId, kitAnimations, kitCustomDefs, localized, templateControls,
-  type AnimationDef, type AnimationState, type KitAnimation,
+  animationGroups, animationNotes, animationReference, animationState, animationsOf, canAddAnimation, freeAnimationId, isSheetCheckId, kitAnimations, kitCustomDefs, localized,
+  templateControls, type AnimationDef, type AnimationState, type KitAnimation,
 } from '../../lib/characterAnimations'
 import { contractOf } from '../../lib/characterAnimationDirections'
 import { characterImageModels, preferredCharacterImageModel } from '../../lib/characterImageModels'
@@ -29,6 +29,8 @@ const BADGE: Record<AnimationState, string> = {
 type WalkMethod = 'poses' | 'video' | 'puppet'
 type Actions = {
   busy: boolean; runs: Record<string, AnimationJob>
+  /** The latest completed job of each animation: its verdict on the sheet the card shows. */
+  finished: Record<string, AnimationJob>
   make: (def: AnimationDef, remake?: string, method?: WalkMethod) => void; cancel: (jobId: string) => void
   review: (id: string, state: CharacterKitReviewState) => void; remove: (id: string) => void
 }
@@ -66,20 +68,37 @@ function RunProgress({ def, run }: { def: AnimationDef; run: AnimationJob }) {
   </div>
 }
 
+/** What the automatic checks and the guide say of a finished sheet: the checks that failed, the poses whose legs missed it, and what to do. */
+function SheetNotes({ def, notes }: { def: AnimationDef; notes: NonNullable<ReturnType<typeof animationNotes>> }) {
+  const { t, i18n } = useUiTranslation('characters')
+  const checks = notes.checks.map(id => isSheetCheckId(id) ? t(`animations.notes.check.${id}`) : id).join(', ')
+  const poses = notes.poses.map(id => { const pose = def.poses.find(item => item.id === id); return pose ? localized(pose.label, i18n.language) : id }).join(', ')
+  return <div data-testid="animation-notes" className="space-y-0.5 text-[11px] text-amber-200">
+    {notes.checks.length > 0 && <p>{t('animations.notes.checks', { checks })}</p>}
+    {notes.poses.length > 0 && <p>{t('animations.notes.poses', { poses })}</p>}
+    <p className="text-text-muted">{t(def.guide === 'walk' ? 'animations.notes.remedyWalk' : 'animations.notes.remedy')}</p>
+  </div>
+}
+
 function MadeAnimation({ def, made, actions, how }: { def: AnimationDef; made: KitAnimation; actions: Actions; how: WalkMethod }) {
   const { t, i18n } = useUiTranslation('characters')
-  const controls = Object.entries(templateControls(made, def.template)).map(([key, value]) => `${key} ${value}`).join(', ')
+  // What the person can set on the card; the sheet's own facing and stride go to the card without being shown.
+  const controls = Object.entries(templateControls(made, def.template)).filter(([key]) => key !== 'sheetFacing' && key !== 'stride').map(([key, value]) => `${key} ${value}`).join(', ')
+  const notes = animationNotes(made, actions.finished[def.id])
   return <div className="grid gap-3 sm:grid-cols-[14rem_minmax(0,1fr)]">
     <AnimationSheetPlayer animation={made} title={localized(def.title, i18n.language)} />
     <div className="space-y-2">
       <ul className="flex flex-wrap gap-1.5">{made.frames.map(frame => {
         const pose = def.poses.find(item => item.id === frame.id)
+        const missed = Boolean(notes?.poses.includes(frame.id))
         return <li key={frame.id} className="w-16 space-y-1 text-center">
-          <img src={frame.source} alt={pose ? localized(pose.label, i18n.language) : frame.id} className="aspect-[3/4] w-full rounded border border-border bg-bg-tertiary object-contain" />
+          <img src={frame.source} alt={pose ? localized(pose.label, i18n.language) : frame.id} title={missed ? t('animations.notes.poseMissed') : undefined}
+            className={`aspect-[3/4] w-full rounded border ${missed ? 'border-amber-400' : 'border-border'} bg-bg-tertiary object-contain`} />
           <button type="button" disabled={actions.busy} onClick={() => actions.make(def, frame.id)} className="w-full text-[10px] text-cyan-200 underline disabled:opacity-40"
             aria-label={t('animations.remakePose', { pose: pose ? localized(pose.label, i18n.language) : frame.id })}>{t('animations.remake')}</button>
         </li>
       })}</ul>
+      {notes && <SheetNotes def={def} notes={notes} />}
       <p className="text-[11px] text-text-muted">{t('animations.plays', { template: def.template, controls })}</p>
       <div className="flex flex-wrap gap-1.5">
         <button type="button" disabled={actions.busy || made.reviewState === 'approved'} className={small} onClick={() => actions.review(def.id, 'approved')}><Check size={12} />{t('animations.approve')}</button>
@@ -151,7 +170,7 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
   const sets = useAnimationSets(workspace, kit?.id)
   const busy = work.busy || sets.active
   const actions: Actions = {
-    busy, runs: work.runs, cancel: id => { void work.cancel(id) },
+    busy, runs: work.runs, finished: work.finished, cancel: id => { void work.cancel(id) },
     make: (def, remake, method) => { if (kit && model) void work.start(kit, def, model, remake, method) },
     review: (id, state) => { if (kit) void work.review(kit.id, id, state) },
     remove: id => { if (kit) void work.remove(kit.id, id) },

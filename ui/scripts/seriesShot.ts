@@ -12,7 +12,7 @@ import { parseMouthCues } from '../src/features/scene3d/speech/track.ts'
 import type { Scene, SceneKeyframe, SceneLayer } from '../src/types/index.ts'
 import type { SceneFx } from '../src/features/sceneFx/types.ts'
 import { holdFields } from '../src/features/stopMotion.ts'
-import { gateSheets, sheetLayer, sheetPlacement, sheetWindows, type SheetGate, type SheetRequest } from './seriesSheet.ts'
+import { gateSheets, sheetLayer, sheetPlacement, sheetWindows, type SheetGate, type SheetRequest, type WalkGround } from './seriesSheet.ts'
 import { ADULT_M, FEET_LINE, figureShare, STAGE_FRAMINGS, stageStanding, type PlateView, type Stage } from './seriesStage.ts'
 
 export type Pose = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
@@ -120,6 +120,14 @@ function poseAsset(kit: CharacterKit, poseId: string) {
 function drawnHeight(size: { width: number; height: number }, scale: number, aspect: number) {
   const ratio = size.width / size.height
   return ratio < aspect ? scale * 100 : scale * 100 * aspect / ratio
+}
+
+/** What the walk of an entrance covers and who walks it (`sheetWindows` makes the feet follow the ground): the way from where the figure comes
+ * in to its mark, and the pose that its sheet stands in for. Nothing for a cast member that does not walk in. */
+function walkGround(kit: CharacterKit, cast: CastSpec, base: Pose, aspect: number, viewport: { width: number; height: number }): WalkGround | undefined {
+  if (cast.enter?.gait !== 'walk') return undefined
+  const pose = poseAsset(kit, cast.poseId ?? 'base')
+  return { travel: Math.abs(base.x - cast.enter.fromX), frame: viewport, pose, poseHeight: drawnHeight(pose, base.scale, aspect) }
 }
 
 /** Eye line as a fraction of the pose image height (from the top), from the kit's eye anchor. */
@@ -561,7 +569,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     const base = cast.transform ?? seat?.character ?? standing ?? castTransform(kit, cast, shot.framing, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
     const talking = shot.lines.filter(line => lineOwnsAppearance(shot.cast, line, index))
       .map(line => [line.start, line.end] as [number, number])
-    const windows = sheetWindows(kit, cast, shot.duration)
+    const windows = sheetWindows(kit, cast, shot.duration, walkGround(kit, cast, base, aspect, viewport))
     // A walk of drawings steps on its own: the body neither bobs nor sways under it.
     const entered = cast.enter && windows.some(window => window.part === 'walk-in') ? { ...cast.enter, sway: 0, bob: 0 } : cast.enter
     const mounted = mountCast(kit, { ...cast, z, enter: entered }, base, shot.duration, viewport, shot.workspace, talking, instanceKey)

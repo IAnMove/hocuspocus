@@ -55,6 +55,9 @@ export type DirectionalSheet = {
   cell: { width: number; height: number }
   fps: number
   loop: Loop
+  /** How much ground the feet of this walk carry the figure in a cycle, in heights of the figure (services/walk_stride.py): the cycle then
+   * covers `stride * heightM` metres. A sheet without one covers the catalog's `CYCLE_METERS`, as before. */
+  stride?: number
   /** Where the sheet looks when it is not to the right (a `side` sheet drawn looking left: the kit's `side_r`). */
   facing?: 'left' | 'right' | 'front'
   /** Where the mouth and the eyes are in the cell (% of its longer edge, as the kit's pose anchors): the sheet can lip-sync. */
@@ -250,11 +253,17 @@ export function cellAt(raw: number, count: number, loop: Loop): number {
   return ((raw % count) + count) % count
 }
 
-/** The cell of a walk cycle after `distance` metres: a cycle is `cycleSteps` steps of `stepMeters`, so the feet cover the
- * same ground for every cell and nothing slides. */
-export function strideFrame(distance: number, count: number, loop: Loop): number {
+/** The metres a cycle of a sheet's feet covers: its own `stride` of the figure's height when it has one and the figure's height is known (a
+ * taller figure takes a longer step), else the catalog's `stepMeters` for `cycleSteps` steps. */
+export function cycleMeters(sheet: Pick<DirectionalSheet, 'stride'>, heightM?: number): number {
+  return sheet.stride && sheet.stride > 0 && heightM && heightM > 0 ? sheet.stride * heightM : CYCLE_METERS
+}
+
+/** The cell of a walk cycle after `distance` metres: a cycle covers `cycleMeters`, so the feet cover the same ground for every cell and
+ * nothing slides. */
+export function strideFrame(distance: number, count: number, loop: Loop, cycle: number = CYCLE_METERS): number {
   const period = loop === 'pingpong' && count > 1 ? count * 2 - 2 : count
-  return cellAt(Math.floor(Math.max(0, distance) / CYCLE_METERS * period), count, loop)
+  return cellAt(Math.floor(Math.max(0, distance) / cycle * period), count, loop)
 }
 
 /** Of two sheets of one direction, the one that looks the way the sector does (no mirror needed), then the one with more cells. */
@@ -295,7 +304,11 @@ export function pickSheet(sheets: readonly DirectionalSheet[], motion: Motion, s
   return { index: -1, mirror: false, exact: false }
 }
 
-export type ViewContext = { start: V2; eye0: V2; eye: V2; t: number; memory: DirectionMemory; id: string }
+export type ViewContext = {
+  start: V2; eye0: V2; eye: V2; t: number; memory: DirectionMemory; id: string
+  /** The figure's height in metres: with a sheet's `stride` it says how far a cycle of its feet carries it. */
+  heightM?: number
+}
 
 /** Where the figure stands at `t`: the point it was placed at, or the point of its walk. */
 export function directionalPosition(sprite: DirectionalSprite, start: readonly [number, number, number], t: number): readonly [number, number, number] {
@@ -339,10 +352,10 @@ function chooseLook(sprite: DirectionalSprite, sector: Sector, t: number, motion
   return { kind: 'sheet', sheet: picked.index, mirror: picked.mirror, speaking }
 }
 
-function drawn(sprite: DirectionalSprite, look: Look, state: WalkState | null, t: number): Drawn {
+function drawn(sprite: DirectionalSprite, look: Look, state: WalkState | null, t: number, heightM?: number): Drawn {
   if (look.kind === 'pose') return look
   const sheet = sprite.sheets[look.sheet]
-  const frame = sheet.motion === 'walk' ? strideFrame(state?.distance ?? 0, sheet.count, sheet.loop) : cellAt(Math.floor(t * sheet.fps), sheet.count, sheet.loop)
+  const frame = sheet.motion === 'walk' ? strideFrame(state?.distance ?? 0, sheet.count, sheet.loop, cycleMeters(sheet, heightM)) : cellAt(Math.floor(t * sheet.fps), sheet.count, sheet.loop)
   return { ...look, frame }
 }
 
@@ -357,7 +370,8 @@ export function directionalView(sprite: DirectionalSprite, context: ViewContext)
   const sector = context.memory.choose(context.id, context.t, theta ?? 0, byTravel, drawnDirections(sprite.sheets, motion))
   const look = chooseLook(sprite, sector, context.t, motion)
   const fade = context.memory.fade(context.id, context.t, look)
-  const view: DirectionalView = { ...drawn(sprite, look, state, context.t), ...(fade ? { blend: { from: drawn(sprite, fade.from, state, context.t), mix: fade.mix } } : {}) }
+  const view: DirectionalView = { ...drawn(sprite, look, state, context.t, context.heightM),
+    ...(fade ? { blend: { from: drawn(sprite, fade.from, state, context.t, context.heightM), mix: fade.mix } } : {}) }
   return { view, theta, sector }
 }
 

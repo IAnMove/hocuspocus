@@ -12,6 +12,11 @@ A ``layout2d.cast`` entry with ``enterFrom`` (``left``/``right``) slides in from
   none). ``enterStep`` is the walk's step in seconds (default 0.5); the walk takes a whole number of steps, so the
   step is stretched a little to fit the entrance, and its feet land on its start, every step after it and its end.
 
+A walk drawn as a sheet plays at the cadence of ``enterStep`` unless the sheet knows its ``stride`` (the ground a cycle of its feet covers, in
+heights of the figure: ``services/walk_stride.py``). Then the compiler (``ui/scripts/seriesSheet.ts``) plays it at the rate the entrance's
+ground asks, which only it can compute (the figure's height in the frame is its own), so the boots do not slide. The planned ``step`` and
+``footfalls`` below stay the author's: a ``repeat: "steps"`` sound on such a walk follows ``enterStep``, not the feet.
+
 ``entrance`` plans one entry for the compiler (``ui/scripts/seriesShot.ts`` draws the gait) and ``footfalls`` says
 when its feet land, so sound can follow: an sfx or fx cue with ``"anchor": "enter"`` and ``"cast"`` (an index into the
 shot's cast, or a character id) plays at the start of that entrance plus its ``offset``, and an sfx with

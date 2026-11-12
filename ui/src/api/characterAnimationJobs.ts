@@ -14,12 +14,27 @@ export type AnimationJob = {
   /** The words of an animation the author described: the job keeps them, so it can be shown and tried again from any page load. */
   custom?: CustomAnimationRequest
   error?: string; errorCode?: string; createdAt: number; updatedAt: number; finishedAt?: number
-  result?: { animation: string; reviewState: string; sheet: string; count: number; frames: string[]; scaleBy: string; autoApproved?: boolean; checks?: AnimationCheck[] }
+  /** What a finished job says of its own sheet, in every approval mode: the checks and their verdict, how the poses of a walk measured against
+   * their guide, and warnings with the way out (services/character_animation_verdict.py). */
+  result?: {
+    animation: string; reviewState: string; sheet: string; count: number; frames: string[]; scaleBy: string; autoApproved?: boolean; checks?: AnimationCheck[]
+    verdict?: { ok: boolean; failed: string[] }; gait?: { checked: number; missed: string[] }; warnings?: AnimationWarning[]
+    autoRemake?: AnimationRemake
+    /** `torso` when every pose of a walk was scaled by its torso instead of one scale for all (services/walk_scale.py). */
+    normalised?: 'torso'
+  }
+  /** The poses of a walk the job drew again after the first pass, with every drawing it tried (services/character_animation_remake.py). */
+  autoRemake?: AnimationRemake
   /** «Modo un solo disparo»: autoApprove was asked for and counts (false, with the note, when the mode is review), whether the job approved it
    * and the automatic checks it ran on the sheet (the failed ones are why it stayed pending). */
   autoApprove?: boolean; autoApproveNote?: string; autoApproved?: boolean; checks?: AnimationCheck[]; reviewNote?: string
 }
 export type AnimationCheck = { id: string; ok: boolean; value: number | string; limit: number | string; detail: string }
+export type AnimationRemake = {
+  rounds: number; max: number; failing: string[]; error?: string
+  poses: { id: string; attempts: { round: number; seed: number; raw: string; keyed: string; score: number; kept: boolean }[] }[]
+}
+export type AnimationWarning = { code: string; message: string; hint?: string }
 export type AnimationReview = { kitId: string; animation: string; reviewState: 'approved' | 'rejected'; reviewedBy: 'agent'; reviewedAt: string; reviewNote: string; revision: number }
 /** An animation of the author's own: a name, a framing (a bust, or the whole figure from one of the five directions) and the words of each pose (up to twelve). */
 export type CustomAnimationRequest = { title: string; view: CustomView; poses: string[] }

@@ -141,8 +141,22 @@ def test_a_walk_card_plays_the_approved_walk_sheet_on_the_shot_plate_with_the_sh
     sent = world.compiled[0]["input"]
     assert sent["templateId"] == "walk-cycle-sheet" and sent["full"] is True and (sent["width"], sent["height"], sent["fps"]) == (1920, 1080, 24)
     assert sent["assets"] == {"subject_1": SHEET, "background": BG}
-    assert sent["controls"] == {"frames": 4, "columns": 4, "facing": "right", "step": 0.5, "duration": 5.0}, "the card is as long as the shot"
+    assert sent["controls"] == {"frames": 4, "columns": 4, "facing": "right", "sheetFacing": "right", "step": 0.5, "duration": 5.0}, "the card is as long as the shot"
     assert reply["bindings"] == [{"slot": "subject_1", "characterId": "gloria", "animation": "walk"}]
+
+
+def test_a_walk_sheet_that_knows_its_stride_gives_it_to_the_card_and_one_that_looks_left_says_so():
+    from services import video2d_compile
+    from services.series_shot_card_bind import card_controls, sheet_controls
+
+    asked = sheet_controls({**animation(), "stride": 0.87, "facing": "left"}, "walk-cycle-sheet")
+    assert asked["stride"] == 0.87 and asked["facing"] == "left" and asked["sheetFacing"] == "left"
+    assert "stride" not in sheet_controls(animation(), "walk-cycle-sheet") and "stride" not in sheet_controls({**animation(), "stride": True}, "walk-two-pose")
+    assert "stride" not in sheet_controls({**animation(), "stride": 0.87}, "character-reaction"), "a gesture has no stride"
+    for card in ("walk-cycle-sheet", "walk-two-pose"):  # the real catalog entries declare both controls, so they are not dropped
+        entry, _preset, _alias = video2d_compile.resolve_card(card)
+        kept, dropped = card_controls(entry, sheet_controls({**animation(count=4 if card == "walk-cycle-sheet" else 2), "stride": 0.87}, card))
+        assert kept["stride"] == 0.87 and kept["sheetFacing"] == "right" and "stride" not in dropped and "sheetFacing" not in dropped, card
 
 
 def test_without_a_cast_the_shots_own_people_fill_the_slots_and_a_walk_card_walks_by_default(tmp_path):

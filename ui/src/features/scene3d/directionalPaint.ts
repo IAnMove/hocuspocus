@@ -35,7 +35,9 @@ export function referenceEye(document: Scene3DDocument): V2 {
  * `screen.directional.view` (a copy: the document is never written to). */
 export function facingSlot(posed: Scene3DSlot, placed: Vec3, frame: DirectionalFrame): Scene3DSlot {
   const screen = posed.screen!, directional = screen.directional!
-  const { view } = directionalView(directional, { start: [placed[0], placed[2]], eye0: frame.eye0, eye: [frame.eye[0], frame.eye[2]], t: frame.t, memory: frame.memory, id: posed.id })
+  // The slot's scale is the plane's half height (walkedSlot): the figure inside it is `figure` of that, and its height in metres is twice its half.
+  const heightM = posed.scale * 2 * (directional.sheets.length ? spriteFrame(directional).figure : 1)
+  const { view } = directionalView(directional, { start: [placed[0], placed[2]], eye0: frame.eye0, eye: [frame.eye[0], frame.eye[2]], t: frame.t, memory: frame.memory, id: posed.id, heightM })
   return { ...posed, rotationY: Math.atan2(frame.eye[0] - posed.position[0], frame.eye[2] - posed.position[2]), screen: { ...screen, directional: { ...directional, view } } }
 }
 

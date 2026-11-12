@@ -200,6 +200,8 @@ class CharacterAnimationSets:
             sheet.update(reviewState=(child.get("result") or {}).get("reviewState", "pending"))
             if "checks" in child:
                 sheet.update(autoApproved=bool(child.get("autoApproved")), failed=[check["id"] for check in child["checks"] if not check["ok"]])
+            elif (child.get("result") or {}).get("verdict"):  # review mode: nothing was asked to be approved, but the sheet is still judged
+                sheet.update(failed=list(child["result"]["verdict"]["failed"]))
         elif child.get("error"):
             sheet["error"] = child["error"]
 

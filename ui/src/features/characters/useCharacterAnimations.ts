@@ -11,6 +11,13 @@ export function runsOf(jobs: AnimationJob[]): Record<string, AnimationJob> {
   return Object.fromEntries(Object.entries(latest).filter(([, job]) => job.status !== 'completed'))
 }
 
+/** The latest completed job of each animation: what it said about the sheet it made (the card matches it to the sheet it shows). */
+export function finishedOf(jobs: AnimationJob[]): Record<string, AnimationJob> {
+  const latest: Record<string, AnimationJob> = {}
+  for (const job of jobs) if (job.status === 'completed' && (!latest[job.animationId] || job.createdAt > latest[job.animationId].createdAt)) latest[job.animationId] = job
+  return latest
+}
+
 /** The animations the author described whose first run is not on the kit yet (still going, or failed): they stay on screen, whatever
  * happens to the page, because the job keeps the words. */
 export function pendingCustomDefs(runs: Record<string, AnimationJob>, kit: CharacterKit): AnimationDef[] {
@@ -93,5 +100,5 @@ export function useCharacterAnimations(workspace: string, kitId: string | undefi
   const review = useCallback((id: string, animation: string, state: CharacterKitReviewState) => change(id, kit => reviewKitAnimation(kit, animation, state)), [change])
   const remove = useCallback((id: string, animation: string) => change(id, kit => withoutKitAnimation(kit, animation)), [change])
 
-  return { runs: runsOf(jobs), busy: active, error, saved, start, cancel, review, remove }
+  return { runs: runsOf(jobs), finished: finishedOf(jobs), busy: active, error, saved, start, cancel, review, remove }
 }
