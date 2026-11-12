@@ -56,8 +56,10 @@ export function resolveRealCharacter(raw: Record<string, unknown>): AgentMakeRea
 
 export async function executeMakeRealCharacter(action: AgentMakeRealCharacterAction, workspace?: string) {
   const space = workspace || 'default' // executeAgentActions always passes the workspace it runs in
-  const { type: _type, confirm: _confirm, ...fields } = action
-  const job = await makeRealCharacter({ workspace: space, ...fields })
+  const job = await makeRealCharacter({
+    workspace: space, name: action.name, gender: action.gender, skin: action.skin, height: action.height, body: action.body,
+    bottom: action.bottom, outfitPrompt: action.outfitPrompt, facePrompt: action.facePrompt, seed: action.seed, talkKit: action.talkKit,
+  })
   const done = job.status === 'completed' && job.result
   const message = i18n.t(done ? 'wizard:replies.realCharacterReady' : 'wizard:replies.realCharacterStarted',
     { name: action.name, jobId: job.jobId, file: job.result?.rigged_file ?? '' })

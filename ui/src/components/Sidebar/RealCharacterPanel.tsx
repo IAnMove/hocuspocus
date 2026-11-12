@@ -63,9 +63,14 @@ export function RealCharacterPanel() {
     void maybeRefreshGallery({ message: t('makers.real.ready'), force: true })
   }, [reload, setMediaFilter, maybeRefreshGallery, t])
   const [job, setJob] = useRealJob(workspace, finished)
+  const [trackedWorkspace, setTrackedWorkspace] = useState(workspace)
+  if (trackedWorkspace !== workspace) {
+    setTrackedWorkspace(workspace)
+    setJob(null)
+    setNotes([])
+  }
 
   useEffect(() => { void fetchRealPresets().then(setPresets).catch(() => setPresets(null)) }, [])
-  useEffect(() => { setJob(null); setNotes([]) }, [workspace, setJob])
   useEffect(() => { reload() }, [reload])
   useEffect(() => { if (adopt) setJob(current => current && active(current) ? current : adopt) }, [adopt, setJob])
 
@@ -141,7 +146,7 @@ export function RealCharacterPanel() {
           <li key={row.slug} className="flex items-center gap-2 text-[10px] text-text-secondary" data-testid={`real-saved-${row.slug}`}>
             {row.face_url && <img src={row.face_url} alt={t('makers.real.facePicture')} className="w-8 h-8 rounded object-cover" />}
             <span className="flex-1 truncate">{row.name}{row.missing ? ` · ${t('makers.real.missing')}` : ''}</span>
-            <button type="button" disabled={blocked} onClick={() => void open(row)} className="underline">{t('makers.real.open')}</button>
+            <button type="button" disabled={blocked} title={controlReason(blocked, 'disabled.actionInProgress')} onClick={() => void open(row)} className="underline">{t('makers.real.open')}</button>
           </li>
         ))}
       </ul>
