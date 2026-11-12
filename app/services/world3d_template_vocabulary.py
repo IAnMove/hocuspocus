@@ -220,6 +220,19 @@ for _group in GROUPS:
         _GROUP_OF.setdefault(_word, _group)
 
 
+# One word of each group that names a place a director would stage a scene in: a plan reads these words of a shot line
+# first. Times of day, seasons, the generic «interior» and the looks are left out: they are not a place.
+PLACE_ANCHORS = ("sea", "rio", "city", "rooftop", "space", "forest", "montana", "desert", "volcan", "stage", "kitchen",
+                 "bedroom", "salon", "office", "classroom", "bar", "church", "hospital", "courtroom", "studio", "door",
+                 "stairs", "corridor", "window", "hangar", "prison", "coche")
+# Words of a place group that read as something else in a line: a stage show, a camera move, a verb, an organisation.
+NOT_PLACE_WORDS = frozenset((
+    "show performance performer espectaculo gala ride hood capo wing convoy drive drives driving conducir conduce "
+    "meeting reunion company empresa corporate corporativo computer computers ordenador"
+).split())
+PLACE_GROUPS: tuple[frozenset[str], ...] = tuple(group for group in GROUPS if group & frozenset(PLACE_ANCHORS))
+
+
 def expand(token: str) -> frozenset[str]:
     """Every word that means the same as ``token``, the token itself included."""
     return _GROUP_OF.get(token, frozenset({token}))

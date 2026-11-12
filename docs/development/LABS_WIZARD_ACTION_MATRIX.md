@@ -1344,6 +1344,15 @@ id through `world3dTemplates.command`, registered by
 and the production planner. A tied or unknown query does not create a scene.
 Coverage is in `ui/tests/world3dTemplatesWizard.test.ts`.
 
+`video3d.templates.plan` (`plan_3d_templates`) chooses the cards of every shot of a
+video in one call, with variety, through the same `world3dTemplates.command`,
+registered by `registerWorld3DTemplatePlanCapabilities` in
+`ui/src/features/agent/world3dTemplatePlanCapability.ts`. It is the operation
+`world3d.templates.plan` of MCP and REST (`app/services/world3d_template_plan.py`);
+`world3d_templates` does not take it. The Wizard lists `key | id | title | shot | why`
+per shot. Coverage is in `ui/tests/world3dTemplatePlanWizard.test.ts` and
+`tests/test_world3d_template_plan.py`.
+
 ## Productions
 
 `production.works.review` lists works in one workspace, opens one production, or

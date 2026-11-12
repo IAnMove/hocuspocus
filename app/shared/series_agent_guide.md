@@ -32,7 +32,7 @@ those ids and file names, never invent one.
      front, columns behind the cast) listed in its `layout2d.layers` (below).
      Paint the plate empty of anything that must move (boats, waves, crowds, rain): a frozen wave reads as broken.
      Animate that motion afterwards, as an H3 loop (`image_start` and `image_end` the same image) or a Video 3D scene;
-   - 3D background: `world3d.templates.suggest` (below) → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
+   - 3D background: `world3d.templates.plan` or `world3d.templates.suggest` (below) → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
    After changing characters or locations, `series.canon.approve`.
 3. **Write the episode:** `series.episode.from_script` with the whole script (format below), every language in the
    same lines. Send it with `check: true` first: it lists every unknown character, pose, location, file or effect. It assigns the ids, writes the shots and a language version for every other language.
@@ -390,8 +390,11 @@ With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GL
 
 Cards are chosen on axes: `uses` (dialogue, talk, reaction, figure, establishing, action, speed, impact, reveal,
 product, music, drive, transition, title, look, plate), `kind`, `place`, `shot`, `moves`, `still`, `subjects`,
-`travel`. `world3d.templates.suggest` first (`line`, `speakers`, `place`, `mood`, `beat`…): up to three cards with
-a `reason`, the filters it derived and `unknown_words` (words no card knows). Then `world3d.templates.list` with
+`travel`. `world3d.templates.plan` first, once for all the 3D shots (`shots: [{key, text, speakers, place}]`, `format: "portrait"`
+for a vertical series, which gives people talking the `vertical-dialogue-*` and `vertical-talk-*` cards): a primary and two alternates per shot with variety (no card twice in a row, one place keeps one stage with
+another `roomCamera` each time) and the `scene3d` keys to copy; a Series shot reads `template` and `roomCamera`. To replace one shot,
+`world3d.templates.suggest` (`line`, `speakers`, `place`, `mood`, `beat`…): up to three cards with a `reason`, the filters it derived
+and `unknown_words`; `compact: true` shortens its cards and `world3d.templates.catalog`'s. Then `world3d.templates.list` with
 those filters or words in either language; `match: partial` means no card had every known word: pick an id from the reply. A stage is
 `stage-<mold>` (28, `stage-sala`, `stage-cocina`…): two speaking marks and the cameras `two_shot`, `ots_a`, `ots_b`,
 `wide`, `close_1`, `close_2`, `entrance` (`roomCamera`); five are `far` from `two_shot`: shoot their lines from a
@@ -405,8 +408,10 @@ size and place in metres); a model is drawn 1.7 m × `scale` tall whatever its l
 (`{"heightM"|"widthM"|"depthM"|"longestM": metres}` or `"native"`) instead of guessing `scale`. A scene from nothing starts from a blank
 personal template (`docs/3d-video-compositor/HOWUSEIT.md`, "Agent-built scenes"). Time a move with `motion.start`/`motion.end` (scene seconds); `world3d.scene.beats` (`beats: [{t, who, verb}]`, verbs `appear`, `go`, `face`, `do`, `fx`) says who does what when and resolves into the object's own fields, a patch's `worldFx` places 3D effects (explosion, shockwave, sparks, smoke, fire) at a point, on an object or at a collision, and the replies list `layout.collisions` where a moving model passes through another (`collide: false` exempts a ghost). What the production dry run warns ruins a series shot too: `template_still` (a `still` card
 with no clip, motion, camera or world), `stage_unskinned` (a stage in its mold colours: give the location a set
-skin), `looks_samey` (one template and place in more than four shots in a row), `template_reused` (one card in
-more than four shots).
+skin), `looks_samey` (one template, place and camera in more than four shots in a row), `template_repeated` (one template with
+one camera in two shots in a row), `template_reused` (one card in more than four shots) and `template_format` (a card drawn
+portrait for a landscape frame, or the reverse). Name only template ids that `world3d.templates.list` or `world3d.templates.suggest`
+returned: an unknown id fails the shot at render time.
 
 ## Edit one shot ("the fifth shot")
 

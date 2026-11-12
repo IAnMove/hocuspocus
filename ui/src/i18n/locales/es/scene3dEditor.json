@@ -3676,6 +3676,78 @@
     "group-circle": {
       "title": "Círculo de cinco",
       "description": "Cinco figuras en círculo mirando al centro; la cámara orbita despacio por encima. Tres de ellas son los huecos prop person_3 a person_5."
+    },
+    "vertical-dialogue-stack": {
+      "title": "Plano de dos vertical, cerca y lejos",
+      "description": "Plano de dos vertical 9:16 en profundidad: subject_1 cerca a la izquierda, en tres cuartos, y subject_2 detrás a la derecha de cara a cámara, una cara sobre la otra. Empuje lento; el tercio inferior queda libre para subtítulos."
+    },
+    "vertical-dialogue-ots-a": {
+      "title": "Por encima del hombro vertical A",
+      "description": "Por encima del hombro en vertical 9:16: el hombro de subject_1 ocupa el borde izquierdo y la cara de subject_2 queda alta a la derecha, plano medio corto con empuje lento. Monta B para el plano inverso; las miradas casan."
+    },
+    "vertical-talk-bust": {
+      "title": "A cámara en vertical, hasta el pecho",
+      "description": "Una figura habla directamente a cámara en un busto vertical 9:16: los ojos en el tercio superior, algo de aire sobre la cabeza y el pecho en el tercio inferior para los subtítulos, con un empuje lento."
+    },
+    "vertical-dialogue-ots-b": {
+      "title": "Por encima del hombro vertical B",
+      "description": "El inverso de A en vertical 9:16: el hombro de subject_2 ocupa el borde derecho y la cara de subject_1 queda alta a la izquierda, a la misma distancia y con el mismo empuje, para que montar A y B conserve las miradas."
+    },
+    "vertical-dialogue-single-a": {
+      "title": "Plano individual vertical A",
+      "description": "Plano individual limpio en vertical 9:16 de subject_1, plano medio corto, mirando a la derecha del cuadro hacia subject_2, justo fuera de campo, con empuje lento. Monta el B y los hombros: mismo lado, mismas miradas."
+    },
+    "vertical-dialogue-single-b": {
+      "title": "Plano individual vertical B",
+      "description": "El individual inverso en vertical 9:16: subject_2, plano medio corto, mirando a la izquierda del cuadro hacia subject_1, justo fuera de campo, a la misma distancia y con el mismo empuje que el A."
+    },
+    "vertical-dialogue-walk": {
+      "title": "Charla de camino en vertical",
+      "description": "Dos figuras caminan hacia la cámara una junto a otra, subject_2 medio paso detrás, y el cuadro vertical 9:16 retrocede con ellas al paso, las dos caras en el tercio superior. Pon a las dos un clip walk."
+    },
+    "vertical-dialogue-trio": {
+      "title": "Tres en triángulo, vertical",
+      "description": "Tres figuras en triángulo en vertical 9:16: subject_1 cerca en el centro, de espaldas, y subject_2 y una tercera figura detrás a cada lado de cara a cámara. Empuje lento con un arco leve. La tercera es el hueco prop person_3."
+    },
+    "vertical-dialogue-listener": {
+      "title": "Quien habla y quien escucha en vertical",
+      "description": "Plano de dos de reacción en vertical 9:16: quien escucha (subject_2) cerca a la derecha de cara a cámara y quien habla (subject_1) detrás a la izquierda, hablándole. Empuje lento sobre la cara de quien escucha."
+    },
+    "vertical-dialogue-low": {
+      "title": "Plano de dos en contrapicado vertical",
+      "description": "Dos figuras frente a frente, vistas desde abajo en vertical 9:16: una lente baja a la altura de la cadera mira hacia las dos caras con el techo o el cielo detrás y se acerca despacio. Poder, un desafío, una confesión."
+    },
+    "vertical-dialogue-high": {
+      "title": "Plano de dos en picado vertical",
+      "description": "Dos figuras frente a frente, vistas desde arriba en vertical 9:16: el suelo es el fondo, subject_1 cerca abajo y de espaldas, subject_2 al fondo arriba mirando hacia arriba. La cámara baja despacio."
+    },
+    "vertical-dialogue-locked": {
+      "title": "Plano de dos fijo en vertical",
+      "description": "Dos figuras frente a frente, en un plano de dos vertical 9:16 con trípode fijo, de las rodillas para arriba, las caras en el tercio superior. La cámara no se mueve; flota polvo y los clips del reparto llevan el plano."
+    },
+    "vertical-talk-caption": {
+      "title": "Plano medio vertical con sitio para subtítulos",
+      "description": "Una figura habla a cámara de cintura para arriba en vertical 9:16, con la cara alta en el cuadro y todo el tercio inferior libre para subtítulos o un rótulo, mientras la cámara se desliza un poco de lado."
+    },
+    "vertical-talk-three-quarter": {
+      "title": "Tres cuartos en vertical",
+      "description": "Una figura girada en tres cuartos habla en un plano medio corto vertical 9:16, con los ojos en el tercio superior; la cámara traza un arco lento hacia la cara."
+    },
+    "vertical-talk-low": {
+      "title": "Contrapicado en vertical",
+      "description": "Una figura habla vista desde abajo en vertical 9:16: una lente baja a la altura del pecho mira hacia la cara y sube un poco mientras se acerca. Autoridad, un discurso, una amenaza."
+    },
+    "vertical-talk-push": {
+      "title": "Empuje lento vertical a la cara",
+      "description": "Una figura habla a cámara mientras el cuadro vertical 9:16 empuja despacio desde la cintura hasta la cara, con los ojos en el tercio superior todo el tiempo."
+    },
+    "vertical-talk-side": {
+      "title": "Hablar a alguien fuera de cuadro, vertical",
+      "description": "Una figura habla con alguien fuera de cuadro, como en una entrevista: en vertical 9:16 la cara queda a la izquierda con aire a la derecha hacia donde mira, y la cámara se desliza despacio en ese sentido."
+    },
+    "vertical-dialogue-across": {
+      "title": "Mesa frente a frente en vertical",
+      "description": "Dos figuras sentadas a una mesa en vertical 9:16: subject_1 cerca a la izquierda de espaldas, subject_2 enfrente de cara a cámara. Empuje lento a la altura de los ojos; clip sentado (sit_down mantenido) o recortes sentados."
     }
   },
   "atmos": {

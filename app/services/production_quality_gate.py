@@ -4,20 +4,23 @@
 three or more shots that are not marked deliberate (``allow: ["still"]``), more runtime on still images
 than the quality allows, and a full-frame title (title-card, trailer-slam) over a moving shot, which hides the
 clip it paid for (``allow: ["title_card"]`` keeps a deliberate one), a 3D shot asking a spec model for a clip its
-rig will not bake (the export would fail after every GPU stage), and a ``camera`` that is not a camera preset
-(``unknown_camera``; the scene edit would fail after the GPU work). A resume of an unchanged spec is never refused.
+rig will not bake (the export would fail after every GPU stage), a ``camera`` that is not a camera preset
+(``unknown_camera``; the scene edit would fail after the GPU work), a 3D template that is not a shipped card
+(``unknown_template``) and a role the card has no slot for (``cast_role_not_on_card``; both from
+``production_template_fit``, the compiler would throw them after the models). A resume of an unchanged spec is never refused.
 Each problem carries a plain ``message`` that names the shots, the pictures, models or cameras and the limit.
 
 The first three only make the video look static (``THIN_CODES``): ``allow_thin: true`` on ``production.run`` (and
-its dry run) turns them into warnings and the run goes ahead. A clip or camera that does not exist is always refused.
+its dry run) turns them into warnings and the run goes ahead. A clip, camera or template that does not exist is always refused.
 What ``allow_thin`` let through is kept in the state (``allow_thin``) so ``production.status`` shows it for as long as
 that spec runs; the record is never read as permission.
 
 ``plan_warnings`` is what ``dry_run`` adds: shot fields the runner ignores (a plan that promises what
 nothing makes), an H3 clip replayed in several shots, H3 shots without the cast, boxes-and-cones models,
-characters that never play a clip, the same 3D template over and over, a scene2d card whose derived traits say it
-holds the picture (``template_still``), and a shot pattern or lyric look copied from another production in the
-workspace.
+characters that never play a clip, the same 3D template over and over, the same template, place and camera in a long
+run (``looks_samey``) or the same template and camera in two shots in a row (``template_repeated``), a card drawn for
+another frame than the shot's (``template_format``), a scene2d card whose derived traits say it holds the picture
+(``template_still``), and a shot pattern or lyric look copied from another production in the workspace.
 """
 from __future__ import annotations
 
@@ -28,6 +31,7 @@ from urllib.parse import unquote, urlparse
 
 from services.production_camera import unknown_cameras
 from services.production_quality import DEFAULT, PROFILES, profile_of
+from services.production_template_fit import camera_key, consecutive_runs, fit_problems, fit_warnings, repeated_templates, template_id
 from services.video2d_catalogs import CATALOGS
 from services.video2d_preset_catalog import camera_presets
 
@@ -155,7 +159,7 @@ def blocking_problems(spec: dict, root: Any = None) -> list[dict]:
     problems += _unbaked_clips(spec, shots, root)
     problems += [{**item, "message": _camera_message(item)} for item in unknown_cameras(spec)]
     problems += _hidden_by_titles(shots)
-    return problems
+    return problems + fit_problems(spec, shots)
 
 
 def _named(spec: dict) -> dict:
@@ -300,7 +304,7 @@ def _covered(shot: dict) -> bool:
 def plan_warnings(spec: dict, root: Any = None, production_id: str | None = None) -> list[dict]:
     shots = _shots(spec)
     found = _ignored_fields(shots) + _replayed_clips(shots) + _castless_h3(spec, shots) + _scene3d_warnings(spec, shots, root)
-    found += _stage_warnings(spec, shots) + _still_cards(shots)
+    found += _stage_warnings(spec, shots) + _still_cards(shots) + fit_warnings(spec, shots)
     if root:
         found += _copied_from_siblings(spec, shots, Path(root), production_id)
     return found
@@ -456,26 +460,16 @@ def _colours_only(skin: dict) -> bool:
     return all(isinstance(value, dict) and set(value) <= {"color"} for value in skin.values())
 
 
-def _stage_runs(shots: list[dict]) -> list[tuple[tuple[str, str], list[str]]]:
-    """Consecutive scene3d shots on the same template and background; any other shot ends a run."""
-    runs: list = []
-    for shot in shots:
-        config = _scene3d(shot)
-        if config is None:
-            runs.append(None)
-            continue
-        template = str(config.get("template") or (config.get("document") or {}).get("templateId"))
-        pair = (template, json.dumps(config.get("background"), sort_keys=True, default=str))
-        if runs and runs[-1] and runs[-1][0] == pair:
-            runs[-1][1].append(str(shot.get("key")))
-        else:
-            runs.append((pair, [str(shot.get("key"))]))
-    return [run for run in runs if run]
+def _stage_runs(shots: list[dict]) -> list[tuple[tuple[str, str, str], list[str]]]:
+    """Consecutive scene3d shots on the same template, background and camera; any other shot ends a run."""
+    def place(config: dict) -> tuple[str, str, str]:
+        return str(template_id(config)), json.dumps(config.get("background"), sort_keys=True, default=str), camera_key(config)
+    return consecutive_runs(shots, place)
 
 
 def _stage_warnings(spec: dict, shots: list[dict]) -> list[dict]:
-    """A stage or room shown in its mold colours only, once per set or template, and the same template and background
-    in more than four shots in a row."""
+    """A stage or room shown in its mold colours only, once per set or template, the same template, background and
+    camera in more than four shots in a row, and one template with one camera in two shots in a row."""
     sets = spec.get("sets") if isinstance(spec.get("sets"), dict) else {}
     unskinned: dict[str, list[str]] = {}
     for shot in shots:
@@ -486,10 +480,12 @@ def _stage_warnings(spec: dict, shots: list[dict]) -> list[dict]:
     found = [{"code": "stage_unskinned", "set": name, "shots": keys,
               "hint": "the stage shows only its mold colours: add a sets entry of kind room with a skin (an image, a texture "
                       "or a video) and name it as the shot's background"} for name, keys in unskinned.items()]
-    found += [{"code": "looks_samey", "template": template, "background": json.loads(background), "shots": keys,
-               "hint": "the same template and place in more than four shots in a row: change the camera (roomCamera), "
-                       "the template or the place"} for (template, background), keys in _stage_runs(shots) if len(keys) > SAMEY_RUN]
-    return found
+    samey = [(key, keys) for key, keys in _stage_runs(shots) if len(keys) > SAMEY_RUN]
+    found += [{"code": "looks_samey", "template": template, "background": json.loads(background), "camera": json.loads(camera),
+               "shots": keys,
+               "hint": "the same template, place and camera in more than four shots in a row: change the camera (roomCamera, "
+                       "camera_template or frame), the template or the place"} for (template, background, camera), keys in samey]
+    return found + repeated_templates(shots, [keys for _key, keys in samey])
 
 
 def _pattern(shots: list[dict]) -> list[str]:

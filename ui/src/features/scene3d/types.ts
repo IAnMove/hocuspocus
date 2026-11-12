@@ -17,6 +17,7 @@ import { TITLE_TEMPLATE_IDS } from './titleTemplateIds'
 import { DIALOGUE_TEMPLATE_IDS } from './dialogueTemplateIds'
 import { REACTION_TEMPLATE_IDS } from './reactionTemplateIds'
 import { GROUP_TEMPLATE_IDS } from './groupTemplateIds'
+import { VERTICAL_TEMPLATE_IDS } from './verticalTemplateIds'
 import type { AtmosSetId } from './atmos/registryIds.ts'
 import type { AtmosSettings } from './atmos/params.ts'
 
@@ -147,6 +148,7 @@ export const SCENE3D_TEMPLATE_IDS = [
   ...DIALOGUE_TEMPLATE_IDS,
   ...REACTION_TEMPLATE_IDS,
   ...GROUP_TEMPLATE_IDS,
+  ...VERTICAL_TEMPLATE_IDS,
 ] as const
 
 export type Scene3DTemplateId = (typeof SCENE3D_TEMPLATE_IDS)[number]

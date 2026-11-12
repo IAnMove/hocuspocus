@@ -1,5 +1,6 @@
 import type { defineCapability } from './capabilityRegistry'
 import i18n from '../../i18n'
+import { type WORLD3D_PLAN_OPERATION, world3dPlanMessage } from './world3dTemplatePlanCapability'
 
 export const WORLD3D_TEMPLATE_OPERATIONS = [
   'world3d.templates.list',
@@ -66,7 +67,8 @@ export function world3dTemplateCommandIntent(
 
 export interface AgentWorld3DTemplatesAction {
   type: 'world3d_templates'
-  operation: World3DTemplateOperation
+  /** The plan operation is not in the list the `world3d_templates` capability accepts: the Wizard asks it as `plan_3d_templates`. */
+  operation: World3DTemplateOperation | typeof WORLD3D_PLAN_OPERATION
   input: Record<string, unknown>
 }
 
@@ -75,6 +77,7 @@ const registrars = new WeakSet<object>()
 
 export function world3dTemplateMessage(body: { status?: string; result?: Record<string, unknown> }): string {
   const result = body.result || {}
+  if (Array.isArray(result.plan)) return world3dPlanMessage(result)
   const cards = (Array.isArray(result.candidates) ? result.candidates : Array.isArray(result.templates) ? result.templates : []) as Array<Record<string, unknown>>
   const lines = cards.slice(0, 8).map(card => `${card.id} | ${card.titleEs} | ${card.titleEn} | ${card.format} | ${card.duration}s`).join('\n')
   const scene = result.scene as { sceneId?: string; revision?: number } | undefined
