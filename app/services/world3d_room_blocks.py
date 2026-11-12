@@ -18,10 +18,14 @@ SEAT_SHARE = {"chair": 0.52, "armchair": 0.52, "sofa": 0.55}
 _TALL_BENCH = 0.6           # a bench box taller than this has a back drawn into it
 
 
+def _as_dict(value) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
 def room_blocks(document: dict) -> dict[str, dict]:
     """Block id -> block, for the blocks the room still draws itself."""
-    room = document.get("room") if isinstance(document.get("room"), dict) else {}
-    mold = room.get("mold") if isinstance(room.get("mold"), dict) else {}
+    room = _as_dict(document.get("room"))
+    mold = _as_dict(room.get("mold"))
     replaced = set(room.get("libraryBlocks") or []) if isinstance(room.get("libraryBlocks"), list) else set()
     found = {}
     for block in mold.get("blocks") or []:

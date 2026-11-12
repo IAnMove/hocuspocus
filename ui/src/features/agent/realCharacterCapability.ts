@@ -49,7 +49,8 @@ export function resolveRealCharacter(raw: Record<string, unknown>): AgentMakeRea
     ...optional('gender', choice<RealGender>(raw.gender, GENDERS)), ...optional('skin', skin),
     ...optional('height', numberIn(raw.height_m, 1.2, 2.2)), ...optional('body', choice(raw.body, BODIES)), ...optional('bottom', choice(raw.bottom, BOTTOMS)),
     ...optional('outfitPrompt', text(raw.outfit_prompt, 1200)), ...optional('facePrompt', text(raw.face_prompt, 1200)),
-    ...optional('seed', numberIn(raw.seed, 0, 2_147_483_647, true)), ...(raw.talk_kit === false ? { talkKit: false } : {}),
+    ...optional('seed', numberIn(raw.seed, 0, 2_147_483_647, true)),
+    ...(raw.talk_kit === true || raw.talk_kit === false ? { talkKit: raw.talk_kit } : {}),
   }
 }
 

@@ -1524,7 +1524,9 @@
         "tests/test_world3d_scene_layout.py",
         "tests/test_world3d_agent_built_scene.py",
         "tests/test_world3d_scene_fit.py",
-        "tests/test_world3d_beats.py"
+        "tests/test_world3d_beats.py",
+        "tests/test_world3d_template_plan.py",
+        "tests/test_world3d_fix_placement.py"
       ]
     },
     {
@@ -2081,6 +2083,38 @@
         "tests/test_world3d_template_traits.py",
         "tests/test_world3d_templates.py"
       ]
+    },
+    {
+      "prefix": "app/services/world3d_template_plan.py",
+      "paths": ["tests/test_world3d_template_plan.py"]
+    },
+    {
+      "prefix": "app/services/world3d_template_plan_assign.py",
+      "paths": ["tests/test_world3d_template_plan.py"]
+    },
+    {
+      "prefix": "app/services/world3d_template_plan_input.py",
+      "paths": ["tests/test_world3d_template_plan.py"]
+    },
+    {
+      "prefix": "app/services/world3d_template_plan_options.py",
+      "paths": ["tests/test_world3d_template_plan.py"]
+    },
+    {
+      "prefix": "app/services/world3d_template_plan_pool.py",
+      "paths": ["tests/test_world3d_template_plan.py"]
+    },
+    {
+      "prefix": "app/services/world3d_template_places.py",
+      "paths": ["tests/test_world3d_template_plan.py"]
+    },
+    {
+      "prefix": "app/services/world3d_template_compact.py",
+      "paths": ["tests/test_world3d_template_plan.py"]
+    },
+    {
+      "prefix": "app/services/world3d_template_frame.py",
+      "paths": ["tests/test_world3d_template_plan.py"]
     },
     {
       "prefix": "app/services/production_usage.py",

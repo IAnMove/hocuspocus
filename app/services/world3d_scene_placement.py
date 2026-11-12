@@ -40,21 +40,25 @@ def scene_placement(document: dict, items: list[dict]) -> dict:
         bodies = [body for body in bodies if body]
         supports = _supports(document, items)
         centers = {item.get("id"): item["boundsM"].get("center") for item in items if item.get("boundsM")}
-        issues: list[dict] = []
-        for body in bodies:
-            if not body["character"]:
-                continue
-            issues += _room_issues(document, body) + _rest_issues(body, supports) + _frame_issues(document, _above_seat(body, supports), centers)
-        for body in bodies:
-            if not body["character"]:
-                issues += _room_issues(document, body)
-        issues = _dedupe(issues)[:MAX_ISSUES]
+        issues = _collect_issues(document, bodies, supports, centers)
         return {"issues": issues, "warnings": placement_warnings(issues, items)}
     except Exception:  # noqa: BLE001 - an object that cannot be checked never fails an inspect
         return {"issues": [], "warnings": []}
 
 
 # ---- bodies and supports ---------------------------------------------------------------------------------------------------
+
+def _collect_issues(document: dict, bodies: list[dict], supports: list[dict], centers: dict) -> list[dict]:
+    issues: list[dict] = []
+    for body in bodies:
+        if not body["character"]:
+            continue
+        issues += _room_issues(document, body) + _rest_issues(body, supports) + _frame_issues(document, _above_seat(body, supports), centers)
+    for body in bodies:
+        if not body["character"]:
+            issues += _room_issues(document, body)
+    return _dedupe(issues)[:MAX_ISSUES]
+
 
 def _checkable(item: dict) -> bool:
     return bool(item.get("boundsM")) and item.get("media", "model3d") == "model3d" and not item.get("hidden")
@@ -114,15 +118,15 @@ def _block_box(block: dict) -> tuple[list[float], list[float]]:
 
 
 def _turn(point, rot):
-    """Euler XYZ (three.js): R = Rx * Ry * Rz applied to the point."""
+    """Euler XYZ, the same matrix as ``set_molds._turned_half`` and three.js (R = Rz Ry Rx, X applied first)."""
     x, y, z = point
-    cz, sz = math.cos(rot[2]), math.sin(rot[2])
-    x, y = x * cz - y * sz, x * sz + y * cz
-    cy, sy = math.cos(rot[1]), math.sin(rot[1])
-    x, z = x * cy + z * sy, -x * sy + z * cy
-    cx, sx = math.cos(rot[0]), math.sin(rot[0])
-    y, z = y * cx - z * sx, y * sx + z * cx
-    return x, y, z
+    sx, sy, sz = (math.sin(a) for a in rot)
+    cx, cy, cz = (math.cos(a) for a in rot)
+    return (
+        cy * cz * x - cy * sz * y + sy * z,
+        (cx * sz + sx * sy * cz) * x + (cx * cz - sx * sy * sz) * y - sx * cy * z,
+        (sx * sz - cx * sy * cz) * x + (sx * cz + cx * sy * sz) * y + cx * cy * z,
+    )
 
 
 def _overlap(a_lo, a_hi, b_lo, b_hi, axis: int) -> float:
@@ -176,6 +180,13 @@ def _rest_issues(body: dict, supports: list[dict]) -> list[dict]:
     top = support["hi"][1]
     if support["kind"] not in SEAT_KINDS | SOFT_KINDS and low < top - SINK_TOLERANCE:
         issues.append(_issue("sinks_into_support", body, f"lowest point {low:.2f} is {top - low:.2f} m under the top of {support['id']} ({top:.2f})", _moved(body, [0, top - low, 0]), support["id"]))
+    overhang = _overhang(body, support)
+    if overhang:
+        issues.append(overhang)
+    return issues
+
+
+def _overhang(body: dict, support: dict) -> dict | None:
     shift = [0.0, 0.0, 0.0]
     notes = []
     for axis, name in ((0, "x"), (2, "z")):
@@ -184,9 +195,9 @@ def _rest_issues(body: dict, supports: list[dict]) -> list[dict]:
             centre = (support["lo"][axis] + support["hi"][axis]) / 2 - (body["lo"][axis] + body["hi"][axis]) / 2
             shift[axis] = centre
             notes.append(f"{max(before, after):.2f} m past the {'start' if before > after else 'end'} of {support['id']} along {name}")
-    if notes:
-        issues.append(_issue("overhangs_support", body, "hangs " + ", ".join(notes), _moved(body, shift), support["id"]))
-    return issues
+    if not notes:
+        return None
+    return _issue("overhangs_support", body, "hangs " + ", ".join(notes), _moved(body, shift), support["id"])
 
 
 def _support_of(body: dict, supports: list[dict]) -> dict | None:
@@ -222,15 +233,7 @@ def _frame_issues(document: dict, body: dict, centers: dict) -> list[dict]:
     if camera.get("family", "fixed") != "fixed" or not body["character"]:
         return []
     aspect = float(document.get("width") or 16) / float(document.get("height") or 9)
-    worst = None
-    for k, label in ((0.0, "start"), (0.5, "middle"), (1.0, "end")):
-        view = _camera_at(camera, k, centers)
-        if view is None:
-            continue
-        frac, height = _in_frame(view, aspect, body)
-        score = (frac, height, label)
-        if worst is None or score[0] < worst[0]:
-            worst = score
+    worst = _worst_sample(camera, centers, aspect, body)
     if worst is None:
         return []
     frac, height, label = worst
@@ -240,6 +243,18 @@ def _frame_issues(document: dict, body: dict, centers: dict) -> list[dict]:
     if sizes and max(sizes) < TINY_BELOW:
         return [_issue("tiny", body, f"is {max(sizes) * 100:.0f}% of the frame height at its largest")]
     return []
+
+
+def _worst_sample(camera: dict, centers: dict, aspect: float, body: dict):
+    worst = None
+    for k, label in ((0.0, "start"), (0.5, "middle"), (1.0, "end")):
+        view = _camera_at(camera, k, centers)
+        if view is None:
+            continue
+        frac, height = _in_frame(view, aspect, body)
+        if worst is None or frac < worst[0]:
+            worst = (frac, height, label)
+    return worst
 
 
 def _camera_at(camera: dict, k: float, centers: dict):

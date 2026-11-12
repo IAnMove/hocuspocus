@@ -564,7 +564,7 @@ def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | N
     _bind_checked(slot, binding)
     _bind_directional(slot, binding)
     bind_motion(slot, binding, document.get("duration") or 0)
-    return warnings + _default_clip(slot, binding, workspace, workspace_dir) + apply_fit(slot, binding, workspace, workspace_dir) + bind_declared(slot, binding, workspace, workspace_dir)
+    return warnings + apply_fit(slot, binding, workspace, workspace_dir) + bind_declared(slot, binding, workspace, workspace_dir) + _default_clip(slot, binding, workspace, workspace_dir)
 
 
 def _default_clip(slot: dict, binding: dict, workspace: str | None, workspace_dir) -> list[str]:
@@ -573,6 +573,9 @@ def _default_clip(slot: dict, binding: dict, workspace: str | None, workspace_di
     if (slot.get("media") or "model3d") != "model3d" or slot.get("clip") or not workspace or workspace_dir is None:
         return []
     if _given(binding, "clip") or not (_given(binding, "sourceUrl") or _given(binding, "sourceRef")):
+        return []
+    # A seated pose bakes its own clip after this binding. Playing Idle first would be stored as the clip to restore on standing.
+    if isinstance(binding.get("rest"), dict) or isinstance(slot.get("rest"), dict):
         return []
     try:
         path, _reason = resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir)

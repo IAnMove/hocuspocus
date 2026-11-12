@@ -115,8 +115,13 @@ def _pictures(mold,skin,style,root,workspace,call,tag,provided):
     return requests,sources
 
 
+def _painted_by_the_room(value):
+    """A colour, a tile the room paints, or a moving window: nothing to generate."""
+    return 'color' in value or 'pattern' in value or 'view' in value
+
+
 def _surface(name,value,mold,requests,sources,root,workspace,call,tag,location_image):
-    if 'color' in value or 'pattern' in value or 'view' in value: return dict(value)      # a colour, a pattern the room paints itself, or a moving window view: nothing to generate
+    if _painted_by_the_room(value): return dict(value)
     kind=next(k for k in ('texture','image','video') if k in value); source=value[kind]
     raw=location_image if source=='location' else source.get('asset') if isinstance(source,dict) else sources.get(name)
     if not raw: raise ValueError(f'{name}: location image must be approved')

@@ -47,14 +47,8 @@ export class RoomSetRuntime {
     const mesh = new Mesh<PlaneGeometry, MeshStandardMaterial | MeshBasicMaterial>(geometry, material)
     mesh.name = panel.id; mesh.position.fromArray(panel.position); mesh.rotation.set(...panel.rotation)
     mesh.receiveShadow = true; mesh.castShadow = true; this.root.add(mesh)
+    if (this.paintGenerated(mesh, geometry, panel, material)) return
     const media = panel.material
-    if (isRoomView(media.view) && panel.wall) { mesh.material = this.windowView(geometry, panel, media.view, media.speed_mps, media.seed, media.lights); material.dispose(); return }
-    if (isRoomPattern(media.pattern)) {
-      const texture = this.pattern(media.pattern, media.seed)
-      const repeat: [number, number] = isFacePattern(media.pattern) ? [1, 1] : [panel.fullSize[0] / (media.tile_m ?? PATTERN_TILE_M[media.pattern]), panel.fullSize[1] / (media.tile_m ?? PATTERN_TILE_M[media.pattern])]
-      if (texture) { remapUv(geometry, panel.uv, repeat); material.map = texture; material.needsUpdate = true }
-      return
-    }
     if (media.video) {
       const screen: MediaScreen = { ...defaultMediaScreen(), media: 'video', sourceUrl: media.video.asset, targetMesh: mesh.name, width: panel.size[0], height: panel.size[1], fit: 'cover' }
       const runtime = await bindScreenMedia(this.root, screen, false, this.abort.signal, this.repaint)
@@ -73,6 +67,21 @@ export class RoomSetRuntime {
       texture.repeat.set(Math.min(1, target/aspect), Math.min(1, aspect/target)); texture.offset.set((1-texture.repeat.x)/2, (1-texture.repeat.y)/2)
     }
     remapUv(geometry, panel.uv); material.map = texture; material.needsUpdate = true
+  }
+  /** A window view or a painted pattern. True when this panel is finished. */
+  private paintGenerated(mesh: Mesh<PlaneGeometry, MeshStandardMaterial | MeshBasicMaterial>, geometry: PlaneGeometry, panel: RoomPanel, material: MeshStandardMaterial): boolean {
+    const media = panel.material
+    if (isRoomView(media.view) && panel.wall) {
+      mesh.material = this.windowView(geometry, panel, media.view, media.speed_mps, media.seed, media.lights)
+      material.dispose()
+      return true
+    }
+    if (!isRoomPattern(media.pattern)) return false
+    const texture = this.pattern(media.pattern, media.seed)
+    const tile = media.tile_m ?? PATTERN_TILE_M[media.pattern]
+    const repeat: [number, number] = isFacePattern(media.pattern) ? [1, 1] : [panel.fullSize[0] / tile, panel.fullSize[1] / tile]
+    if (texture) { remapUv(geometry, panel.uv, repeat); material.map = texture; material.needsUpdate = true }
+    return true
   }
   /** One tile per pattern and seed for the whole room: each face scales its own uv, so the texture is never copied. */
   private pattern(name: Parameters<typeof patternTexture>[0], seed = 3): Texture | null {

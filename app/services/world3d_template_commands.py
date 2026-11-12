@@ -217,6 +217,11 @@ def _effect(name, data, workspace_dir):
         return {"status": "completed", "scene": inspect_scene(data["workspace"], data["scene_id"], workspace_dir)}
     if name == "world3d.scene.preview":
         return _preview(data, workspace_dir)
+    return _effect_scene(name, data, workspace_dir)
+
+
+def _effect_scene(name, data, workspace_dir):
+    """The scene writes (instantiate, patch, talk, face, beats, publish). Split from ``_effect`` so neither chain is one long branch."""
     if name == "world3d.scene.instantiate":
         if data["template_id"] == BLANK_ID:
             from services.world3d_scenes import store_working_scene

@@ -29,6 +29,8 @@ test('"hazme un hombre realista con traje" is the server job the Studio 3D panel
     { type: 'make_real_character', name: 'Marta', confirm: true, outfitPrompt: 'A grey suit.' })
   assert.deepEqual(capability.resolve({ type: 'make_real_character', name: 'Marta', gender: 'woman', skin: '#e3b58f', height_m: 1.7, bottom: 'skirt', face_prompt: 'Red hair.', seed: 7, talk_kit: false, confirm: true }),
     { type: 'make_real_character', name: 'Marta', confirm: true, gender: 'woman', skin: '#E3B58F', height: 1.7, bottom: 'skirt', facePrompt: 'Red hair.', seed: 7, talkKit: false })
+  assert.deepEqual(capability.resolve({ type: 'make_real_character', name: 'Marta', talk_kit: true, confirm: true }),
+    { type: 'make_real_character', name: 'Marta', confirm: true, talkKit: true })
   const parsed = parseAgentTurn(JSON.stringify({ reply: 'Empiezo.', actions: [{ type: 'make_real_character', name: 'Marta', outfit_prompt: 'A suit.', confirm: true }] }))
   assert.equal(parsed.actions[0]?.type, 'make_real_character')
 

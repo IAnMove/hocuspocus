@@ -124,7 +124,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": _WORKSPACE, "job_id": _ID}, ["workspace", "job_id"], False,
         "Read an animation job of characters.animation.make, or a set job of characters.animation.make_set (id animset-...: its sheets and "
         "done/total): queued, running (stage poses | sheet, each pose waiting | generating | "
-        "keying | ready | failed), completed (result: animation, sheet, count, reviewState; with autoApprove also autoApproved and checks), "
+        "keying | ready | failed), completed (result: animation, sheet, count, reviewState, checks, verdict {ok, failed}, gait {checked, missed}, warnings [{code, message, hint}]; autoApprove also sets autoApproved; no verdict means the checks were not read and warnings contains checks_unavailable, which is not a pass), "
         "failed (error), cancelling, cancelled or interrupted "
         "(a restart). Poses already made are kept for the next try.",
     ),
