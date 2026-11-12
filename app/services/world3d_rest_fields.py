@@ -50,7 +50,8 @@ SEATED_RECIPE = ("People seated at a table or on a bed, by intent (no coordinate
                  "3) each character seated (a character made by model3d.*.make is drawn at its recorded height, layout.items[].recordedHeightM; "
                  "give height only for other models), {object_id: \"ana\", add: true, source_url, rest: {pose: \"sit\", on: \"chair_1\", "
                  "at: \"table\"}} (characters.list gives the kit ids for world3d.scene.face); 4) read layout.contacts and the warnings and "
-                 "apply every fix binding (a seat or table height, beside gap) until none is left. On the edge of a bed: rest {pose: \"sit\", "
+                 "apply every fix binding (a seat or table height, beside gap) until none is left; 5) look at it with world3d.scene.preview "
+                 "{scene_id, still: true} (real frames of the renderer, not boxes). On the edge of a bed: rest {pose: \"sit\", "
                  "on: \"bed\"}; a bedside table: {object_id: \"nightstand\", add: true, furniture: {kind: \"nightstand\"}, beside: {object: "
                  "\"bed\"}} (by the head end). A go, face or do beat stands a sitter up (rest_released).")
 PLACING_DOC = ("height: metres, the object's real height (the same as fit {heightM}). beside: {object, side? degrees around it from its "

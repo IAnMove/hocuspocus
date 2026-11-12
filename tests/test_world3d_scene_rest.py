@@ -486,6 +486,7 @@ def test_an_agent_starts_from_an_empty_stage_sets_the_frame_and_names_the_scene(
     recipe = tools["world3d.scene.patch"]["description"]
     assert "needs add: true" in recipe and 'assets {workspace, kind: "model3d"}' in recipe
     assert "characters.list" in recipe and "still: true" in tools["world3d.scene.preview"]["description"]
+    assert "world3d.scene.preview {scene_id, still: true}" in recipe, "the seating recipe points at the real still"
     assert "about 40 degrees" in tools["world3d.scene.face"]["description"] and "{start, end, value}" in tools["world3d.scene.talk"]["description"]
     assert "No card is needed" in tools["world3d.scene.patch"]["description"]
     assert "scenes.world3d.export.receipt" in tools["world3d.scene.publish"]["description"]
@@ -504,8 +505,9 @@ def test_a_table_glb_without_its_height_is_said_before_anyone_sits_at_it(stage):
     unsized = patch(stage, [{"object_id": "dining", "add": True, "source_url": "/api/v1/file/cc0-table.glb?workspace=studio"}])
     assert "furniture_size_unusual: dining is drawn 1.70 m tall (every model is 1.7 m x scale until it is sized); a table is about 0.75 m: " \
            "give dining height 0.75" in unsized["warnings"]
-    tall = patch(stage, [{"object_id": "dining", "height": 1.3}])
-    assert any(line.startswith("furniture_size_unusual: dining is 1.30 m high and a table is 0.6 to 1.15 m") for line in tall["warnings"])
-    fine = patch(stage, [{"object_id": "dining", "height": 0.75}, {"object_id": "tablet", "add": True,
-                                                                     "source_url": "/api/v1/file/crate.glb?workspace=studio"}])
-    assert not [line for line in fine["warnings"] if line.startswith("furniture_size_unusual")], "a table at 0.75 m, and a crate named tablet"
+    crate = "/api/v1/file/crate.glb?workspace=studio"
+    named = patch(stage, [{"object_id": "dining", "height": 0.75}, {"object_id": "coffee_table", "add": True, "source_url": crate},
+                          {"object_id": "table_lamp", "add": True, "source_url": crate}, {"object_id": "tablet", "add": True, "source_url": crate}])
+    hints = [line for line in named["warnings"] if line.startswith("furniture_size_unusual")]
+    assert hints == ["furniture_size_unusual: coffee_table is drawn 1.70 m tall (every model is 1.7 m x scale until it is sized); a coffee "
+                     "table is about 0.45 m: give coffee_table height 0.45"], "a sized table, a lamp and a crate named tablet say nothing"
