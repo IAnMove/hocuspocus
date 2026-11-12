@@ -3,7 +3,7 @@ import { AmbientLight, BackSide, BufferAttribute, BufferGeometry, CanvasTexture,
 import { hasAmbientLife, isExterior, keyLightBreath, roomLightPreset, roomPanels, roomSky, type RoomPanel, type RoomSet, type RoomSky } from './roomSet'
 import { defaultMediaScreen, type MediaScreen } from './mediaScreen'
 import { bindScreenMedia, type ScreenMediaRuntime } from './screenMediaRuntime'
-import { isFacePattern, isRoomPattern, patternTexture, PATTERN_TILE_M } from './roomPatterns'
+import { isFacePattern, isRoomPattern, patternTexture, PATTERN_TILE_M, type TilePattern } from './roomPatterns'
 import { DEFAULT_SPEED_MPS, drawRoomView, isRoomView, isWallView, viewRole, viewSize, type RoomView, type SkyLight, type ViewRole } from './roomViews'
 
 type LiveView = { ctx: CanvasRenderingContext2D; texture: CanvasTexture; width: number; height: number; view: RoomView; role: ViewRole; speed: number; seed: number; lights: readonly SkyLight[] }
@@ -78,8 +78,8 @@ export class RoomSetRuntime {
     }
     if (!isRoomPattern(media.pattern)) return false
     const texture = this.pattern(media.pattern, media.seed)
-    const tile = media.tile_m ?? PATTERN_TILE_M[media.pattern]
-    const repeat: [number, number] = isFacePattern(media.pattern) ? [1, 1] : [panel.fullSize[0] / tile, panel.fullSize[1] / tile]
+    // A face (dials, radio, books) is painted once. Only a repeating tile has a metre size.
+    const repeat: [number, number] = isFacePattern(media.pattern) ? [1, 1] : tileRepeat(panel, media.pattern, media.tile_m)
     if (texture) { remapUv(geometry, panel.uv, repeat); material.map = texture; material.needsUpdate = true }
     return true
   }
@@ -121,6 +121,12 @@ export class RoomSetRuntime {
     this.root.traverse(object => { if (object instanceof Mesh) { object.geometry.dispose(); const mat = object.material as MeshStandardMaterial; mat.map?.dispose(); mat.dispose() } })
     this.views.clear(); this.patterns.clear()
   }
+}
+
+/** How many times a repeating tile covers this face. A face pattern never calls this. */
+function tileRepeat(panel: RoomPanel, pattern: TilePattern, tileM: number | undefined): [number, number] {
+  const tile = tileM ?? PATTERN_TILE_M[pattern]
+  return [panel.fullSize[0] / tile, panel.fullSize[1] / tile]
 }
 
 /** Map a plane's 0..1 uv onto the part `[left, bottom, right, top]` of the face it belongs to, optionally repeated `[x, y]` times over that face. */
