@@ -1,3 +1,4 @@
+import { ImageBatchImport } from './ImageBatchImport'
 import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useState } from 'react'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
@@ -147,6 +148,7 @@ export function RunsPanel() {
     <section aria-label={t('aria.runsPanel')} className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg-primary md:flex-row">
       <aside aria-label={t('aria.savedRuns')} className="flex w-full shrink-0 flex-col border-b border-border bg-bg-secondary md:w-64 md:border-b-0 md:border-r xl:w-72">
         <div className="border-b border-border p-3">
+          <ImageBatchImport />
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold text-text-primary">{t('headings.runs')}</h2>
