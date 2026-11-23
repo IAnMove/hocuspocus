@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { createWorkspace, fetchDefaults, fetchJobStatus, getFileUrl, uploadImage } from '../../api/client'
+import { cancelJob, createWorkspace, fetchDefaults, fetchJobStatus, getFileUrl, uploadImage } from '../../api/client'
 import { createStudioImageGenerationCommand, newImageGenerationIntentId, submitImageGenerationCommand } from '../../api/imageGenerationCommands'
 
 const labels = ['Picture 1', 'Picture 2']
@@ -22,13 +22,13 @@ export function parseBatchCsv(csv: string): string[][] {
   return records
 }
 
-type Row = { id: string; prompt: string; references: string[]; seed: number; output?: string; error?: string; jobId?: string }
+type Row = { id: string; prompt: string; references: string[]; seed: number; output?: string; error?: string; cancelled?: boolean; jobId?: string }
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char]!)
 
-export async function runBatch(file: File, progress: (status: string) => void) {
+export async function runBatch(file: File, progress: (status: string) => void, signal?: AbortSignal) {
   const zip = await JSZip.loadAsync(await file.arrayBuffer())
   const manifest = zip.file('lote.json')
   const csv = zip.file('prompts.csv')
@@ -67,14 +67,20 @@ export async function runBatch(file: File, progress: (status: string) => void) {
   const tuning = config.model === 'qwen_image_21_viggle_turbo'
     ? { num_inference_steps: 6, guidance_scale: 1 }
     : { num_inference_steps: defaults.num_inference_steps, guidance_scale: defaults.guidance_scale }
+  signal?.throwIfAborted()
   await createWorkspace(config.workspace)
   const result = new JSZip()
   for (const ref of refs.values()) {
+    signal?.throwIfAborted()
     result.file(ref.path, await ref.file.arrayBuffer())
     ref.url = (await uploadImage(ref.file)).url
   }
   const batchId = newImageGenerationIntentId()
   for (const [index, row] of rows.entries()) {
+    if (signal?.aborted) {
+      row.cancelled = true
+      continue
+    }
     progress(`${index + 1} / ${rows.length} · ${row.id}`)
     try {
       const command = createStudioImageGenerationCommand({
@@ -84,7 +90,18 @@ export async function runBatch(file: File, progress: (status: string) => void) {
         ...tuning,
       }, `batch-${batchId}-${index}`)
       row.jobId = (await submitImageGenerationCommand(command)).result.job_id
+      let cancelSent = false
       for (;;) {
+        if (signal?.aborted && !cancelSent) {
+          cancelSent = true
+          try {
+            await cancelJob(row.jobId)
+          } catch (error) {
+            // A job can complete between admission and the cancellation request.
+            const terminal = await fetchJobStatus(row.jobId)
+            if (!['completed', 'failed', 'cancelled'].includes(terminal.status)) throw error
+          }
+        }
         const job = await fetchJobStatus(row.jobId)
         if (job.status === 'completed') {
           const name = job.output_files[0]
@@ -98,6 +115,10 @@ export async function runBatch(file: File, progress: (status: string) => void) {
           result.file(row.output, await image.arrayBuffer())
           break
         }
+        if (job.status === 'cancelled' && signal?.aborted) {
+          row.cancelled = true
+          break
+        }
         if (['failed', 'cancelled', 'leftover', 'interrupted'].includes(job.status)) {
           throw new Error(job.error || job.status)
         }
@@ -108,7 +129,7 @@ export async function runBatch(file: File, progress: (status: string) => void) {
     }
   }
   const csvValue = (value: string | number | undefined) => '"' + String(value ?? '').replaceAll('"', '""') + '"'
-  const report = rows.map(row => [row.id, row.prompt, row.references.join('|'), row.seed, row.output, row.error]
+  const report = rows.map(row => [row.id, row.prompt, row.references.join('|'), row.seed, row.output, row.cancelled ? 'Cancelada' : row.error]
     .map(csvValue).join(','))
   result.file('resultados.csv', ['id,prompt,references,seed,output,error', ...report].join('\r\n'))
   result.file('manifest.json', JSON.stringify({ workspace: config.workspace, model: config.model, rows }, null, 2))
@@ -117,9 +138,9 @@ export async function runBatch(file: File, progress: (status: string) => void) {
     return `<img src="${path}" alt="${key}">`
   }).join(' ')}</td><td>${row.output
     ? `<a href="${row.output}"><img src="${row.output}" alt="${row.id}"></a>`
-    : escapeHtml(row.error ?? '')}</td></tr>`).join('')
+    : escapeHtml(row.cancelled ? 'Cancelada' : row.error ?? '')}</td></tr>`).join('')
   result.file('index.html', `<!doctype html><meta charset="utf-8"><title>Resultados</title>
 <style>table{border-collapse:collapse}td,th{padding:.5rem;border:1px solid #999;white-space:pre-wrap}img{max-width:180px;max-height:180px}</style>
 <table><thead><tr><th>ID</th><th>Prompt</th><th>Referencias</th><th>Resultado</th></tr></thead><tbody>${table}</tbody></table>`)
-  return { archive: await result.generateAsync({ type: 'blob' }), done: rows.filter(row => row.output).length, total: rows.length }
+  return { archive: await result.generateAsync({ type: 'blob' }), done: rows.filter(row => row.output).length, total: rows.length, cancelled: rows.filter(row => row.cancelled).length }
 }
