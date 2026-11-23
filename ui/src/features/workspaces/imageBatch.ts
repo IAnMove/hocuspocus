@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import { createWorkspace, fetchDefaults, fetchJobStatus, getFileUrl, uploadImage } from '../../api/client'
-import { createStudioImageGenerationCommand, submitImageGenerationCommand } from '../../api/imageGenerationCommands'
+import { createStudioImageGenerationCommand, newImageGenerationIntentId, submitImageGenerationCommand } from '../../api/imageGenerationCommands'
 
 const labels = ['Picture 1', 'Picture 2']
 const csvField = /(?:"((?:[^"]|"")*)"|([^",\r\n]*))(,|\r?\n|$)/gy
@@ -73,7 +73,7 @@ export async function runBatch(file: File, progress: (status: string) => void) {
     result.file(ref.path, await ref.file.arrayBuffer())
     ref.url = (await uploadImage(ref.file)).url
   }
-  const batchId = crypto.randomUUID()
+  const batchId = newImageGenerationIntentId()
   for (const [index, row] of rows.entries()) {
     progress(`${index + 1} / ${rows.length} · ${row.id}`)
     try {
