@@ -29,6 +29,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -84,6 +85,8 @@ INTERRUPTED = "The server restarted during this render; resume to continue"
 MAX_WER = 0.34
 # A take shorter than this (per word, with a floor) is a voice that stopped before speaking, not a line.
 MIN_SECONDS_PER_WORD, MIN_LINE_SECONDS = 0.1, 0.25
+# Silence in a take: this far under its peak, at most the first value (a full-scale voice), at least the last.
+TRIM_THRESHOLD_DB, TRIM_BELOW_PEAK_DB, TRIM_FLOOR_DB = -42.0, 40.0, -70.0
 SPEECH_CODES = {"english": "en", "spanish": "es", "french": "fr", "german": "de", "italian": "it", "portuguese": "pt",
                 "japanese": "ja", "korean": "ko", "chinese": "cmn", "russian": "ru"}
 
@@ -100,10 +103,32 @@ def audio_seconds(path: str) -> float:
     return float(probe.stdout.strip())
 
 
+def peak_db(source: str) -> float | None:
+    """The loudest sample of a recording in dBFS; None when ffmpeg cannot tell (an empty or unreadable file)."""
+    probe = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", source, "-af", "volumedetect", "-f", "null", "-"],
+                           capture_output=True, text=True, check=False, timeout=120)
+    found = re.search(r"max_volume:\s*(-?[0-9.]+) dB", probe.stderr or "")
+    return float(found.group(1)) if found else None
+
+
+def silence_threshold_db(peak: float | None) -> float:
+    """Where silence starts for a take with this peak.
+
+    A fixed -42 dBFS suits a voice that peaks near full scale. A quiet reference voice gives quiet takes (a peak at
+    -16 dBFS, speech around -37): their last syllable falls under a fixed threshold and the trim cuts the word
+    ("unanimously" → "unanimous"). So the threshold follows the take's own peak, never above the old value and
+    never below what a real noise floor reaches.
+    """
+    if peak is None:
+        return TRIM_THRESHOLD_DB
+    return max(TRIM_FLOOR_DB, min(TRIM_THRESHOLD_DB, peak - TRIM_BELOW_PEAK_DB))
+
+
 def trim_silence(source: str, target: str, pad: float = 0.06) -> float:
     """Cut leading and trailing silence, keep a short natural pad; returns the new duration."""
-    flt = (f"silenceremove=start_periods=1:start_threshold=-42dB:start_silence={pad},areverse,"
-           f"silenceremove=start_periods=1:start_threshold=-42dB:start_silence={pad + 0.06},areverse")
+    threshold = f"{silence_threshold_db(peak_db(source)):.1f}dB"
+    flt = (f"silenceremove=start_periods=1:start_threshold={threshold}:start_silence={pad},areverse,"
+           f"silenceremove=start_periods=1:start_threshold={threshold}:start_silence={pad + 0.06},areverse")
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", source, "-af", flt, "-ar", "44100", "-ac", "1", target],
                    check=True, timeout=120)
     return audio_seconds(target)
