@@ -352,7 +352,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 5332,
+      "weight": 5335,
       "paths": [
         "tests/characterization/test_models_and_config.py",
         "tests/characterization/test_model3d_rig.py",
@@ -513,6 +513,7 @@
         "tests/test_series_assembly_router.py",
         "tests/test_series_commands.py",
         "tests/test_series_native_render.py",
+        "tests/test_series_line_trim.py",
         "tests/test_series_scene_inputs.py",
         "tests/test_series_video_produce.py",
         "tests/test_series_shot_plan.py",
@@ -1348,7 +1349,8 @@
     {
       "prefix": "app/services/series_native_render.py",
       "paths": [
-        "tests/test_series_native_render.py"
+        "tests/test_series_native_render.py",
+        "tests/test_series_line_trim.py"
       ]
     },
     {
